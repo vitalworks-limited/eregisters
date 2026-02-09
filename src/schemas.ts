@@ -468,6 +468,8 @@ export type FlattenedEvent = FlattenedTrackedEntity["events"][number];
 export type FlattenedRelationship =
     FlattenedTrackedEntity["relationships"][number];
 
+export type FlattenedEnrollment = FlattenedTrackedEntity["enrollment"];
+
 export interface Village {
     village_id: string;
     village_name: string;

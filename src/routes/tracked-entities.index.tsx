@@ -45,7 +45,7 @@ export const TrackedEntitiesIndexRoute = createRoute({
             program: "ueBhWkWll5v",
             orgUnitMode: "ACCESSIBLE",
             order: "updatedAt:DESC",
-            fields: "trackedEntity,trackedEntityType,orgUnit,createdAt,updatedAt,createdAtClient,updatedAtClient,inactive,deleted,potentialDuplicate,attributes,relationships[relationship,to],enrollments[*,events[*]]",
+            fields: "trackedEntity,trackedEntityType,orgUnit,createdAt,updatedAt,createdAtClient,updatedAtClient,inactive,deleted,potentialDuplicate,attributes,relationships[*],enrollments[*,events[*,relationships[*]]]",
         });
         if (search && Object.values(search).length > 0) {
             for (const [filterKey, filterValues] of Object.entries(search)) {
@@ -78,7 +78,6 @@ export const TrackedEntitiesIndexRoute = createRoute({
                     queryKey: ["trackedEntities", search],
                 }),
             );
-
             const results = flattenTrackedEntityResponse(data);
             const events = results.flatMap((te) => te.events);
             const relationships = results.flatMap((te) => te.relationships);
@@ -253,11 +252,6 @@ function TrackedEntitiesSearch() {
                 onClose={closeModal}
                 onSave={async (values) => {
                     if (values && data) {
-                        console.log(
-                            "Saving new tracked entity with values:",
-                            values,
-                            data,
-                        );
                         await db.trackedEntities.put({
                             ...data,
                             attributes: {

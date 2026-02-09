@@ -1,13 +1,11 @@
 import { Form, Row, Typography } from "antd";
-import { useLiveQuery } from "dexie-react-hooks";
 import React, { useCallback } from "react";
-import { db, BasicTrackedEntity } from "../db";
 import { useDexiePersistence } from "../hooks/useDexiePersistence";
 import { useProgramRulesWithDexie } from "../hooks/useProgramRules";
 import { RootRoute } from "../routes/__root";
+import { FlattenedEvent, FlattenedRelationship } from "../schemas";
 import { calculateColSpan } from "../utils/utils";
 import { DataElementField } from "./data-element-field";
-import { FlattenedEvent, FlattenedRelationship } from "../schemas";
 
 export default function Relation({
     section,
@@ -28,7 +26,7 @@ export default function Relation({
     } = RootRoute.useLoaderData();
 
     const [childEventForm] = Form.useForm();
-    const occurredAt = mainEvent?.occurredAt;
+    const occurredAt = mainEvent.dataValues["occurredAt"] || mainEvent.occurredAt;
 
     const [stage] = program.programStages.filter(
         ({ id }) => id === "K2nxbE9ubSs",
@@ -59,13 +57,12 @@ export default function Relation({
             programRules,
             programRuleVariables,
             programStage: "K2nxbE9ubSs",
-            trackedEntityAttributes: child.fields,
+            trackedEntityAttributes: child,
             onAssignments: updateFields,
             applyAssignmentsToForm: true,
             persistAssignments: true,
             program: program.id,
             autoExecute: true,
-
         });
 
     const updateFieldWithRules = useCallback(
@@ -75,18 +72,6 @@ export default function Relation({
         },
         [updateField, triggerAutoExecute],
     );
-
-    // useTrackerFormInit({
-    //     form: childEventForm,
-    //     entity: "event",
-    //     initialValues: {
-    //         UuxHHVp5CnF: section === "Maternity" ? "Newborn" : "Postnatal",
-    //         mrKZWf2WMIC: "Child Health Services",
-    //         occurredAt,
-    //     },
-    //     executeRules: executeAndApplyRules,
-    //     enabled: !!mainEvent,
-    // });
 
     const currentDataElements = new Map(
         stage.programStageDataElements.map((psde) => [
@@ -174,7 +159,23 @@ export default function Relation({
                             key={dataElement.id}
                             form={childEventForm}
                             onAutoSave={updateFieldWithRules}
-                            span={calculateColSpan(
+                            xs={calculateColSpan(
+                                currentSection.dataElements.length,
+                                24,
+                            )}
+                            sm={calculateColSpan(
+                                currentSection.dataElements.length,
+                                24,
+                            )}
+                            md={calculateColSpan(
+                                currentSection.dataElements.length,
+                                24,
+                            )}
+                            lg={calculateColSpan(
+                                currentSection.dataElements.length,
+                                12,
+                            )}
+                            xl={calculateColSpan(
                                 currentSection.dataElements.length,
                                 6,
                             )}

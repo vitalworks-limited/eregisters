@@ -34,6 +34,12 @@ const stages: Map<string, number> = new Map([
     ["DA0Yt3V16AN", 4],
     ["wmPg6qplttg", 8],
 ]);
+
+const relationshipTypes: Map<string, string> = new Map([
+    ["opwSN351xGC", "W16c7nWGWpY"],
+    ["zKGWob5AZKP", "v3dKzBFfI7p"],
+    ["DA0Yt3V16AN", "mrdzkBOTFay"],
+]);
 export default function MainEventCapture({
     form,
     trackedEntity,
@@ -220,6 +226,9 @@ export default function MainEventCapture({
                                     programStage={stage}
                                     trackedEntity={trackedEntity}
                                     mainEvent={mainEvent}
+                                    relationShipType={
+                                        relationshipTypes.get(stage.id)!
+                                    }
                                 />
                             ),
                         };

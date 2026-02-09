@@ -1,6 +1,8 @@
 import Dexie, { Table } from "dexie";
 import {
     DataElement,
+    FlattenedEnrollment,
+    FlattenedTrackedEntity,
     Node,
     Program,
     ProgramRule,
@@ -8,79 +10,31 @@ import {
     ProgramRuleVariable,
     RelationshipType,
     TrackedEntityAttribute,
+    FlattenedEvent,
+    FlattenedRelationship,
 } from "../schemas";
-import {
-    flattenTrackedEntity,
-    flattenTrackedEntityResponse,
-} from "../utils/utils";
 
-/**
- * Database Schema for MOH Registers Application
- *
- * This IndexedDB database provides offline-first data persistence
- * and enables draft management, sync queueing, and local caching.
- */
-
-// Flattened TrackedEntity type from utils
-export type FlattenedTrackedEntity = ReturnType<typeof flattenTrackedEntity>;
-export type FlattenedTrackedEntities = ReturnType<
-    typeof flattenTrackedEntityResponse
->;
-
-// Flattened Event type
-export type FlattenedEvent = FlattenedTrackedEntity["events"][number];
-export type FlattenedRelationship =
-    FlattenedTrackedEntity["relationships"][number];
-
-// BasicTrackedEntity type used by relationship components
-// This represents the structure after populateRelationshipsForEntity() transformation
-export interface BasicTrackedEntity extends FlattenedTrackedEntity {
-    attributes: Array<{
-        attribute: string;
-        value: string;
-        valueType: string;
-        createdAt: string;
-        updatedAt: string;
-    }>;
-    enrollments: Array<FlattenedTrackedEntity["enrollment"]>;
-}
-
-// Sync status for entities and events
 export type SyncStatus = "draft" | "pending" | "syncing" | "synced" | "failed";
-
-// Enhanced types with sync metadata
-// export interface SyncMetadata {
-//     syncStatus?: SyncStatus;
-//     version?: number; // For optimistic locking
-//     lastModified?: string;
-//     lastSynced?: string;
-//     syncError?: string;
-//     createdAtClient?: string; // DHIS2 required field
-//     updatedAtClient?: string; // DHIS2 required field
-// }
-
-// Database types with sync metadata
-// export type TrackedEntityWithSync = FlattenedTrackedEntity & SyncMetadata;
-// export type EventWithSync = FlattenedEvent & SyncMetadata;
-// export type RelationshipWithSync = FlattenedRelationship & SyncMetadata;
-
-// Sync queue for offline operations
 export interface SyncOperation {
-    id: string; // Unique operation ID
+    id: string;
     type:
         | "CREATE_TRACKED_ENTITY"
         | "UPDATE_TRACKED_ENTITY"
         | "CREATE_RELATIONSHIP"
         | "CREATE_EVENT"
         | "UPDATE_EVENT";
-    entityId: string; // TrackedEntity or Event ID
-    data: any; // The data payload to sync
+    entityId: string;
+    data:
+        | FlattenedEnrollment
+        | FlattenedTrackedEntity
+        | FlattenedEvent
+        | FlattenedRelationship;
     status: "pending" | "syncing" | "failed" | "completed";
     attempts: number;
     createdAt: string;
     updatedAt: string;
     error?: string;
-    priority: number; // Higher priority syncs first (0-10)
+    priority: number;
 }
 
 // Machine state persistence
@@ -197,15 +151,15 @@ export class RegisterDatabase extends Dexie {
         this.version(2).stores({
             // Tracked entities with sync status, version tracking, and lastSynced
             trackedEntities:
-                "trackedEntity,orgUnit,enrollment.enrolledAt,updatedAt,syncStatus,version,lastModified,lastSynced",
+                "trackedEntity,orgUnit,enrollment.enrolledAt,updatedAt,syncStatus,version,lastSynced",
 
             // Events with sync status, version tracking, and lastSynced
-            events: "event,trackedEntity,programStage,enrollment,occurredAt,updatedAt,syncStatus,version,lastModified,lastSynced",
+            events: "event,trackedEntity,programStage,enrollment,occurredAt,updatedAt,syncStatus,version,lastSynced",
 
             // Relationships with sync status, version tracking, and lastSynced
             // Using flattened structure: from.id and to.id
             relationships:
-                "relationship,from.id,to.id,syncStatus,version,lastModified,lastSynced",
+                "relationship,fromId,toId,syncStatus,version,lastSynced",
 
             // Relationship types
             relationshipTypes: "id",

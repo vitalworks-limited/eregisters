@@ -45,14 +45,12 @@ const METADATA_TYPES = [
     "programRuleVariables",
     "optionSets",
     "optionGroups",
-    "villages",
     "relationshipTypes",
 ] as const;
 
 type MetadataType = (typeof METADATA_TYPES)[number];
 
-// Metadata types that should only sync on initial load or explicit request
-const SKIP_ON_UPDATE_TYPES: MetadataType[] = ["villages"];
+const SKIP_ON_UPDATE_TYPES: MetadataType[] = [];
 
 /**
  * Check if a metadata type should be skipped during update checks
@@ -404,25 +402,30 @@ export class MetadataSync {
                 };
                 break;
 
-            case "villages":
-                data = (await this.engine.query({
-                    villages: {
-                        resource: "dataStore/registers",
-                        id: "villages",
-                    },
-                })) as { villages: Village[] };
-                break;
+            // case "villages":
+            //     data = (await this.engine.query({
+            //         villages: {
+            //             resource: "dataStore/registers",
+            //             id: "villages",
+            //         },
+            //     })) as { villages: Village[] };
+            //     break;
 
             case "relationshipTypes":
                 data = (await this.engine.query({
                     relationshipTypes: {
                         resource: "relationshipTypes",
-                        id: "vDnDNhGRzzy",
+                        params: {
+                            fields: "*",
+                        },
                     },
-                })) as { relationshipTypes: RelationshipType };
+                })) as {
+                    relationshipTypes: {
+                        relationshipTypes: RelationshipType[];
+                    };
+                };
                 break;
         }
-
         await this.queueWrite(async () => {
             switch (type) {
                 case "programs":
@@ -498,11 +501,13 @@ export class MetadataSync {
                         );
                     await db.optionGroups.bulkPut(flattenedOptionGroups);
                     break;
-                case "villages":
-                    await db.villages.bulkPut(data.villages);
-                    break;
+                // case "villages":
+                //     await db.villages.bulkPut(data.villages);
+                //     break;
                 case "relationshipTypes":
-                    await db.relationshipTypes.put(data.relationshipTypes);
+                    await db.relationshipTypes.bulkPut(
+                        data.relationshipTypes.relationshipTypes,
+                    );
                     break;
             }
             const currentTimestamp = new Date().toISOString();
@@ -798,7 +803,7 @@ export class MetadataSync {
         onProgress?: (progress: MetadataSyncProgress) => void,
     ): Promise<void> {
         console.log("🏘️ Explicitly syncing villages...");
-        return this.syncMetadataBatched(["villages"], onProgress);
+        // return this.syncMetadataBatched(["villages"], onProgress);
     }
 
     /**

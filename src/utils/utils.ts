@@ -2,6 +2,7 @@ import { FormItemProps, TableProps } from "antd";
 import dayjs from "dayjs";
 import { isEmpty } from "lodash";
 import {
+    FlattenedRelationship,
     ProgramRule,
     ProgramRuleResult,
     ProgramRuleVariable,
@@ -42,9 +43,10 @@ export const flattenTrackedEntity = ({
         {},
     );
     const flattenedEvents = (events || []).map((event) => {
-        const eventAttrs: Record<string, string> = (
-            event.dataValues || []
-        ).reduce((acc, dv) => {
+        const eventAttrs: Record<string, string> = [
+            ...event.dataValues,
+            { dataElement: "occurredAt", value: event.occurredAt },
+        ].reduce((acc, dv) => {
             acc[dv.dataElement] = dv.value;
             return acc;
         }, {});
@@ -77,20 +79,16 @@ export const flattenTrackedEntity = ({
                 version: 1,
                 lastSynced: new Date().toISOString(),
                 syncError: "",
-                from: {
-                    id: trackedEntity,
-                    fields: attributes.reduce((acc, attr) => {
-                        acc[attr.attribute] = attr.value;
-                        return acc;
-                    }, {}),
-                },
-                to: {
-                    id: toTrackedEntity,
-                    fields: toAttributes.reduce((acc, attr) => {
-                        acc[attr.attribute] = attr.value;
-                        return acc;
-                    }, {}),
-                },
+                from: attributes.reduce((acc, attr) => {
+                    acc[attr.attribute] = attr.value;
+                    return acc;
+                }, {}),
+                to: toAttributes.reduce((acc, attr) => {
+                    acc[attr.attribute] = attr.value;
+                    return acc;
+                }, {}),
+                toId: toTrackedEntity,
+                fromId: trackedEntity,
             };
         },
     );
@@ -108,24 +106,20 @@ export const flattenTrackedEntity = ({
             }) => {
                 return {
                     ...rel,
-                    from: {
-                        id: event,
-                        fields: dataValues.reduce((acc, attr) => {
-                            acc[attr.dataElement] = attr.value;
-                            return acc;
-                        }, {}),
-                    },
-                    to: {
-                        id: toEvent,
-                        fields: toDataValues.reduce((acc, attr) => {
-                            acc[attr.dataElement] = attr.value;
-                            return acc;
-                        }, {}),
-                    },
                     syncStatus: "synced",
                     version: 1,
                     lastSynced: new Date().toISOString(),
                     syncError: "",
+                    from: dataValues.reduce((acc, attr) => {
+                        acc[attr.dataElement] = attr.value;
+                        return acc;
+                    }, {}),
+                    to: toDataValues.reduce((acc, attr) => {
+                        acc[attr.dataElement] = attr.value;
+                        return acc;
+                    }, {}),
+                    toId: toEvent,
+                    fromId: event,
                 };
             },
         ),
@@ -646,14 +640,14 @@ export function executeProgramRules({
                             if (typeof val === "boolean") return String(val);
                             // For strings, escape and quote
                             const stringVal = String(val);
-															// if (log) {
-															// 		console.log(
-															// 				"Variable value for",
-															// 				varName,
-															// 				"is",
-															// 				stringVal,
-															// 		);
-															// }
+                            // if (log) {
+                            // 		console.log(
+                            // 				"Variable value for",
+                            // 				varName,
+                            // 				"is",
+                            // 				stringVal,
+                            // 		);
+                            // }
                             const escaped = stringVal
                                 .replace(/\\/g, "\\\\")
                                 .replace(/'/g, "\\'");
@@ -969,13 +963,15 @@ export const isNumber = (valueType: string | undefined) => {
 
 export const createEmptyTrackedEntity = ({
     orgUnit,
+    attributes = {},
 }: {
     orgUnit: string;
+    attributes?: Record<string, any>;
 }): ReturnType<typeof flattenTrackedEntity> => {
     const trackedEntity = generateUid();
     return {
         orgUnit,
-        attributes: {},
+        attributes,
         enrollment: {
             createdAt: dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
             program: "ueBhWkWll5v",
@@ -1006,6 +1002,35 @@ export const createEmptyTrackedEntity = ({
     };
 };
 
+export const createRelationship = ({
+    from,
+    to,
+    fromId,
+    toId,
+    relationshipType,
+}: {
+    fromId: string;
+    toId: string;
+    relationshipType: string;
+    from: Record<string, any>;
+    to: Record<string, any>;
+}): FlattenedRelationship => {
+    return {
+        relationship: generateUid(),
+        fromId,
+        toId,
+        relationshipType,
+        from,
+        to,
+        lastSynced: "",
+        syncError: "",
+        syncStatus: "draft",
+        version: 1,
+        updatedAt: dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
+        createdAt: dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
+    };
+};
+
 export const createEmptyEvent = ({
     orgUnit,
     program,
@@ -1013,6 +1038,7 @@ export const createEmptyEvent = ({
     enrollment,
     programStage,
     parentEvent,
+    dataValues = {},
 }: {
     orgUnit: string;
     program: string;
@@ -1020,6 +1046,7 @@ export const createEmptyEvent = ({
     enrollment: string;
     programStage: string;
     parentEvent?: string;
+    dataValues?: Record<string, any>;
 }) => {
     const eventId = generateUid();
     const now = dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ");
@@ -1030,7 +1057,7 @@ export const createEmptyEvent = ({
         orgUnit,
         trackedEntity,
         enrollment,
-        dataValues: {},
+        dataValues,
         status: "ACTIVE",
         occurredAt: dayjs().format("YYYY-MM-DD"),
         followUp: false,

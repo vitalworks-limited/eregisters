@@ -1,6 +1,11 @@
+import {
+    FlattenedEvent,
+    FlattenedRelationship,
+    FlattenedTrackedEntity,
+} from "./../schemas";
 import { useCallback, useEffect, useRef } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, FlattenedEvent, FlattenedTrackedEntity } from "../db";
+import { db } from "../db";
 
 type EntityType = "event" | "trackedEntity" | "relationship";
 
@@ -19,7 +24,7 @@ interface UseDexiePersistenceReturn<T> {
 }
 
 export function useDexiePersistence<
-    T extends FlattenedEvent | FlattenedTrackedEntity,
+    T extends FlattenedEvent | FlattenedTrackedEntity | FlattenedRelationship,
 >(options: UseDexiePersistenceOptions): UseDexiePersistenceReturn<T> {
     const { entityType, entityId, debounceMs = 300 } = options;
 

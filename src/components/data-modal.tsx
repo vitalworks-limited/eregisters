@@ -34,7 +34,7 @@ export function DataModal<T extends Record<string, any>>({
     React.useEffect(() => {
         form.resetFields();
         if (open && data) {
-            form.setFieldsValue(data);
+            form.setFieldsValue(data.attributes || data.dataValues);
         } else {
             form.resetFields();
         }

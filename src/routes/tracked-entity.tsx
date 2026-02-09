@@ -16,17 +16,20 @@ import {
     Typography,
 } from "antd";
 import dayjs from "dayjs";
-import { z } from "zod";
 import { useLiveQuery } from "dexie-react-hooks";
 import React, { useMemo } from "react";
+import { z } from "zod";
 import { DataModal } from "../components/data-modal";
 import MainEventCapture from "../components/main-event-capture";
 import { TrackerRegistration } from "../components/tracker-registration";
-import { db, FlattenedEvent } from "../db";
+import { db } from "../db";
 import { useModalState } from "../hooks/useModalState";
-import { FlattenedTrackedEntity } from "../schemas";
-import { generateUid } from "../utils/id";
-import { createEmptyEvent, createEmptyTrackedEntity } from "../utils/utils";
+import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
+import {
+    createEmptyEvent,
+    createEmptyTrackedEntity,
+    createRelationship,
+} from "../utils/utils";
 import { RootRoute } from "./__root";
 export const TrackedEntityRoute = createRoute({
     getParentRoute: () => RootRoute,
@@ -135,17 +138,7 @@ function TrackedEntity() {
                 width: 100,
                 render: (_, record) => (
                     <Flex gap="small" align="center">
-                        <Button
-                            onClick={() =>
-                                openModal({
-                                    ...record,
-                                    dataValues: {
-                                        ...record.dataValues,
-                                        occurredAt: record.occurredAt,
-                                    },
-                                })
-                            }
-                        >
+                        <Button onClick={() => openModal(record)}>
                             Edit Event
                         </Button>
                         <Button
@@ -206,12 +199,96 @@ function TrackedEntity() {
         openModal(newEvent);
     };
 
-    const onValueChange = async (change: any) => {
+    const createPatientAndLink = (allValues: Record<string, any>) => {
+        const dataElementToAttributeMap: Record<string, string> = {
+            KJ2V2JlOxFi: "Y3DE5CZWySr",
+        };
+        const parentAttributesToCopy: string[] = [
+            "XjgpfkoxffK",
+            "W87HAtUHJjB",
+            "PKuyTiVCR89",
+            "oTI0DLitzFY",
+        ];
+
+        const combinedAttributes: Record<
+            string,
+            {
+                sourceAttributes: string[];
+                separator?: string;
+            }
+        > = {
+            P6Kp91wfCWy: {
+                sourceAttributes: ["KSq9EyZ8ZFi", "TWPNbc9O2nK"],
+                separator: " ",
+            },
+            ACgDjRCyX8r: {
+                sourceAttributes: ["hPGgzWsb14m"],
+                separator: " ",
+            },
+            b2cMfkY6M3h: {
+                sourceAttributes: ["b2x4gA14JsP"],
+                separator: " ",
+            },
+        };
+
+        const autoPopulatedAttributes: Record<string, any> = {};
+        parentAttributesToCopy.forEach((attributeId) => {
+            if (
+                trackedEntity.attributes &&
+                trackedEntity.attributes[attributeId]
+            ) {
+                autoPopulatedAttributes[attributeId] =
+                    trackedEntity.attributes[attributeId];
+            }
+        });
+        const mappedAttributes: Record<string, any> = {};
+        Object.entries(dataElementToAttributeMap).forEach(
+            ([dataElementId, attributeId]) => {
+                if (allValues[dataElementId]) {
+                    let value = allValues[dataElementId];
+                    if (
+                        value &&
+                        typeof value === "object" &&
+                        "format" in value
+                    ) {
+                        value = value.format("YYYY-MM-DD");
+                    }
+
+                    mappedAttributes[attributeId] = value;
+                }
+            },
+        );
+
+        const combinedValues: Record<string, any> = {};
+        Object.entries(combinedAttributes).forEach(([targetAttrId, config]) => {
+            const values = config.sourceAttributes
+                .map((attrId) => trackedEntity.attributes?.[attrId] || "")
+                .filter((v) => v);
+            if (values.length > 0) {
+                combinedValues[targetAttrId] = values.join(
+                    config.separator || " ",
+                );
+            }
+        });
+
+        const initialValues = {
+            ...autoPopulatedAttributes,
+            ...mappedAttributes,
+            ...combinedValues,
+            occurredAt: trackedEntity.attributes["occurredAt"],
+            enrolledAt: mappedAttributes["Y3DE5CZWySr"],
+        };
+        const newPatient: FlattenedTrackedEntity = createEmptyTrackedEntity({
+            orgUnit: id,
+            attributes: initialValues,
+        });
+        return newPatient;
+    };
+
+    const onValueChange = (change: any, allValues: Record<string, any>) => {
         if (change && change["REWqohCg4Km"] === "Yes") {
-            const newPatient: FlattenedTrackedEntity = createEmptyTrackedEntity(
-                { orgUnit: id },
-            );
-            openChildModal(newPatient);
+            const patient = createPatientAndLink(allValues);
+            openChildModal(patient);
         }
     };
 
@@ -351,6 +428,14 @@ function TrackedEntity() {
                 data={data}
                 onClose={closeModal}
                 onSave={async (values) => {
+                    const pendingRelationships = await db.relationships
+                        .where("fromId")
+                        .equals(data!.event)
+                        .filter((e) => e.syncStatus === "draft")
+                        .toArray();
+                    const pendingEvents = await db.events
+                        .where("event")
+                        .anyOf(pendingRelationships.map((r) => r.toId));
                     if (values && data) {
                         await db.events.update(data.event, {
                             syncStatus: "pending",
@@ -376,69 +461,42 @@ function TrackedEntity() {
                 onClose={closeChildModal}
                 hasAddAnother={true}
                 onSave={async (values, addAnother) => {
-                    if (values && childData) {
-                        await db.trackedEntities.put({
-                            ...childData,
-                            attributes: {
-                                ...childData.attributes,
-                                ...values,
-                            },
-                            syncStatus: "pending",
-                        });
+                    await db.trackedEntities.put({
+                        ...childData!,
+                        attributes: values,
+                        syncStatus: "pending",
+                    });
 
-                        const childEvent = createEmptyEvent({
-                            trackedEntity: childData.trackedEntity,
-                            program: childData.enrollment.program,
-                            orgUnit: childData.orgUnit,
-                            enrollment: childData.enrollment.enrollment,
-                            programStage: "K2nxbE9ubSs",
-                        });
-                        await db.events.put(childEvent);
-                        await db.relationships.bulkPut([
-                            {
-                                relationshipType: "vDnDNhGRzzy",
-                                relationship: generateUid(),
-                                from: {
-                                    id: trackedEntity.trackedEntity,
-                                    fields: trackedEntity.attributes,
-                                },
-                                to: {
-                                    id: childData.trackedEntity,
-                                    fields: values,
-                                },
-                                syncStatus: "pending",
-                                createdAt: new Date().toISOString(),
-                                lastSynced: new Date().toISOString(),
-                                syncError: new Date().toISOString(),
-                                updatedAt: new Date().toISOString(),
-                                version: 1,
-                            },
-                            {
-                                relationshipType: "N2t9W26bKp7",
-                                relationship: generateUid(),
-                                from: {
-                                    id: data?.event || "",
-                                    fields: data?.dataValues || {},
-                                },
-                                to: {
-                                    id: childEvent.event,
-                                    fields: childEvent.dataValues || {},
-                                },
-                                syncStatus: "pending",
-                                createdAt: new Date().toISOString(),
-                                lastSynced: new Date().toISOString(),
-                                syncError: new Date().toISOString(),
-                                updatedAt: new Date().toISOString(),
-                                version: 1,
-                            },
-                        ]);
-                    }
+                    const childEvent = createEmptyEvent({
+                        trackedEntity: childData!.trackedEntity,
+                        program: childData!.enrollment.program,
+                        orgUnit: childData!.enrollment.orgUnit,
+                        enrollment: childData!.enrollment.enrollment,
+                        programStage: "K2nxbE9ubSs",
+                        dataValues: { occurredAt: values["enrolledAt"] },
+                    });
+
+                    const relationship = createRelationship({
+                        from: trackedEntity.attributes,
+                        to: values,
+                        fromId: trackedEntity.trackedEntity,
+                        toId: childData!.trackedEntity,
+                        relationshipType: "vDnDNhGRzzy",
+                    });
+
+                    await db.relationships.put({
+                        ...relationship,
+                        syncStatus: "pending",
+                    });
+
+                    await db.events.put({
+                        ...childEvent,
+                        syncStatus: "pending",
+                    });
+
                     if (addAnother) {
-                        const newPatient: FlattenedTrackedEntity =
-                            createEmptyTrackedEntity({
-                                orgUnit: id,
-                            });
-                        openChildModal(newPatient);
+                        const patient = createPatientAndLink(values);
+                        openChildModal(patient);
                     }
                 }}
                 title="New Born Child"

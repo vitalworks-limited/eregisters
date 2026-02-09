@@ -8,12 +8,14 @@ import { createEmptyTrackedEntity } from "../utils/utils";
 import { DataModal } from "./data-modal";
 import { TrackerRegistration } from "./tracker-registration";
 import { RootRoute } from "../routes/__root";
+import { TrackedEntitiesRoute } from "../routes/tracked-entities";
 
 const { Title, Text } = Typography;
 const NoPatientsCard: React.FC = () => {
     const {
         orgUnit: { id },
     } = RootRoute.useRouteContext();
+		const navigate = TrackedEntitiesRoute.useNavigate();
     const { data, isOpen, openModal, closeModal } =
         useModalState<FlattenedTrackedEntity>();
 
@@ -87,6 +89,11 @@ const NoPatientsCard: React.FC = () => {
                             },
                             syncStatus: "pending",
                         });
+												navigate({
+													to: `/tracked-entity/$trackedEntity`,
+													search: { orgUnits: id },
+													params: { trackedEntity: data.trackedEntity },
+												});
                     }
                     if (addAnother) {
                         const newPatient: FlattenedTrackedEntity =

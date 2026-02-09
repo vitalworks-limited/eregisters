@@ -1,8 +1,7 @@
 import { Tabs } from "antd";
-import dayjs from "dayjs";
 import { useLiveQuery } from "dexie-react-hooks";
 import React from "react";
-import { populateRelationshipsForEntity } from "../db/operations";
+import { db } from "../db";
 import {
     FlattenedEvent,
     FlattenedRelationship,
@@ -11,18 +10,10 @@ import {
 import Relation from "./relation";
 
 const getChildLabel = (to: FlattenedRelationship["to"]): string => {
-    const nameAttr = to.fields["P6Kp91wfCWy"];
-    const birthDateAttr = to.fields["Y3DE5CZWySr"];
-
-    if (nameAttr) {
-        return nameAttr;
-    }
-
-    if (birthDateAttr) {
-        return `Born ${dayjs(birthDateAttr).format("MMM DD, YYYY")}`;
-    }
-
-    return `Child ${dayjs().format("MMM DD")}`;
+    const firstName = to["KSq9EyZ8ZFi"];
+    const surname = to["TWPNbc9O2nK"];
+    const dob = to["Y3DE5CZWySr"];
+    return `${firstName || "Unknown"} ${surname || ""} (${dob || "No DOB"})`.trim();
 };
 
 export default function RelationshipEvent({
@@ -35,16 +26,10 @@ export default function RelationshipEvent({
     mainEvent: FlattenedEvent;
 }) {
     const relationships = useLiveQuery(async () => {
-        if (!trackedEntity.trackedEntity) return [];
-
-        try {
-            return await populateRelationshipsForEntity(
-                trackedEntity.trackedEntity,
-            );
-        } catch (error) {
-            console.error("Failed to load relationships:", error);
-            return [];
-        }
+        return db.relationships
+            .where("fromId")
+            .equals(trackedEntity.trackedEntity)
+            .toArray();
     }, [trackedEntity.trackedEntity]);
 
     if (!relationships || relationships.length === 0) {
@@ -61,10 +46,10 @@ export default function RelationshipEvent({
                     destroyInactiveTabPane: false,
                     children: (
                         <Relation
-                            key={child.id}
+                            key={relationship.relationship}
                             section={section}
                             child={child}
-														mainEvent={mainEvent}
+                            mainEvent={mainEvent}
                         />
                     ),
                 };

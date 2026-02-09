@@ -1,8 +1,7 @@
 import { FormInstance, Select } from "antd";
-import { useLiveQuery } from "dexie-react-hooks";
 import React, { useState } from "react";
 import { Village } from "../schemas";
-import { db } from "../db";
+import villages from "../villages.json";
 
 interface WatchField {
     fieldId: string;
@@ -26,16 +25,9 @@ export default function VillageSelect({
     form,
     watchFields,
     filterFields,
-    sortField = "village_name",
-    allowDirectSearch = false,
     syncParentFields = false,
 }: VillageSelectProps) {
-    const [searchMode, setSearchMode] = useState(true);
-
-    const villages = useLiveQuery(async () => {
-        return await db.villages.orderBy(sortField).toArray();
-    }, [allowDirectSearch, searchMode, sortField]);
-
+    const currentVillages = villages as Village[];
     const getPlaceholder = () => {
         return "Select Village";
     };
@@ -44,7 +36,7 @@ export default function VillageSelect({
 
         if (syncParentFields && selectedValue) {
             try {
-                const selectedVillage = villages?.find(
+                const selectedVillage = currentVillages?.find(
                     ({ village_id, village_name }) =>
                         `${village_id}(${village_name})` === selectedValue,
                 );
@@ -62,7 +54,6 @@ export default function VillageSelect({
                             );
                         }
                     });
-                    setSearchMode(false);
                 } else if (selectedVillage && !filterFields) {
                     if (watchFields.length === 3) {
                         form.setFieldValue(
@@ -92,7 +83,6 @@ export default function VillageSelect({
                             selectedVillage.District,
                         );
                     }
-                    setSearchMode(false);
                 }
             } catch (error) {
                 console.error("Failed to sync parent fields:", error);
@@ -105,7 +95,7 @@ export default function VillageSelect({
             placeholder={getPlaceholder()}
             value={value}
             onChange={handleVillageChange}
-            options={villages?.map((v) => {
+            options={currentVillages?.map((v) => {
                 const {
                     District,
                     subcounty_name,
@@ -121,10 +111,14 @@ export default function VillageSelect({
                 };
             })}
             showSearch={{
-                filterOption: (input, option) =>
-                    String(option?.label ?? "")
-                        .toLowerCase()
-                        .includes(input.toLowerCase()),
+                filterOption: (input, option) => {
+                    const allInputs = input
+                        .split(" ")
+                        .map((part) => part.trim().toLowerCase());
+                    return allInputs.every((part) => {
+                        return option?.label.toLowerCase().includes(part);
+                    });
+                },
             }}
             virtual
             style={{ width: "100%" }}

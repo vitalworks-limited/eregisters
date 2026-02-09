@@ -1,11 +1,10 @@
-import { generateUid } from "../utils/id";
-import {
-    db,
+import type {
+    FlattenedTrackedEntity,
+    FlattenedEvent,
     FlattenedRelationship,
-    type FlattenedEvent,
-    type FlattenedTrackedEntity,
-    type SyncOperation,
-} from "./index";
+} from "../schemas";
+import { generateUid } from "../utils/id";
+import { db, type SyncOperation } from "./index";
 
 /**
  * Database Operations for MOH Registers Application
@@ -104,8 +103,12 @@ export async function bulkSaveTrackedEntities(
             ...entity,
             syncStatus: entityWithSync.syncStatus || syncStatus,
             version: entityWithSync.version || 1,
-            lastModified: entityWithSync.lastModified || new Date().toISOString(),
-            lastSynced: syncStatus === "synced" ? new Date().toISOString() : entityWithSync.lastSynced,
+            lastModified:
+                entityWithSync.lastModified || new Date().toISOString(),
+            lastSynced:
+                syncStatus === "synced"
+                    ? new Date().toISOString()
+                    : entityWithSync.lastSynced,
         };
     });
 
@@ -136,10 +139,7 @@ export async function getRelationshipsByEntity(
     entityId: string,
 ): Promise<FlattenedRelationship[]> {
     // Query using flattened structure
-    return await db.relationships
-        .where("from.id")
-        .equals(entityId)
-        .toArray();
+    return await db.relationships.where("from.id").equals(entityId).toArray();
 }
 
 /**
@@ -150,31 +150,27 @@ export async function populateRelationshipsForEntity(
     entityId: string,
 ): Promise<FlattenedRelationship[]> {
     const relationships = await getRelationshipsByEntity(entityId);
-
-    // Fetch referenced entities and convert to BasicTrackedEntity format
-    // Now using flattened structure where rel.to.id contains the tracked entity ID
     const populated = await Promise.all(
         relationships.map(async (rel) => {
-            if (rel.to.id) {
-                const toEntity = await db.trackedEntities.get(rel.to.id);
+            if (rel.toId) {
+                const toEntity = await db.trackedEntities.get(rel.toId);
 
                 if (toEntity) {
-                    // Convert flattened entity to BasicTrackedEntity format
-                    // The tabs component expects enrollments as an array
+
                     const basicEntity = {
                         ...toEntity,
-                        // Convert attributes from object to array format
-                        attributes: Object.entries(toEntity.attributes || {}).map(
-                            ([attribute, value]) => ({
-                                attribute,
-                                value: String(value),
-                                valueType: "TEXT",
-                                createdAt: toEntity.createdAt,
-                                updatedAt: toEntity.updatedAt,
-                            }),
-                        ),
-                        // Convert enrollment (singular) to enrollments (plural array)
-                        enrollments: toEntity.enrollment ? [toEntity.enrollment] : [],
+                        attributes: Object.entries(
+                            toEntity.attributes || {},
+                        ).map(([attribute, value]) => ({
+                            attribute,
+                            value: String(value),
+                            valueType: "TEXT",
+                            createdAt: toEntity.createdAt,
+                            updatedAt: toEntity.updatedAt,
+                        })),
+                        enrollments: toEntity.enrollment
+                            ? [toEntity.enrollment]
+                            : [],
                     };
 
                     return {
