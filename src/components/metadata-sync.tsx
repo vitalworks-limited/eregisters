@@ -95,7 +95,6 @@ export default function MetadataSyncComponent({
         // Check on mount
         checkAndSync();
 
-        // Set up periodic check
         const intervalMs = checkInterval * 60 * 1000; // Convert minutes to milliseconds
         const interval = setInterval(() => {
             console.log("⏰ Periodic auto-sync check triggered");

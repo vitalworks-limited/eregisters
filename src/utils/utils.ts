@@ -2,7 +2,6 @@ import { FormItemProps, TableProps } from "antd";
 import dayjs from "dayjs";
 import { isEmpty } from "lodash";
 import {
-    FlattenedRelationship,
     ProgramRule,
     ProgramRuleResult,
     ProgramRuleVariable,
@@ -24,7 +23,6 @@ export const flattenTrackedEntity = ({
     trackedEntity,
     attributes,
     enrollments,
-    relationships,
     ...rest
 }: TrackedEntity) => {
     const trackedEntityAttributes = (attributes || []).reduce((acc, attr) => {
@@ -42,6 +40,11 @@ export const flattenTrackedEntity = ({
         },
         {},
     );
+    const allAttributes = {
+        ...trackedEntityAttributes,
+        ...enrollmentAttrs,
+    };
+    const parentEntity = allAttributes["FhyNxUVOpjh"] || "";
     const flattenedEvents = (events || []).map((event) => {
         const eventAttrs: Record<string, string> = [
             ...event.dataValues,
@@ -50,6 +53,7 @@ export const flattenTrackedEntity = ({
             acc[dv.dataElement] = dv.value;
             return acc;
         }, {});
+
         return {
             ...event,
             dataValues: eventAttrs,
@@ -57,85 +61,21 @@ export const flattenTrackedEntity = ({
             version: 1,
             lastSynced: new Date().toISOString(),
             syncError: "",
+            parentEvent: eventAttrs["Wx7x4sMAa62"] || "",
         };
     });
 
-    const trackedEntityRelationships = relationships.map(
-        ({
-            from: {
-                trackedEntity: { trackedEntity, attributes },
-            },
-            to: {
-                trackedEntity: {
-                    attributes: toAttributes,
-                    trackedEntity: toTrackedEntity,
-                },
-            },
-            ...rel
-        }) => {
-            return {
-                ...rel,
-                syncStatus: "synced",
-                version: 1,
-                lastSynced: new Date().toISOString(),
-                syncError: "",
-                from: attributes.reduce((acc, attr) => {
-                    acc[attr.attribute] = attr.value;
-                    return acc;
-                }, {}),
-                to: toAttributes.reduce((acc, attr) => {
-                    acc[attr.attribute] = attr.value;
-                    return acc;
-                }, {}),
-                toId: toTrackedEntity,
-                fromId: trackedEntity,
-            };
-        },
-    );
-
-    const eventRelationships = flattenedEvents.flatMap((ev) =>
-        ev.relationships.map(
-            ({
-                from: {
-                    event: { event, dataValues },
-                },
-                to: {
-                    event: { event: toEvent, dataValues: toDataValues },
-                },
-                ...rel
-            }) => {
-                return {
-                    ...rel,
-                    syncStatus: "synced",
-                    version: 1,
-                    lastSynced: new Date().toISOString(),
-                    syncError: "",
-                    from: dataValues.reduce((acc, attr) => {
-                        acc[attr.dataElement] = attr.value;
-                        return acc;
-                    }, {}),
-                    to: toDataValues.reduce((acc, attr) => {
-                        acc[attr.dataElement] = attr.value;
-                        return acc;
-                    }, {}),
-                    toId: toEvent,
-                    fromId: event,
-                };
-            },
-        ),
-    );
-
     return {
         ...rest,
-        attributes: { ...trackedEntityAttributes, ...enrollmentAttrs },
+        attributes: allAttributes,
         enrollment: enrollmentDetails,
         events: flattenedEvents,
         trackedEntity,
-        relationships: [...eventRelationships, ...trackedEntityRelationships],
         syncStatus: "synced",
         version: 1,
         lastSynced: new Date().toISOString(),
         syncError: "",
+        parentEntity,
     };
 };
 
@@ -192,18 +132,8 @@ export function executeProgramRules({
         ) {
             value = attributeValues[variable.trackedEntityAttribute.id];
         }
-
-        // if (value !== null && value !== undefined) {
-        //     console.log(
-        //         `  📌 Variable "${variable.name}" = ${value} (from ${variable.dataElement ? "dataElement" : "attribute"}: ${variable.dataElement?.id || variable.trackedEntityAttribute?.id})`,
-        //     );
-        // }
         variableValues[variable.name] = value ?? null;
     }
-
-    // console.log("Variable Values:", variableValues);
-
-    // D2 function implementations
     const d2Functions = {
         hasValue: (varName: string): boolean => {
             const val = variableValues[varName];
@@ -245,14 +175,6 @@ export function executeProgramRules({
 
                 const regex = new RegExp(anchoredPattern);
                 const test = regex.test(String(value));
-                // console.log("Validating pattern:", {
-                //     value,
-                //     pattern,
-                //     anchoredPattern,
-                //     regex,
-                //     test,
-                // });
-
                 return test;
             } catch {
                 return false;
@@ -392,7 +314,6 @@ export function executeProgramRules({
         },
     };
 
-    // Helper function to get and format variable/attribute value
     const getFormattedValue = (
         name: string,
         skipQuotes: boolean = false,
@@ -415,7 +336,6 @@ export function executeProgramRules({
         return `'${escaped}'`;
     };
 
-    // Helper to find matching closing parenthesis
     const findClosingParen = (str: string, startPos: number): number => {
         let depth = 1;
         for (let i = startPos; i < str.length; i++) {
@@ -428,18 +348,13 @@ export function executeProgramRules({
         return -1;
     };
 
-    // Helper to evaluate expressions (for ASSIGN and other actions)
     const evaluateExpression = (expression: string): any => {
         if (!expression) return null;
 
-        // First replace d2: function calls with JavaScript function calls
         let processedExpression = expression;
 
-        // Replace d2:functionName(...) with d2Functions.functionName(...)
-        // Process from innermost to outermost by repeatedly replacing
-        let maxIterations = 10; // Prevent infinite loops
+        let maxIterations = 10;
         while (processedExpression.includes("d2:") && maxIterations-- > 0) {
-            // Find the first d2: function call
             const d2Match = processedExpression.match(/d2:(\w+)\s*\(/);
             if (!d2Match) break;
 
@@ -459,7 +374,6 @@ export function executeProgramRules({
                 break;
             }
 
-            // Extract the full function call including d2: prefix
             const fullMatch = processedExpression.substring(
                 startPos,
                 closeParenPos + 1,
@@ -469,14 +383,12 @@ export function executeProgramRules({
                 closeParenPos,
             );
 
-            // Split args carefully (simple comma split works for most cases)
             const args = argsStr.split(",");
 
             const processedArgs = args
                 .map((arg: string) => {
                     arg = arg.trim();
 
-                    // Functions that need variable name instead of value
                     const needsVarName = [
                         "hasValue",
                         "count",
@@ -484,20 +396,17 @@ export function executeProgramRules({
                         "countIfZeroPos",
                     ].includes(funcName);
 
-                    // Handle variable references #{varName} or A{attributeName} or V{systemVar}
                     const varMatch = arg.match(/^[#AV]\{([^}]+)\}$/);
                     if (varMatch) {
                         const varName = varMatch[1];
                         if (needsVarName) {
                             return `'${varName}'`;
                         } else {
-                            // Get the raw value and wrap it properly
                             const val = variableValues[varName];
                             if (val === null || val === undefined)
                                 return "null";
                             if (typeof val === "number") return String(val);
                             if (typeof val === "boolean") return String(val);
-                            // For strings, escape and quote
                             const stringVal = String(val);
                             const escaped = stringVal
                                 .replace(/\\/g, "\\\\")
@@ -506,24 +415,19 @@ export function executeProgramRules({
                         }
                     }
 
-                    // If it's already quoted, keep as is
                     if (arg.match(/^['"].*['"]$/)) {
                         return arg;
                     }
-                    // If it's a number, keep as is
                     if (!isNaN(Number(arg)) && arg !== "") {
                         return arg;
                     }
-                    // If it's a boolean
                     if (arg === "true" || arg === "false") {
                         return arg;
                     }
-                    // Otherwise leave as is (might be an expression)
                     return arg;
                 })
                 .join(", ");
 
-            // Replace this one function call
             const replacement = `d2Functions.${funcName}(${processedArgs})`;
             processedExpression =
                 processedExpression.substring(0, startPos) +
@@ -531,7 +435,6 @@ export function executeProgramRules({
                 processedExpression.substring(closeParenPos + 1);
         }
 
-        // Replace variable references: #{varName} for data elements
         processedExpression = processedExpression.replace(
             /#\{([^}]+)\}/g,
             (_, name) => {
@@ -542,7 +445,6 @@ export function executeProgramRules({
             },
         );
 
-        // Replace attribute references: A{attributeName}
         processedExpression = processedExpression.replace(
             /A\{([^}]+)\}/g,
             (_, name) => {
@@ -553,7 +455,6 @@ export function executeProgramRules({
             },
         );
 
-        // Replace system variable references: V{varName}
         processedExpression = processedExpression.replace(
             /V\{([^}]+)\}/g,
             (_, name) => {
@@ -565,7 +466,6 @@ export function executeProgramRules({
         );
 
         try {
-            // Create function with d2Functions and variableValues in scope
             const func = new Function(
                 "d2Functions",
                 "variableValues",
@@ -583,16 +483,10 @@ export function executeProgramRules({
         }
     };
 
-    // Step 2: Safely evaluate rule condition with d2 function support
     const evaluateCondition = (condition: string, log = false): boolean => {
-        // First replace d2: function calls with JavaScript function calls
         let processedCondition = condition ?? "";
-
-        // Replace d2:functionName(...) with d2Functions.functionName(...)
-        // Process from innermost to outermost by repeatedly replacing
-        let maxIterations = 10; // Prevent infinite loops
+        let maxIterations = 10;
         while (processedCondition.includes("d2:") && maxIterations-- > 0) {
-            // Find the first d2: function call
             const d2Match = processedCondition.match(/d2:(\w+)\s*\(/);
             if (!d2Match) break;
 
@@ -933,16 +827,6 @@ export function executeProgramRules({
         }
     }
 
-    // 🐛 DEBUG: Log final rule execution result
-    // console.log(`📊 Program Rules Result:`, {
-    //     hiddenFields: Array.from(result.hiddenFields),
-    //     shownFields: Array.from(result.shownFields),
-    //     hiddenSections: Array.from(result.hiddenSections),
-    //     assignments: result.assignments,
-    //     errors: result.errors.length,
-    //     warnings: result.warnings.length,
-    // });
-
     return result;
 }
 
@@ -964,9 +848,11 @@ export const isNumber = (valueType: string | undefined) => {
 export const createEmptyTrackedEntity = ({
     orgUnit,
     attributes = {},
+    parentEntity = "",
 }: {
     orgUnit: string;
     attributes?: Record<string, any>;
+    parentEntity?: string;
 }): ReturnType<typeof flattenTrackedEntity> => {
     const trackedEntity = generateUid();
     return {
@@ -994,40 +880,11 @@ export const createEmptyTrackedEntity = ({
         createdAtClient: dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
         potentialDuplicate: false,
         trackedEntity,
-        relationships: [],
         lastSynced: "",
         syncError: "",
         syncStatus: "draft",
         version: 1,
-    };
-};
-
-export const createRelationship = ({
-    from,
-    to,
-    fromId,
-    toId,
-    relationshipType,
-}: {
-    fromId: string;
-    toId: string;
-    relationshipType: string;
-    from: Record<string, any>;
-    to: Record<string, any>;
-}): FlattenedRelationship => {
-    return {
-        relationship: generateUid(),
-        fromId,
-        toId,
-        relationshipType,
-        from,
-        to,
-        lastSynced: "",
-        syncError: "",
-        syncStatus: "draft",
-        version: 1,
-        updatedAt: dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
-        createdAt: dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
+        parentEntity,
     };
 };
 
@@ -1037,7 +894,7 @@ export const createEmptyEvent = ({
     trackedEntity,
     enrollment,
     programStage,
-    parentEvent,
+    parentEvent = "",
     dataValues = {},
 }: {
     orgUnit: string;
@@ -1071,7 +928,7 @@ export const createEmptyEvent = ({
         syncError: "",
         syncStatus: "draft",
         version: 1,
-        parentEvent: parentEvent || undefined,
+        parentEvent,
     };
 };
 

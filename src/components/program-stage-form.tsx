@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect } from "react";
 import { RootRoute } from "../routes/__root";
 
 import { Card, Form, FormInstance, Row } from "antd";
@@ -31,7 +31,6 @@ export default function ProgramStageForm({
         programRules,
         programRuleVariables,
     } = RootRoute.useLoaderData();
-    const values = Form.useWatch([], form);
     const currentDataElements = new Map(
         programStage.programStageDataElements.map((psde) => [
             psde.dataElement.id,
@@ -44,11 +43,12 @@ export default function ProgramStageForm({
         ]),
     );
 
-    const { updateField, entity } = useDexiePersistence<FlattenedEvent>({
-        entityType: "event",
-        entityId: event.event,
-        debounceMs: 100,
-    });
+    const { updateField, updateFields, entity } =
+        useDexiePersistence<FlattenedEvent>({
+            entityType: "event",
+            entityId: event.event,
+            debounceMs: 100,
+        });
 
     const { ruleResult, triggerAutoExecute } = useProgramRulesWithDexie({
         form,
@@ -56,17 +56,19 @@ export default function ProgramStageForm({
         programRuleVariables,
         programStage: programStage.id,
         trackedEntityAttributes: trackedEntity.attributes,
-        onAssignments: async () => {},
+        onAssignments: updateFields,
         applyAssignmentsToForm: true,
         persistAssignments: true,
         program: program.id,
         autoExecute: true,
     });
-
-    useEffect(() => {
-        if (!values) return;
-        triggerAutoExecute();
-    }, [values]);
+    const updateFieldWithRules = useCallback(
+        (fieldId: string, value: any) => {
+            updateField(fieldId, value);
+            triggerAutoExecute();
+        },
+        [updateField, triggerAutoExecute],
+    );
     useEffect(() => {
         form.setFieldsValue(entity?.dataValues);
     }, [entity]);
@@ -75,7 +77,7 @@ export default function ProgramStageForm({
             {programStage.programStageSections.flatMap((section) => {
                 if (ruleResult.hiddenSections.has(section.id)) return [];
                 return (
-                    <Row gutter={24}>
+                    <Row gutter={[16, 0]} key={section.id}>
                         {section.dataElements.flatMap((dataElement) => {
                             const currentDataElement = dataElements.get(
                                 dataElement.id,
@@ -166,9 +168,7 @@ export default function ProgramStageForm({
                                         section.dataElements.length,
                                         6,
                                     )}
-                                    onAutoSave={(dataElement, value) =>
-                                        updateField(dataElement, value)
-                                    }
+                                    onAutoSave={updateFieldWithRules}
                                 />
                             );
                         })}

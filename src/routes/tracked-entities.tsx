@@ -117,7 +117,7 @@ function TrackedEntities() {
     const handleClear = () => {
         form.resetFields();
         navigate({
-            search: (prev) => ({ ...prev, search: {} }),
+            search: (prev) => ({ ...prev, search: undefined }),
         });
     };
 
@@ -247,7 +247,6 @@ function TrackedEntities() {
                             </Card>
                         </Col>
                     </Row>
-
                     <Outlet />
                 </Col>
             </Row>

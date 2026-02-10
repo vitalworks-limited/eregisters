@@ -10,7 +10,7 @@ import {
     Tabs,
 } from "antd";
 import { orderBy } from "lodash";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useProgramRulesWithDexie } from "../hooks/useProgramRules";
 import { RootRoute } from "../routes/__root";
 import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
@@ -57,16 +57,17 @@ export default function MainEventCapture({
         programRules,
         programRuleVariables,
     } = RootRoute.useLoaderData();
-    const values = Form.useWatch([], form);
+    // const values = Form.useWatch([], form);
     const [activeKey, setActiveKey] = useState<string>(
         "K2nxbE9ubSs-bnV62fxQmoE",
     );
 
-    const { updateField, entity } = useDexiePersistence<FlattenedEvent>({
-        entityType: "event",
-        entityId: mainEvent.event,
-        debounceMs: 100,
-    });
+    const { updateField, updateFields, entity } =
+        useDexiePersistence<FlattenedEvent>({
+            entityType: "event",
+            entityId: mainEvent.event,
+            debounceMs: 100,
+        });
 
     const { ruleResult, triggerAutoExecute } = useProgramRulesWithDexie({
         form,
@@ -74,12 +75,21 @@ export default function MainEventCapture({
         programRuleVariables,
         programStage: "K2nxbE9ubSs",
         trackedEntityAttributes: trackedEntity.attributes,
-        onAssignments: async () => {},
+        onAssignments: updateFields,
         applyAssignmentsToForm: true,
         persistAssignments: true,
         program: program.id,
         autoExecute: true,
     });
+
+    const updateFieldWithRules = useCallback(
+        (fieldId: string, value: any) => {
+            updateField(fieldId, value);
+            triggerAutoExecute();
+        },
+        [updateField, triggerAutoExecute],
+    );
+
     const [serviceTypes, setServiceTypes] = useState<
         Array<{
             id: string;
@@ -102,11 +112,6 @@ export default function MainEventCapture({
         }
     }, [ruleResult.hiddenOptions["mrKZWf2WMIC"]]);
 
-    useEffect(() => {
-        if (!values) return;
-        triggerAutoExecute();
-    }, [values]);
-
     const handleTabChange = (active: string) => {
         setActiveKey(() => active);
     };
@@ -116,7 +121,7 @@ export default function MainEventCapture({
     return (
         <Flex vertical gap={10} style={{ width: "100%" }}>
             <Card size="small" styles={{ body: { padding: 10, margin: 0 } }}>
-                <Row gutter={20}>
+                <Row gutter={[16, 0]}>
                     <Col span={12}>
                         <Form.Item
                             label="Visit Date"
@@ -226,9 +231,6 @@ export default function MainEventCapture({
                                     programStage={stage}
                                     trackedEntity={trackedEntity}
                                     mainEvent={mainEvent}
-                                    relationShipType={
-                                        relationshipTypes.get(stage.id)!
-                                    }
                                 />
                             ),
                         };
@@ -246,7 +248,7 @@ export default function MainEventCapture({
                                 label: section.displayName || section.name,
                                 children: (
                                     <Card>
-                                        <Row gutter={24}>
+                                        <Row gutter={[16, 0]}>
                                             {section.dataElements.flatMap(
                                                 (dataElement) => {
                                                     const currentDataElement =
@@ -399,14 +401,8 @@ export default function MainEventCapture({
                                                                     .length,
                                                                 6,
                                                             )}
-                                                            onAutoSave={(
-                                                                dataElement,
-                                                                value,
-                                                            ) =>
-                                                                updateField(
-                                                                    dataElement,
-                                                                    value,
-                                                                )
+                                                            onAutoSave={
+                                                                updateFieldWithRules
                                                             }
                                                         />
                                                     );

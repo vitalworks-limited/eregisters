@@ -11,19 +11,19 @@ import { RootRoute } from "../routes/__root";
 import { TrackedEntitiesRoute } from "../routes/tracked-entities";
 
 const { Title, Text } = Typography;
-const NoPatientsCard: React.FC = () => {
+const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
     const {
         orgUnit: { id },
     } = RootRoute.useRouteContext();
-		const navigate = TrackedEntitiesRoute.useNavigate();
+    const navigate = TrackedEntitiesRoute.useNavigate();
     const { data, isOpen, openModal, closeModal } =
         useModalState<FlattenedTrackedEntity>();
 
-    const handleCreate = () => {
-        console.log("Creating new patient");
+    const handleCreate = async () => {
         const newPatient: FlattenedTrackedEntity = createEmptyTrackedEntity({
             orgUnit: id,
         });
+        await db.trackedEntities.put(newPatient);
         openModal(newPatient);
     };
 
@@ -41,7 +41,7 @@ const NoPatientsCard: React.FC = () => {
                 style={{ width: "100%" }}
             >
                 <Title level={3} style={{ color: "#2c3e50", margin: 0 }}>
-                    No clients found.
+                    {message}
                 </Title>
 
                 <Text
@@ -89,17 +89,25 @@ const NoPatientsCard: React.FC = () => {
                             },
                             syncStatus: "pending",
                         });
-												navigate({
-													to: `/tracked-entity/$trackedEntity`,
-													search: { orgUnits: id },
-													params: { trackedEntity: data.trackedEntity },
-												});
+
+                        if (!addAnother) {
+                            navigate({
+                                to: `/tracked-entity/$trackedEntity`,
+                                search: {
+                                    orgUnits: id,
+                                },
+                                params: {
+                                    trackedEntity: data.trackedEntity,
+                                },
+                            });
+                        }
                     }
                     if (addAnother) {
                         const newPatient: FlattenedTrackedEntity =
                             createEmptyTrackedEntity({
                                 orgUnit: id,
                             });
+                        await db.trackedEntities.put(newPatient);
                         openModal(newPatient);
                     }
                 }}

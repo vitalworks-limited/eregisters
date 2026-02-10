@@ -25,11 +25,7 @@ import { TrackerRegistration } from "../components/tracker-registration";
 import { db } from "../db";
 import { useModalState } from "../hooks/useModalState";
 import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
-import {
-    createEmptyEvent,
-    createEmptyTrackedEntity,
-    createRelationship,
-} from "../utils/utils";
+import { createEmptyEvent, createEmptyTrackedEntity } from "../utils/utils";
 import { RootRoute } from "./__root";
 export const TrackedEntityRoute = createRoute({
     getParentRoute: () => RootRoute,
@@ -55,7 +51,6 @@ function TrackedEntity() {
     } = RootRoute.useRouteContext();
     const { data, isOpen, openModal, closeModal } =
         useModalState<FlattenedEvent>();
-
     const {
         data: childData,
         isOpen: childIsOpen,
@@ -270,7 +265,6 @@ function TrackedEntity() {
                 );
             }
         });
-
         const initialValues = {
             ...autoPopulatedAttributes,
             ...mappedAttributes,
@@ -428,18 +422,22 @@ function TrackedEntity() {
                 data={data}
                 onClose={closeModal}
                 onSave={async (values) => {
-                    const pendingRelationships = await db.relationships
-                        .where("fromId")
-                        .equals(data!.event)
-                        .filter((e) => e.syncStatus === "draft")
-                        .toArray();
-                    const pendingEvents = await db.events
-                        .where("event")
-                        .anyOf(pendingRelationships.map((r) => r.toId));
                     if (values && data) {
                         await db.events.update(data.event, {
                             syncStatus: "pending",
                         });
+                        const otherEvents = await db.events
+                            .where("parentEvent")
+                            .equals(data.event)
+                            .filter((e) => e.syncStatus === "draft")
+                            .toArray();
+                        await Promise.all(
+                            otherEvents.map((e) =>
+                                db.events.update(e.event, {
+                                    syncStatus: "pending",
+                                }),
+                            ),
+                        );
                     }
                 }}
                 title="New Visit"
@@ -465,8 +463,8 @@ function TrackedEntity() {
                         ...childData!,
                         attributes: values,
                         syncStatus: "pending",
+                        parentEntity: trackedEntity.trackedEntity,
                     });
-
                     const childEvent = createEmptyEvent({
                         trackedEntity: childData!.trackedEntity,
                         program: childData!.enrollment.program,
@@ -476,22 +474,10 @@ function TrackedEntity() {
                         dataValues: { occurredAt: values["enrolledAt"] },
                     });
 
-                    const relationship = createRelationship({
-                        from: trackedEntity.attributes,
-                        to: values,
-                        fromId: trackedEntity.trackedEntity,
-                        toId: childData!.trackedEntity,
-                        relationshipType: "vDnDNhGRzzy",
-                    });
-
-                    await db.relationships.put({
-                        ...relationship,
-                        syncStatus: "pending",
-                    });
-
                     await db.events.put({
                         ...childEvent,
                         syncStatus: "pending",
+                        parentEvent: data!.event,
                     });
 
                     if (addAnother) {

@@ -250,26 +250,6 @@ export const EventSchema = z.object({
     trackedEntity: UID,
     orgUnit: UID,
     parentEvent: UID.optional(),
-    relationships: z.array(
-        z.object({
-            relationship: UID,
-            relationshipType: UID,
-            from: z.object({
-                event: z.object({
-                    event: UID,
-                    dataValues: z.array(DataValueSchema),
-                }),
-            }),
-            to: z.object({
-                event: z.object({
-                    event: UID,
-                    dataValues: z.array(DataValueSchema),
-                }),
-            }),
-            createdAt: z.string(),
-            updatedAt: z.string(),
-        }),
-    ),
     occurredAt: z.string(),
     followUp: z.boolean(),
     deleted: z.boolean(),
@@ -328,26 +308,7 @@ export const TrackedEntitySchema = z.object({
         )
         .optional(),
 
-    relationships: z.array(
-        z.object({
-            relationship: UID,
-            relationshipType: UID,
-            createdAt: z.string(),
-            updatedAt: z.string(),
-            from: z.object({
-                trackedEntity: z.object({
-                    trackedEntity: UID,
-                    attributes: z.array(AttributeSchema),
-                }),
-            }),
-            to: z.object({
-                trackedEntity: z.object({
-                    trackedEntity: UID,
-                    attributes: z.array(AttributeSchema),
-                }),
-            }),
-        }),
-    ),
+    parentEntity: UID.optional(),
 });
 
 export const TrackedEntityResponseSchema = z.object({
@@ -463,11 +424,7 @@ export type FlattenedTrackedEntity = ReturnType<typeof flattenTrackedEntity>;
 export type FlattenedTrackedEntities = ReturnType<
     typeof flattenTrackedEntityResponse
 >;
-
 export type FlattenedEvent = FlattenedTrackedEntity["events"][number];
-export type FlattenedRelationship =
-    FlattenedTrackedEntity["relationships"][number];
-
 export type FlattenedEnrollment = FlattenedTrackedEntity["enrollment"];
 
 export interface Village {

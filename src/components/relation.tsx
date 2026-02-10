@@ -3,18 +3,20 @@ import React, { useCallback } from "react";
 import { useDexiePersistence } from "../hooks/useDexiePersistence";
 import { useProgramRulesWithDexie } from "../hooks/useProgramRules";
 import { RootRoute } from "../routes/__root";
-import { FlattenedEvent, FlattenedRelationship } from "../schemas";
+import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
 import { calculateColSpan } from "../utils/utils";
 import { DataElementField } from "./data-element-field";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db } from "../db";
 
 export default function Relation({
     section,
-    child,
     mainEvent,
+    trackedEntity,
 }: {
     section: string;
-    child: FlattenedRelationship["to"];
     mainEvent: FlattenedEvent;
+    trackedEntity: FlattenedTrackedEntity;
 }) {
     const {
         program,
@@ -26,7 +28,6 @@ export default function Relation({
     } = RootRoute.useLoaderData();
 
     const [childEventForm] = Form.useForm();
-    const occurredAt = mainEvent.dataValues["occurredAt"] || mainEvent.occurredAt;
 
     const [stage] = program.programStages.filter(
         ({ id }) => id === "K2nxbE9ubSs",
@@ -36,28 +37,26 @@ export default function Relation({
         ({ name }) => name === "Child Health Services",
     );
 
-    // const childEvent = useLiveQuery(async () => {
-    //     const existingEvent = await db.events
-    //         .where("enrollment")
-    //         .equals(child.enrollments[0].enrollment)
-    //         .and((e) => e.programStage === "K2nxbE9ubSs")
-    //         .first();
-    //     return existingEvent || null;
-    // }, [child.enrollments?.[0]?.enrollment, mainEventId]);
+    const childEvent = useLiveQuery(async () => {
+        return db.events
+            .where("parentEvent")
+            .equals(mainEvent.event)
+            .filter((x) => x.trackedEntity === trackedEntity.trackedEntity)
+            .first();
+    }, [mainEvent.event, trackedEntity.trackedEntity]);
 
     const { updateField, updateFields } = useDexiePersistence({
         entityType: "event",
-        entityId: "",
+        entityId: childEvent?.event ?? "",
     });
 
-    // Use program rules with autoExecute enabled
     const { ruleResult, executeAndApplyRules, triggerAutoExecute } =
         useProgramRulesWithDexie({
             form: childEventForm,
             programRules,
             programRuleVariables,
             programStage: "K2nxbE9ubSs",
-            trackedEntityAttributes: child,
+            trackedEntityAttributes: trackedEntity.attributes,
             onAssignments: updateFields,
             applyAssignmentsToForm: true,
             persistAssignments: true,
@@ -66,9 +65,12 @@ export default function Relation({
         });
 
     const updateFieldWithRules = useCallback(
-        (fieldId: string, value: any) => {
+        async (fieldId: string, value: any) => {
             updateField(fieldId, value);
             triggerAutoExecute();
+            await db.events.update(childEvent?.event ?? "", {
+                syncStatus: "pending",
+            });
         },
         [updateField, triggerAutoExecute],
     );
@@ -94,7 +96,7 @@ export default function Relation({
             <Typography.Title level={4} style={{ marginBottom: 16 }}>
                 {section}
             </Typography.Title>
-            <Row gutter={24}>
+            <Row gutter={[16, 0]}>
                 {currentSection.dataElements.flatMap((dataElement) => {
                     const currentDataElement = dataElements.get(dataElement.id);
                     const { compulsory = false, desktopRenderType } =

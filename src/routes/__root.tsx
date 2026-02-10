@@ -1,6 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
-import React, { useMemo } from "react";
+import React from "react";
 
 import { HomeOutlined } from "@ant-design/icons";
 import { useDataEngine } from "@dhis2/app-runtime";
@@ -12,10 +12,10 @@ import { OrgUnit } from "../schemas";
 
 import MetadataSyncComponent from "../components/metadata-sync";
 import MetadataProgress from "../components/metdata-progress";
+import { SyncStatus } from "../components/sync-status";
 import { db } from "../db";
 import { createMetadataSync } from "../db/metadata-sync";
 import { createSyncManager } from "../db/sync";
-import { SyncStatus } from "../components/sync-status";
 
 const { Header } = Layout;
 const { Title, Text } = Typography;
@@ -25,18 +25,8 @@ const queryInfo = async (engine: ReturnType<typeof useDataEngine>) => {
     const updateInfo = await metadataSync.checkForUpdates();
 
     if (updateInfo.hasUpdates) {
-        // console.log("📡 Syncing metadata...", updateInfo);
-        await metadataSync.fullSync((progress) => {
-            // console.log(
-            //     `📊 Metadata sync progress: ${progress.percentage}% - ${progress.current}`,
-            // );
-        });
+        await metadataSync.fullSync((progress) => {});
     } else {
-        // console.log(
-        //     "✅ Using cached metadata (last sync:",
-        //     updateInfo.lastSync,
-        //     ")",
-        // );
     }
     const dataElements = await db.dataElements.toArray();
     const trackedEntityAttributes = await db.trackedEntityAttributes.toArray();
@@ -45,8 +35,6 @@ const queryInfo = async (engine: ReturnType<typeof useDataEngine>) => {
     const optionGroups = await db.optionGroups.toArray();
     const optionSets = await db.optionSets.toArray();
     const [program] = await db.programs.toArray();
-    const villages = await db.villages.toArray();
-    const [motherChildRelation] = await db.relationshipTypes.toArray();
     return {
         dataElements: new Map(dataElements.map((de) => [de.id, de])),
         trackedEntityAttributes: new Map(
@@ -66,9 +54,7 @@ const queryInfo = async (engine: ReturnType<typeof useDataEngine>) => {
             ]),
         ),
         program,
-        villages,
         programOrgUnits: new Set(program.organisationUnits.map(({ id }) => id)),
-        motherChildRelation,
     };
 };
 

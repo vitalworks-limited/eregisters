@@ -19,11 +19,11 @@ import { db } from "../db";
 import { useModalState } from "../hooks/useModalState";
 import { RootRoute } from "../routes/__root";
 import {
+    FlattenedEvent,
     FlattenedTrackedEntity,
     ProgramStage,
-    FlattenedEvent,
 } from "../schemas";
-import { createEmptyEvent, createRelationship } from "../utils/utils";
+import { createEmptyEvent } from "../utils/utils";
 import { DataModal } from "./data-modal";
 import ProgramStageForm from "./program-stage-form";
 
@@ -34,14 +34,7 @@ export const ProgramStageCapture: React.FC<{
     trackedEntity: FlattenedTrackedEntity;
     mainEvent: FlattenedEvent;
     captureMode?: "modal" | "inline";
-    relationShipType: string;
-}> = ({
-    programStage,
-    trackedEntity,
-    mainEvent,
-    relationShipType,
-    captureMode = "modal",
-}) => {
+}> = ({ programStage, trackedEntity, mainEvent, captureMode = "modal" }) => {
     const enrollment = trackedEntity.enrollment;
     const { data, isOpen, openModal, closeModal } =
         useModalState<FlattenedEvent>();
@@ -54,30 +47,22 @@ export const ProgramStageCapture: React.FC<{
             orgUnit: enrollment.orgUnit,
             enrollment: enrollment.enrollment,
             programStage: programStage.id,
-        });
-        const newRelationship = createRelationship({
-            fromId: mainEvent.event,
-            toId: newEvent.event,
-            relationshipType: relationShipType,
-            from: {},
-            to: {},
+            dataValues: {
+                occurredAt:
+                    mainEvent.dataValues["occurredAt"] || mainEvent.occurredAt,
+            },
         });
         await db.events.put(newEvent);
-        await db.relationships.put(newRelationship);
         openModal(newEvent);
     };
 
     const events =
         useLiveQuery(async () => {
             if (!mainEvent.event) return [];
-            const relationships = await db.relationships
-                .where("fromId")
-                .equals(mainEvent.event)
-                .and((e) => e.relationshipType === relationShipType)
-                .toArray();
             return db.events
-                .where("event")
-                .anyOf(relationships.map((r) => r.toId))
+                .where("parentEvent")
+                .equals(mainEvent.event)
+								.filter((event) => event.programStage === programStage.id)
                 .toArray();
         }, [trackedEntity.trackedEntity, programStage.id, mainEvent.event]) ||
         [];
@@ -218,16 +203,7 @@ export const ProgramStageCapture: React.FC<{
                                 mainEvent.syncStatus === "synced"
                                     ? "pending"
                                     : "draft",
-                        });
-                        const relationship = createRelationship({
-                            fromId: mainEvent.event,
-                            toId: data.event,
-                            relationshipType: relationShipType,
-                            from: {},
-                            to: {},
-                        });
-                        await db.relationships.put({
-                            ...relationship,
+                            parentEvent: mainEvent.event,
                         });
                     }
                 }}

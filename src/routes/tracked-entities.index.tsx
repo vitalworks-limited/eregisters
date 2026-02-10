@@ -45,7 +45,7 @@ export const TrackedEntitiesIndexRoute = createRoute({
             program: "ueBhWkWll5v",
             orgUnitMode: "ACCESSIBLE",
             order: "updatedAt:DESC",
-            fields: "trackedEntity,trackedEntityType,orgUnit,createdAt,updatedAt,createdAtClient,updatedAtClient,inactive,deleted,potentialDuplicate,attributes,relationships[*],enrollments[*,events[*,relationships[*]]]",
+            fields: "trackedEntity,trackedEntityType,orgUnit,createdAt,updatedAt,createdAtClient,updatedAtClient,inactive,deleted,potentialDuplicate,attributes,enrollments[*,events[*]]",
         });
         if (search && Object.values(search).length > 0) {
             for (const [filterKey, filterValues] of Object.entries(search)) {
@@ -80,10 +80,8 @@ export const TrackedEntitiesIndexRoute = createRoute({
             );
             const results = flattenTrackedEntityResponse(data);
             const events = results.flatMap((te) => te.events);
-            const relationships = results.flatMap((te) => te.relationships);
             await db.trackedEntities.bulkPut(results);
             await db.events.bulkPut(events);
-            await db.relationships.bulkPut(relationships);
             return results;
         }
 
@@ -100,11 +98,12 @@ function TrackedEntitiesSearch() {
     const navigate = TrackedEntitiesIndexRoute.useNavigate();
     const { data, isOpen, openModal, closeModal } =
         useModalState<FlattenedTrackedEntity>();
-    const { orgUnits } = TrackedEntitiesRoute.useSearch();
-    const handleCreate = () => {
+    const { orgUnits, search } = TrackedEntitiesRoute.useSearch();
+    const handleCreate = async () => {
         const newPatient: FlattenedTrackedEntity = createEmptyTrackedEntity({
             orgUnit: id,
         });
+        await db.trackedEntities.put(newPatient);
         openModal(newPatient);
     };
 
@@ -123,18 +122,6 @@ function TrackedEntitiesSearch() {
         ],
     };
     const columns: ColumnsType<FlattenedTrackedEntity> = [
-        {
-            displayInList: true,
-            displayFormName: "Registering Facility",
-            name: "Registering Facility",
-            id: "registeringFacility",
-            valueType: "TEXT",
-            optionSetValue: false,
-            generated: false,
-            unique: false,
-            pattern: "",
-            confidential: false,
-        },
         ...program.programTrackedEntityAttributes.map(
             ({ trackedEntityAttribute: { id }, ...rest }) => ({
                 ...rest,
@@ -201,7 +188,14 @@ function TrackedEntitiesSearch() {
         };
     });
 
-    if (trackedEntities.length === 0) return <NoPatientsCard />;
+    if (
+        trackedEntities.length === 0 &&
+        Object.values(search ?? {}).some(Boolean)
+    )
+        return (
+            <NoPatientsCard message="No clients found matching your search criteria." />
+        );
+    if (trackedEntities.length === 0) return <NoPatientsCard message="" />;
     return (
         <Card
             variant="borderless"
@@ -250,7 +244,7 @@ function TrackedEntitiesSearch() {
                 open={isOpen}
                 data={data}
                 onClose={closeModal}
-                onSave={async (values) => {
+                onSave={async (values, addAnother) => {
                     if (values && data) {
                         await db.trackedEntities.put({
                             ...data,
@@ -258,11 +252,32 @@ function TrackedEntitiesSearch() {
                                 ...data.attributes,
                                 ...values,
                             },
+                            syncStatus: "pending",
                         });
+                        if (!addAnother) {
+                            navigate({
+                                to: `/tracked-entity/$trackedEntity`,
+                                search: {
+                                    orgUnits: id,
+                                },
+                                params: {
+                                    trackedEntity: data.trackedEntity,
+                                },
+                            });
+                        }
+                    }
+                    if (addAnother) {
+                        const newPatient: FlattenedTrackedEntity =
+                            createEmptyTrackedEntity({
+                                orgUnit: id,
+                            });
+                        await db.trackedEntities.put(newPatient);
+                        openModal(newPatient);
                     }
                 }}
                 title="Register New Client"
                 submitButtonText="Register client"
+                hasAddAnother={true}
             >
                 {(form) => (
                     <TrackerRegistration trackedEntity={data!} form={form} />

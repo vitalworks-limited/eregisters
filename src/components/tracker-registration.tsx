@@ -1,10 +1,11 @@
 import { Card, Flex, Form, FormInstance, Row, Typography } from "antd";
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect } from "react";
 import { useProgramRulesWithDexie } from "../hooks/useProgramRules";
 import { RootRoute } from "../routes/__root";
 import { FlattenedTrackedEntity, RenderType } from "../schemas";
 import { calculateColSpan, spans } from "../utils/utils";
 import { DataElementField } from "./data-element-field";
+import { useDexiePersistence } from "../hooks/useDexiePersistence";
 export interface TrackerRegistrationProps {
     trackedEntity: FlattenedTrackedEntity;
     form: FormInstance;
@@ -39,7 +40,13 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
         ),
     );
 
-    const values = Form.useWatch([], form);
+    const { updateField, updateFields } =
+        useDexiePersistence<FlattenedTrackedEntity>({
+            entityType: "trackedEntity",
+            entityId: trackedEntity.trackedEntity,
+        });
+
+    const values = Form.useWatch("xcYGVzmcWvi", form);
 
     const { ruleResult, executeAndApplyRules, triggerAutoExecute } =
         useProgramRulesWithDexie({
@@ -47,7 +54,7 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
             programRules,
             programRuleVariables,
             trackedEntityAttributes: trackedEntity.attributes,
-            onAssignments: async () => {},
+            onAssignments: updateFields,
             applyAssignmentsToForm: true,
             persistAssignments: true,
             clearHiddenFields: true,
@@ -56,8 +63,16 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
             autoExecute: true,
         });
 
+    const updateFieldWithRules = useCallback(
+        (fieldId: string, value: any) => {
+            updateField(fieldId, value);
+            triggerAutoExecute();
+        },
+        [updateField, triggerAutoExecute],
+    );
+
     useEffect(() => {
-        if (!values) return;
+			console.log("Values changed:", values);
         triggerAutoExecute();
     }, [values]);
 
@@ -97,8 +112,7 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
                         md={24}
                         lg={24}
                         xl={24}
-                        // desktopRenderType={"DEFAULT"}
-                        onAutoSave={() => {}}
+                        onAutoSave={updateFieldWithRules}
                     />
                 </Row>
             </Card>
@@ -199,7 +213,7 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
                                             desktopRenderType={
                                                 desktopRenderType?.type
                                             }
-                                            onAutoSave={() => {}}
+                                            onAutoSave={updateFieldWithRules}
                                         />
                                     );
                                 })}

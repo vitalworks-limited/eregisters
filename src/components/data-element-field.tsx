@@ -40,19 +40,17 @@ export const DataElementField = React.memo<{
     customLabel?: string;
     onAutoSave: (dataElementId: string, value: any) => void;
     desktopRenderType?: RenderType["type"];
-    disabled?: boolean; // Disable field (e.g., for assigned values from program rules)
+    disabled?: boolean;
 }>(
     ({
         dataElement,
         hidden,
         finalOptions,
         errors,
-        messages,
         warnings,
         required,
         sm,
         lg,
-        span,
         md,
         xs,
         xl,
@@ -63,7 +61,6 @@ export const DataElementField = React.memo<{
         disabled = false,
     }) => {
         if (hidden) return null;
-        // Determine if this field should trigger rules on blur or change
         const isTextInput =
             !dataElement.optionSetValue &&
             !["BOOLEAN", "AGE"].includes(dataElement.valueType ?? "") &&
@@ -79,6 +76,7 @@ export const DataElementField = React.memo<{
                           }
                         : undefined
                 }
+                allowClear
             />
         );
         if (dataElement.id === "oTI0DLitzFY") {

@@ -1,4 +1,5 @@
-import { db, FlattenedEvent, FlattenedTrackedEntity } from "./index";
+import { FlattenedEvent, FlattenedTrackedEntity } from "./../schemas";
+import { db } from "./index";
 
 /**
  * Conflict Resolution Strategies for Dexie-DHIS2 Sync
@@ -107,7 +108,10 @@ export async function resolveConflict(
         };
     }
 
-    console.log(`⚠️ Conflict detected for ${entityType} ${entityId}`, detection);
+    console.log(
+        `⚠️ Conflict detected for ${entityType} ${entityId}`,
+        detection,
+    );
 
     switch (strategy) {
         case "client-wins":
@@ -131,9 +135,7 @@ export async function resolveConflict(
             };
 
         case "newest-wins": {
-            const localTime = new Date(
-                detection.localLastModified,
-            ).getTime();
+            const localTime = new Date(detection.localLastModified).getTime();
             const remoteTime = detection.remoteLastModified
                 ? new Date(detection.remoteLastModified).getTime()
                 : 0;
@@ -192,9 +194,6 @@ async function updateLocalWithRemote(
             break;
         case "event":
             await db.events.update(entityId, updates);
-            break;
-        case "relationship":
-            await db.relationships.update(entityId, updates);
             break;
     }
 

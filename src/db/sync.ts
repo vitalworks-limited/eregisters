@@ -2,20 +2,14 @@ import { useDataEngine } from "@dhis2/app-runtime";
 import { db, type SyncOperation, type SyncState } from "./index";
 import { createMetadataSync, type MetadataSync } from "./metadata-sync";
 import {
-    deleteOldDrafts,
     deleteSyncOperation,
     failSyncOperation,
     getNextSyncOperation,
-    getSyncOperationsByStatus,
     getSyncQueueStats,
     queueSyncOperation,
     updateSyncOperation,
 } from "./operations";
-import {
-    FlattenedEvent,
-    FlattenedRelationship,
-    FlattenedTrackedEntity,
-} from "../schemas";
+import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
 
 /**
  * Sync Manager for MOH Registers Application
@@ -36,9 +30,9 @@ export interface SyncManagerState {
 const SYNC_CONFIG = {
     batchSize: 10,
     retryLimit: 3,
-    syncInterval: 5000, // 5 seconds
-    pullInterval: 10000, // 10 seconds - interval for pulling data from server
-    enablePull: true, // Enable pulling data from server
+    syncInterval: 5000,
+    pullInterval: 10000,
+    enablePull: true,
 };
 
 /**
@@ -51,7 +45,9 @@ export class SyncManager {
     private isOnline: boolean = navigator.onLine;
     private isSyncing: boolean = false;
     private isPulling: boolean = false;
+    private isSyncUpdating: boolean = false;
     private syncInterval?: NodeJS.Timeout;
+    private pullTimer?: NodeJS.Timeout;
     private cleanupInterval?: NodeJS.Timeout;
     private metadataCheckInterval?: NodeJS.Timeout;
     private metadataSync: MetadataSync;
@@ -89,7 +85,6 @@ export class SyncManager {
     ): Promise<void> {
         const currentState = await db.syncState.get("current");
         if (!currentState) {
-            // Initialize if missing
             await this.initializeSyncState();
         }
 
@@ -100,9 +95,7 @@ export class SyncManager {
     }
 
     private setupDatabaseHooks() {
-        // Hook for creating tracked entities
         db.trackedEntities.hook("creating", (primKey, obj, transaction) => {
-            // Initialize sync metadata if not present
             const entity = obj;
             if (!entity.syncStatus) {
                 entity.syncStatus = "pending";
@@ -111,7 +104,8 @@ export class SyncManager {
             }
 
             transaction.on("complete", () => {
-                // Get the created entity to check its final status
+                if (this.isSyncUpdating) return;
+
                 db.trackedEntities.get(primKey).then((created) => {
                     if (created && created.syncStatus === "pending") {
                         this.queueCreateTrackedEntity(created, 8).catch(
@@ -131,8 +125,6 @@ export class SyncManager {
                 });
             });
         });
-
-        // Hook for updating tracked entities
         db.trackedEntities.hook(
             "updating",
             (modifications, primKey, obj, transaction) => {
@@ -151,6 +143,8 @@ export class SyncManager {
                 }
 
                 transaction.on("complete", () => {
+                    if (this.isSyncUpdating) return;
+
                     db.trackedEntities.get(primKey).then((updated) => {
                         if (!updated) return;
                         if (updated.syncStatus === "synced") {
@@ -172,14 +166,11 @@ export class SyncManager {
             },
         );
 
-        // Hook for deleting tracked entities
         db.trackedEntities.hook("deleting", (primKey, obj, transaction) => {});
 
         // ============================================================
         // EVENTS HOOKS
         // ============================================================
-
-        // Hook for creating events
         db.events.hook("creating", (primKey, obj, transaction) => {
             const event = obj;
             if (!event.syncStatus) {
@@ -188,6 +179,8 @@ export class SyncManager {
                 event.updatedAt = new Date().toISOString();
             }
             transaction.on("complete", () => {
+                if (this.isSyncUpdating) return;
+
                 db.events.get(primKey).then((created) => {
                     console.log("🎣 Hook: Creating event", created);
                     if (created && created.syncStatus === "pending") {
@@ -213,9 +206,7 @@ export class SyncManager {
                 const event = obj;
                 const mods: Partial<FlattenedEvent> = modifications;
 
-                // Skip status update if this is a sync-initiated update
                 if ("lastSynced" in mods) {
-                    // This update is from sync process, don't change syncStatus or queue
                     return;
                 }
 
@@ -231,9 +222,10 @@ export class SyncManager {
                     mods.updatedAt = new Date().toISOString();
                 }
                 transaction.on("complete", () => {
+                    if (this.isSyncUpdating) return;
+
                     db.events.get(primKey).then((updated) => {
                         if (!updated) return;
-                        // Skip if already synced - no need to queue again
                         if (updated.syncStatus === "synced") {
                             return;
                         }
@@ -253,90 +245,6 @@ export class SyncManager {
         db.events.hook("deleting", (primKey, obj, transaction) => {
             console.log("🎣 Hook: Deleting event", primKey);
         });
-
-        // ============================================================
-        // RELATIONSHIPS HOOKS
-        // ============================================================
-
-        // Hook for creating relationships
-        db.relationships.hook("creating", (primKey, obj, transaction) => {
-            console.log("🎣 Hook: Creating relationship", primKey);
-
-            // Initialize sync metadata if not present
-            const relationship = obj;
-            if (!relationship.syncStatus) {
-                relationship.syncStatus = "pending";
-                relationship.version = 1;
-                relationship.updatedAt = new Date().toISOString();
-            }
-            transaction.on("complete", () => {
-                db.relationships.get(primKey).then((created) => {
-                    if (created && created.syncStatus === "pending") {
-                        this.queueCreateRelationship(created, 6).catch(
-                            (error) => {
-                                console.error(
-                                    "❌ Failed to queue relationship sync:",
-                                    error,
-                                );
-                            },
-                        );
-                    } else if (created && created.syncStatus === "draft") {
-                        console.log(
-                            "⏸️  Relationship is draft, skipping sync queue:",
-                            primKey,
-                        );
-                    }
-                });
-            });
-        });
-
-        // Hook for updating relationships
-        db.relationships.hook(
-            "updating",
-            (modifications, primKey, obj, transaction) => {
-                const relationship = obj;
-                const mods: Partial<FlattenedRelationship> = modifications;
-
-                if (
-                    !("syncStatus" in mods) &&
-                    relationship.syncStatus !== "draft" &&
-                    relationship.syncStatus !== "synced"
-                ) {
-                    mods.syncStatus = "pending";
-                }
-
-                if (!("version" in mods) && !("lastSynced" in mods)) {
-                    mods.version = (relationship.version || 0) + 1;
-                    mods.updatedAt = new Date().toISOString();
-                }
-                transaction.on("complete", () => {
-                    db.relationships.get(primKey).then((updated) => {
-                        if (!updated) return;
-
-                        // Skip if already synced - no need to queue again
-                        if (updated.syncStatus === "synced") {
-                            return;
-                        }
-
-                        if (updated.syncStatus === "pending") {
-                            this.queueCreateRelationship(updated, 6).catch(
-                                (error) => {
-                                    console.error(
-                                        "❌ Failed to queue relationship update:",
-                                        error,
-                                    );
-                                },
-                            );
-                        } else if (updated.syncStatus === "draft") {
-                            console.log(
-                                "⏸️  Relationship is draft, skipping sync queue:",
-                                primKey,
-                            );
-                        }
-                    });
-                });
-            },
-        );
     }
 
     /**
@@ -369,7 +277,6 @@ export class SyncManager {
     public async getState(): Promise<SyncManagerState> {
         const state = await db.syncState.get("current");
         if (!state) {
-            // Fallback if state not initialized
             const stats = await getSyncQueueStats();
             return {
                 status: this.isSyncing
@@ -398,7 +305,6 @@ export class SyncManager {
      */
     public startAutoSync(intervalMs: number = 300000): void {
         if (this.syncInterval) {
-            console.warn("⚠️  Auto-sync already running");
             return;
         }
         this.syncInterval = setInterval(() => {
@@ -409,17 +315,11 @@ export class SyncManager {
             }
         }, intervalMs);
 
-        // Immediate first sync if online
         if (this.isOnline) {
             this.startSync().catch((error) => {
                 console.error("❌ Initial sync error:", error);
             });
         }
-
-        // ✅ OPTIMIZED: Run draft cleanup daily (24 hours)
-        this.scheduleDraftCleanup();
-
-        // ✅ NEW: Start metadata freshness checks every 30 minutes
         this.startMetadataChecks();
     }
 
@@ -430,36 +330,20 @@ export class SyncManager {
         if (this.syncInterval) {
             clearInterval(this.syncInterval);
             this.syncInterval = undefined;
-            console.log("🛑 Auto-sync stopped");
         }
         if (this.cleanupInterval) {
             clearInterval(this.cleanupInterval);
             this.cleanupInterval = undefined;
-            console.log("🛑 Draft cleanup stopped");
         }
         if (this.metadataCheckInterval) {
             clearInterval(this.metadataCheckInterval);
             this.metadataCheckInterval = undefined;
-            console.log("🛑 Metadata checks stopped");
         }
-    }
-    private scheduleDraftCleanup(): void {
-        // Run cleanup immediately on start
-        deleteOldDrafts(30).catch((error) => {
-            console.error("❌ Draft cleanup error:", error);
-        });
 
-        // Schedule daily cleanup (24 hours)
-        this.cleanupInterval = setInterval(
-            () => {
-                deleteOldDrafts(30).catch((error) => {
-                    console.error("❌ Draft cleanup error:", error);
-                });
-            },
-            24 * 60 * 60 * 1000,
-        ); // 24 hours
-
-        console.log("🗑️  Scheduled daily draft cleanup (30+ days old)");
+        if (this.pullTimer) {
+            clearInterval(this.pullTimer);
+            this.pullTimer = undefined;
+        }
     }
 
     /**
@@ -468,12 +352,10 @@ export class SyncManager {
      * Users can manually sync via the UI button if needed
      */
     private startMetadataChecks(): void {
-        // Check immediately on start
         this.checkMetadataFreshness().catch((error) => {
             console.error("❌ Metadata check error:", error);
         });
 
-        // Schedule checks every 30 minutes
         this.metadataCheckInterval = setInterval(
             () => {
                 this.checkMetadataFreshness().catch((error) => {
@@ -481,10 +363,6 @@ export class SyncManager {
                 });
             },
             30 * 60 * 1000,
-        ); // 30 minutes
-
-        console.log(
-            "📋 Scheduled metadata freshness checks (every 30 minutes)",
         );
     }
 
@@ -496,11 +374,6 @@ export class SyncManager {
         try {
             const isStale = await this.metadataSync.isMetadataStale();
             if (isStale) {
-                console.log(
-                    "📋 Metadata is stale (>1 hour old). User can sync via UI button.",
-                );
-                // Optional: Could emit an event or notification here
-                // For now, just log - user has manual sync button in UI
             } else {
                 console.log("📋 Metadata is fresh");
             }
@@ -523,19 +396,14 @@ export class SyncManager {
      */
     public async startSync(): Promise<void> {
         if (!this.isOnline) {
-            console.log("📵 Offline - sync skipped");
             return;
         }
 
         if (this.isSyncing) {
-            console.log("🔄 Sync already in progress");
             return;
         }
-
         this.isSyncing = true;
         const syncStartTime = Date.now();
-
-        // Get pending count before sync
         const stats = await getSyncQueueStats();
         await this.updateSyncState({
             status: "syncing",
@@ -547,11 +415,9 @@ export class SyncManager {
             console.log("🔄 Starting sync...");
             let syncedCount = 0;
             while (this.isOnline) {
-                // Get batch of operations
                 const batch = await this.getNextBatch(10);
                 if (batch.length === 0) break;
 
-                // Group by type for efficient batching
                 const eventOps = batch.filter(
                     (op) =>
                         op.type === "CREATE_EVENT" ||
@@ -562,84 +428,32 @@ export class SyncManager {
                         op.type === "CREATE_TRACKED_ENTITY" ||
                         op.type === "UPDATE_TRACKED_ENTITY",
                 );
-                const relationshipOps = batch.filter(
-                    (op) => op.type === "CREATE_RELATIONSHIP",
-                );
-
                 try {
-                    // Batch events together (most common operation)
                     if (eventOps.length > 0) {
                         await this.processBatchedEvents(eventOps);
                         for (const op of eventOps) {
-                            // Clean up ALL pending operations for this event BEFORE updating status
-                            // This prevents race condition where hook creates new operation
-                            const allOps =
-                                await getSyncOperationsByStatus("pending");
-                            const orphanedOps = allOps.filter(
-                                (o) => o.entityId === op.entityId,
-                            );
-                            for (const orphan of orphanedOps) {
-                                await deleteSyncOperation(orphan.id);
-                            }
-
                             await deleteSyncOperation(op.id);
-
-                            // Update event syncStatus to "synced" AFTER cleanup
+                            this.isSyncUpdating = true;
                             await db.events.update(op.entityId, {
                                 syncStatus: "synced",
                                 lastSynced: new Date().toISOString(),
                             });
-
+                            this.isSyncUpdating = false;
                             syncedCount++;
                         }
                     }
 
-                    if (relationshipOps.length > 0) {
-                        await this.processBatchedRelationships(relationshipOps);
-                        for (const op of relationshipOps) {
-                            // Clean up ALL pending operations for this relationship BEFORE updating status
-                            const allOps =
-                                await getSyncOperationsByStatus("pending");
-                            const orphanedOps = allOps.filter(
-                                (o) => o.entityId === op.entityId,
-                            );
-                            for (const orphan of orphanedOps) {
-                                await deleteSyncOperation(orphan.id);
-                            }
-
-                            await deleteSyncOperation(op.id);
-
-                            // Update relationship syncStatus to "synced" AFTER cleanup
-                            await db.relationships.update(op.entityId, {
-                                syncStatus: "synced",
-                                lastSynced: new Date().toISOString(),
-                            });
-
-                            syncedCount++;
-                        }
-                    }
-                    // Process entities one by one (less common, more critical)
                     for (const op of entityOps) {
                         try {
                             await this.processSyncOperation(op);
 
-                            // Clean up ALL pending operations for this tracked entity BEFORE updating status
-                            const allOps =
-                                await getSyncOperationsByStatus("pending");
-                            const orphanedOps = allOps.filter(
-                                (o) => o.entityId === op.entityId,
-                            );
-                            for (const orphan of orphanedOps) {
-                                await deleteSyncOperation(orphan.id);
-                            }
-
                             await deleteSyncOperation(op.id);
-
-                            // Update tracked entity syncStatus to "synced" AFTER cleanup
+                            this.isSyncUpdating = true;
                             await db.trackedEntities.update(op.entityId, {
                                 syncStatus: "synced",
                                 lastSynced: new Date().toISOString(),
                             });
+                            this.isSyncUpdating = false;
 
                             syncedCount++;
                         } catch (error: any) {
@@ -667,11 +481,7 @@ export class SyncManager {
                     }
                 }
             }
-            if (syncedCount > 0) {
-                console.log(`✅ Sync completed: ${syncedCount} operations`);
-            }
 
-            // Record successful sync
             const syncDuration = Date.now() - syncStartTime;
             const finalStats = await getSyncQueueStats();
             await this.updateSyncState({
@@ -681,7 +491,7 @@ export class SyncManager {
                 lastSyncDuration: syncDuration,
                 lastSyncCount: syncedCount,
                 pendingCount: finalStats.pending + finalStats.failed,
-                lastError: undefined, // Clear any previous errors
+                lastError: undefined,
             });
         } catch (error) {
             console.error("❌ Sync error:", error);
@@ -709,13 +519,11 @@ export class SyncManager {
             const op = await getNextSyncOperation();
             if (!op) break;
 
-            // Log retry attempts
             if (op.status === "failed") {
                 console.log(
                     `🔄 Retrying failed operation (attempt ${op.attempts + 1}/3): ${op.type} - ${op.entityId}`,
                 );
             }
-            // Mark as syncing
             await updateSyncOperation(op.id, {
                 status: "syncing",
                 attempts: op.attempts + 1,
@@ -752,9 +560,16 @@ export class SyncManager {
         });
         const allEvents = events.map(({ dataValues, ...event }) => {
             const { occurredAt, ...othersDataElements } = dataValues;
+            let finalDataValues = othersDataElements;
+            if (event.parentEvent) {
+                finalDataValues = {
+                    ...finalDataValues,
+                    Wx7x4sMAa62: event.parentEvent,
+                };
+            }
             return {
                 ...event,
-                dataValues: Object.entries(othersDataElements).flatMap(
+                dataValues: Object.entries(finalDataValues).flatMap(
                     ([dataElement, value]: [string, any]) => {
                         if (
                             value !== undefined &&
@@ -787,34 +602,6 @@ export class SyncManager {
         });
     }
 
-    private async processBatchedRelationships(
-        operations: SyncOperation[],
-    ): Promise<void> {
-        const opsToSync: SyncOperation[] = [];
-
-        for (const op of operations) {
-            const relationship = await db.relationships.get(op.entityId);
-            if (relationship?.syncStatus === "synced") {
-                await deleteSyncOperation(op.id);
-                continue;
-            }
-
-            opsToSync.push(op);
-        }
-
-        if (opsToSync.length === 0) return;
-        const relationships = opsToSync.map((op) => {
-            const { from, to, lastSynced, toId, fromId } =
-                op.data as FlattenedRelationship;
-        });
-        await this.engine.mutate({
-            resource: "tracker",
-            type: "create",
-            data: { relationships },
-            params: { async: false, importStrategy: "CREATE_AND_UPDATE" },
-        });
-    }
-
     /**
      * Process a single sync operation
      */
@@ -839,9 +626,6 @@ export class SyncManager {
                 case "UPDATE_EVENT":
                     await this.syncUpdateEvent(operation.data);
                     break;
-                case "CREATE_RELATIONSHIP":
-                    await this.syncCreateRelationship(operation.data);
-                    break;
 
                 default:
                     throw new Error(
@@ -860,18 +644,22 @@ export class SyncManager {
     /**
      * Sync create tracked entity to DHIS2 API
      */
-    private async syncCreateTrackedEntity(data: any): Promise<void> {
+    private async syncCreateTrackedEntity(data: any) {
         const entity = await db.trackedEntities.get(data.trackedEntity);
-        if (entity?.syncStatus === "synced") return;
 
+        if (entity?.syncStatus === "synced") return;
         const { attributes, enrollment, events, relationships, ...rest } = data;
-        const { enrolledAt, TRACKER_ID, ENROLLED_AT, ...othersAttributes } =
-            attributes;
-        const allAttributes = Object.entries(othersAttributes).flatMap(
+        const { enrolledAt, ...othersAttributes } = attributes;
+
+        let finalAttributes = othersAttributes;
+        if (entity && entity.parentEntity) {
+            finalAttributes = {
+                ...finalAttributes,
+                FhyNxUVOpjh: entity.parentEntity,
+            };
+        }
+        const allAttributes = Object.entries(finalAttributes).flatMap(
             ([attribute, value]: [string, any]) => {
-                if (attribute === "TRACKER_ID" || attribute === "ENROLLED_AT") {
-                    return [];
-                }
                 if (value !== undefined && value !== null && value !== "") {
                     return { attribute, value: String(value) };
                 }
@@ -905,29 +693,25 @@ export class SyncManager {
             params: { async: false, importStrategy: "CREATE_AND_UPDATE" },
         });
     }
-    private async syncCreateRelationship(relationships: any): Promise<void> {
-        await this.engine.mutate({
-            resource: "tracker",
-            type: "create",
-            data: { relationships },
-            params: { async: false, importStrategy: "CREATE_AND_UPDATE" },
-        });
-    }
 
     /**
      * Sync update tracked entity to DHIS2 API
      */
-    private async syncUpdateTrackedEntity(data: any): Promise<void> {
+    private async syncUpdateTrackedEntity(data: any) {
         const entity = await db.trackedEntities.get(data.trackedEntity);
         if (entity?.syncStatus === "synced") return;
         const { attributes, enrollment, events, relationships, ...rest } = data;
-        const { enrolledAt, TRACKER_ID, ENROLLED_AT, ...othersAttributes } =
-            attributes;
-        const allAttributes = Object.entries(othersAttributes).flatMap(
+        const { enrolledAt, ...othersAttributes } = attributes;
+
+        let finalAttributes = othersAttributes;
+        if (entity && entity.parentEntity) {
+            finalAttributes = {
+                ...finalAttributes,
+                FhyNxUVOpjh: entity.parentEntity,
+            };
+        }
+        const allAttributes = Object.entries(finalAttributes).flatMap(
             ([attribute, value]: [string, any]) => {
-                if (attribute === "TRACKER_ID" || attribute === "ENROLLED_AT") {
-                    return [];
-                }
                 if (value !== undefined && value !== null && value !== "") {
                     return { attribute, value: String(value) };
                 }
@@ -940,12 +724,7 @@ export class SyncManager {
                 attributes: allAttributes,
             },
         ];
-        const enrollments = [
-            {
-                ...enrollment,
-                // Don't include attributes - tracked entity attributes belong to the TE, not enrollment
-            },
-        ];
+        const enrollments = [enrollment];
         await this.engine.mutate({
             resource: "tracker",
             type: "create",
@@ -957,14 +736,21 @@ export class SyncManager {
     /**
      * Sync create/update events to DHIS2 API
      */
-    private async syncCreateEvent(data: any): Promise<void> {
+    private async syncCreateEvent(data: any) {
         const { dataValues, relationships, ...event } = data;
         const { occurredAt, ...othersDataElements } = dataValues;
 
+        let finalDataValues = othersDataElements;
+        if (event.parentEvent) {
+            finalDataValues = {
+                ...finalDataValues,
+                Wx7x4sMAa62: event.parentEvent,
+            };
+        }
         const allEvents = [
             {
                 ...event,
-                dataValues: Object.entries(othersDataElements).flatMap(
+                dataValues: Object.entries(finalDataValues).flatMap(
                     ([dataElement, value]: [string, any]) => {
                         if (
                             value !== undefined &&
@@ -1000,47 +786,18 @@ export class SyncManager {
     /**
      * Sync update event to DHIS2 API
      */
-    private async syncUpdateEvent(data: any): Promise<void> {
+    private async syncUpdateEvent(data: any) {
         await this.syncCreateEvent(data);
     }
 
     /**
-     * Check if operation already exists in queue
-     * ✅ OPTIMIZED: Prevent duplicate queue entries
-     */
-    private async operationExists(
-        entityId: string,
-        type: string,
-    ): Promise<boolean> {
-        // Check pending and syncing operations for this entity
-        const pending = await getSyncOperationsByStatus("pending");
-        const syncing = await getSyncOperationsByStatus("syncing");
-
-        const allOps = [...pending, ...syncing];
-        return allOps.some(
-            (op) => op.entityId === entityId && op.type === type,
-        );
-    }
-
-    /**
      * Queue a create tracked entity operation
-     * ✅ OPTIMIZED: Check for duplicates before queueing
+     * Uses composite ID for automatic deduplication at database level
      */
     public async queueCreateTrackedEntity(
         data: any,
         priority: number = 5,
     ): Promise<void> {
-        const exists = await this.operationExists(
-            data.trackedEntity,
-            "CREATE_TRACKED_ENTITY",
-        );
-
-        if (exists) {
-            console.log(
-                `⏭️  Skipping duplicate: CREATE_TRACKED_ENTITY - ${data.trackedEntity}`,
-            );
-            return;
-        }
 
         await queueSyncOperation({
             type: "CREATE_TRACKED_ENTITY",
@@ -1049,7 +806,6 @@ export class SyncManager {
             priority,
         });
 
-        // Update pending count
         const stats = await getSyncQueueStats();
         await this.updateSyncState({
             pendingCount: stats.pending + stats.failed,
@@ -1068,20 +824,11 @@ export class SyncManager {
         data: any,
         priority: number = 5,
     ): Promise<void> {
-        // Check if event is already synced
         const event = await db.events.get(data.event);
         if (event?.syncStatus === "synced") {
             console.log(
                 `⏭️  Skipping already synced: CREATE_EVENT - ${data.event}`,
             );
-            return;
-        }
-
-        // Check if already queued
-        const exists = await this.operationExists(data.event, "CREATE_EVENT");
-
-        if (exists) {
-            console.log(`⏭️  Skipping duplicate: CREATE_EVENT - ${data.event}`);
             return;
         }
 
@@ -1092,49 +839,11 @@ export class SyncManager {
             priority,
         });
 
-        // Update pending count
         const stats = await getSyncQueueStats();
         await this.updateSyncState({
             pendingCount: stats.pending + stats.failed,
         });
 
-        // Trigger immediate sync if online
-        if (this.isOnline && !this.isSyncing) {
-            this.startSync();
-        }
-    }
-
-    public async queueCreateRelationship(
-        data: any,
-        priority: number = 5,
-    ): Promise<void> {
-        // Check if already queued
-        const exists = await this.operationExists(
-            data.relationship,
-            "CREATE_RELATIONSHIP",
-        );
-
-        if (exists) {
-            console.log(
-                `⏭️  Skipping duplicate: CREATE_RELATIONSHIP - ${data.relationship}`,
-            );
-            return;
-        }
-
-        await queueSyncOperation({
-            type: "CREATE_RELATIONSHIP",
-            entityId: data.relationship,
-            data,
-            priority,
-        });
-
-        // Update pending count
-        const stats = await getSyncQueueStats();
-        await this.updateSyncState({
-            pendingCount: stats.pending + stats.failed,
-        });
-
-        // Trigger immediate sync if online
         if (this.isOnline && !this.isSyncing) {
             this.startSync();
         }
@@ -1147,7 +856,6 @@ export class SyncManager {
         return this.isOnline;
     }
 
-    // Pull data from server
     private async pullFromServer() {
         if (this.isPulling || !this.isOnline) {
             return;
@@ -1157,22 +865,19 @@ export class SyncManager {
         this.isPulling = false;
     }
 
-    // Start periodic pull from server
     private startPeriodicPull() {
         // Initial pull
         if (this.isOnline) {
             this.pullFromServer();
         }
 
-        // // Set up periodic pull
-        // this.pullTimer = setInterval(() => {
-        //     if (this.isOnline && !this.isPulling) {
-        //         this.pullFromServer();
-        //     }
-        // }, SYNC_CONFIG.pullInterval);
+        this.pullTimer = setInterval(() => {
+            if (this.isOnline && !this.isPulling) {
+                this.pullFromServer();
+            }
+        }, SYNC_CONFIG.pullInterval);
     }
 
-    // Manually trigger pull
     public async pullNow() {
         if (this.isOnline) {
             await this.pullFromServer();

@@ -1,8 +1,4 @@
-import {
-    FlattenedEvent,
-    FlattenedRelationship,
-    FlattenedTrackedEntity,
-} from "./../schemas";
+import { FlattenedEvent, FlattenedTrackedEntity } from "./../schemas";
 import { useCallback, useEffect, useRef } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db";
@@ -24,7 +20,7 @@ interface UseDexiePersistenceReturn<T> {
 }
 
 export function useDexiePersistence<
-    T extends FlattenedEvent | FlattenedTrackedEntity | FlattenedRelationship,
+    T extends FlattenedEvent | FlattenedTrackedEntity,
 >(options: UseDexiePersistenceOptions): UseDexiePersistenceReturn<T> {
     const { entityType, entityId, debounceMs = 300 } = options;
 
@@ -46,62 +42,38 @@ export function useDexiePersistence<
         batchQueueRef.current = {};
 
         if (Object.keys(updates).length === 0) {
-            console.log("💾 Flush skipped: No updates in queue");
             return;
         }
 
         if (!entityId) {
-            console.log("💾 Flush skipped: No entityId");
             return;
         }
-
-        console.log(
-            `💾 Flushing ${Object.keys(updates).length} updates for ${entityType}:`,
-            entityId,
-        );
 
         try {
             if (entityType === "event") {
                 const current = await db.events.get(entityId);
                 if (!current) {
-                    console.error("❌ Event not found in Dexie:", entityId);
                     throw new Error(`Event ${entityId} not found in database`);
                 }
-                console.log(
-                    "✅ Found event in Dexie, updating with:",
-                    Object.keys(updates),
-                );
-                await db.events.put({
-                    ...current,
+                await db.events.update(entityId, {
                     dataValues: {
                         ...current.dataValues,
                         ...updates,
                     },
                 });
-                console.log("✅ Event updated successfully");
             } else {
                 const current = await db.trackedEntities.get(entityId);
                 if (!current) {
-                    console.error(
-                        "❌ TrackedEntity not found in Dexie:",
-                        entityId,
-                    );
                     throw new Error(
                         `TrackedEntity ${entityId} not found in database`,
                     );
                 }
-                console.log(
-                    "✅ Found trackedEntity in Dexie, updating with:",
-                    Object.keys(updates),
-                );
-                await db.trackedEntities.put({
-                    ...current,
+                await db.trackedEntities.update(entityId, {
                     attributes: {
                         ...current.attributes,
                         ...updates,
                     },
                 });
-                console.log("✅ TrackedEntity updated successfully");
             }
         } catch (error) {
             console.error(`❌ Failed to update ${entityType}:`, error);

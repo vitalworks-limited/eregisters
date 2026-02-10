@@ -2,14 +2,10 @@ import { Tabs } from "antd";
 import { useLiveQuery } from "dexie-react-hooks";
 import React from "react";
 import { db } from "../db";
-import {
-    FlattenedEvent,
-    FlattenedRelationship,
-    FlattenedTrackedEntity,
-} from "../schemas";
+import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
 import Relation from "./relation";
 
-const getChildLabel = (to: FlattenedRelationship["to"]): string => {
+const getChildLabel = (to: FlattenedTrackedEntity["attributes"]): string => {
     const firstName = to["KSq9EyZ8ZFi"];
     const surname = to["TWPNbc9O2nK"];
     const dob = to["Y3DE5CZWySr"];
@@ -25,31 +21,30 @@ export default function RelationshipEvent({
     trackedEntity: FlattenedTrackedEntity;
     mainEvent: FlattenedEvent;
 }) {
-    const relationships = useLiveQuery(async () => {
-        return db.relationships
-            .where("fromId")
+    const children = useLiveQuery(async () => {
+        return db.trackedEntities
+            .where("parentEntity")
             .equals(trackedEntity.trackedEntity)
             .toArray();
     }, [trackedEntity.trackedEntity]);
 
-    if (!relationships || relationships.length === 0) {
+    if (!children || children.length === 0) {
         return null;
     }
 
     return (
         <Tabs
-            items={relationships.map((relationship) => {
-                const child = relationship.to;
+            items={children.map((trackedEntity) => {
                 return {
-                    key: relationship.relationship,
-                    label: getChildLabel(child),
-                    destroyInactiveTabPane: false,
+                    key: trackedEntity.trackedEntity,
+                    label: getChildLabel(trackedEntity.attributes),
+                    destroyOnHidden: true,
                     children: (
                         <Relation
-                            key={relationship.relationship}
+                            key={trackedEntity.trackedEntity}
                             section={section}
-                            child={child}
                             mainEvent={mainEvent}
+														trackedEntity={trackedEntity}
                         />
                     ),
                 };

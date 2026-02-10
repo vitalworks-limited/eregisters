@@ -121,6 +121,7 @@ export default function VillageSelect({
                 },
             }}
             virtual
+						allowClear
             style={{ width: "100%" }}
         />
     );

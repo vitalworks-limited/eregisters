@@ -401,30 +401,6 @@ export class MetadataSync {
                     };
                 };
                 break;
-
-            // case "villages":
-            //     data = (await this.engine.query({
-            //         villages: {
-            //             resource: "dataStore/registers",
-            //             id: "villages",
-            //         },
-            //     })) as { villages: Village[] };
-            //     break;
-
-            case "relationshipTypes":
-                data = (await this.engine.query({
-                    relationshipTypes: {
-                        resource: "relationshipTypes",
-                        params: {
-                            fields: "*",
-                        },
-                    },
-                })) as {
-                    relationshipTypes: {
-                        relationshipTypes: RelationshipType[];
-                    };
-                };
-                break;
         }
         await this.queueWrite(async () => {
             switch (type) {
@@ -489,7 +465,6 @@ export class MetadataSync {
                     break;
                 case "optionGroups":
                     if (data.optionGroups.optionGroups.length === 0) {
-                        console.log(`⏭️  No updates for ${type}`);
                         return;
                     }
                     const flattenedOptionGroups =
@@ -500,14 +475,6 @@ export class MetadataSync {
                             })),
                         );
                     await db.optionGroups.bulkPut(flattenedOptionGroups);
-                    break;
-                // case "villages":
-                //     await db.villages.bulkPut(data.villages);
-                //     break;
-                case "relationshipTypes":
-                    await db.relationshipTypes.bulkPut(
-                        data.relationshipTypes.relationshipTypes,
-                    );
                     break;
             }
             const currentTimestamp = new Date().toISOString();
@@ -549,7 +516,6 @@ export class MetadataSync {
                 completed++;
             }
 
-            // Update overall lastSync timestamp
             await this.queueWrite(async () => {
                 const version =
                     await db.metadataVersions.get("metadata-version");
@@ -755,8 +721,6 @@ export class MetadataSync {
                 db.programRuleVariables.clear(),
                 db.optionSets.clear(),
                 db.optionGroups.clear(),
-                db.villages.clear(),
-                db.relationshipTypes.clear(),
                 db.metadataVersions.clear(),
             ]);
         });

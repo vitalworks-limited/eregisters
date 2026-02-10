@@ -8,15 +8,13 @@ import {
     ProgramRule,
     ProgramRuleResult,
     ProgramRuleVariable,
-    RelationshipType,
     TrackedEntityAttribute,
     FlattenedEvent,
-    FlattenedRelationship,
 } from "../schemas";
 
 export type SyncStatus = "draft" | "pending" | "syncing" | "synced" | "failed";
 export interface SyncOperation {
-    id: string;
+    id: string; // Composite ID format: {entityId}_{type} for automatic deduplication
     type:
         | "CREATE_TRACKED_ENTITY"
         | "UPDATE_TRACKED_ENTITY"
@@ -24,11 +22,7 @@ export interface SyncOperation {
         | "CREATE_EVENT"
         | "UPDATE_EVENT";
     entityId: string;
-    data:
-        | FlattenedEnrollment
-        | FlattenedTrackedEntity
-        | FlattenedEvent
-        | FlattenedRelationship;
+    data: FlattenedEnrollment | FlattenedTrackedEntity | FlattenedEvent;
     status: "pending" | "syncing" | "failed" | "completed";
     attempts: number;
     createdAt: string;
@@ -114,15 +108,9 @@ export interface SyncState {
  * RegisterDatabase - Main Dexie database instance
  */
 export class RegisterDatabase extends Dexie {
-    // Tables with sync metadata
     trackedEntities!: Table<FlattenedTrackedEntity, string>;
     events!: Table<FlattenedEvent, string>;
-    relationships!: Table<FlattenedRelationship, string>;
-    trackedEntityDrafts!: Table<FlattenedTrackedEntity, string>;
-    relationshipDraft!: Table<FlattenedRelationship, string>;
-    eventDrafts!: Table<FlattenedEvent, string>;
     syncQueue!: Table<SyncOperation, string>;
-    machineState!: Table<MachineState, string>;
     programRules!: Table<ProgramRule, string>;
     programRuleVariables!: Table<ProgramRuleVariable, string>;
     optionGroups!: Table<
@@ -137,44 +125,17 @@ export class RegisterDatabase extends Dexie {
     trackedEntityAttributes!: Table<TrackedEntityAttribute, string>;
     organisationUnits!: Table<Node, string>;
     programs!: Table<Program, string>;
-    villages!: Table<Village, string>;
-    relationshipTypes: Table<RelationshipType>;
-    ruleCache!: Table<RuleCacheEntry, string>;
     metadataVersions!: Table<MetadataVersion, string>;
     metadataSyncProgress!: Table<MetadataSyncProgress, string>;
     syncState!: Table<SyncState, string>;
 
     constructor() {
         super("MOHRegisterDB");
-
-        // Version 2 - Added syncState table for persistent sync manager state
-        this.version(2).stores({
-            // Tracked entities with sync status, version tracking, and lastSynced
+        this.version(1).stores({
             trackedEntities:
-                "trackedEntity,orgUnit,enrollment.enrolledAt,updatedAt,syncStatus,version,lastSynced",
-
-            // Events with sync status, version tracking, and lastSynced
-            events: "event,trackedEntity,programStage,enrollment,occurredAt,updatedAt,syncStatus,version,lastSynced",
-
-            // Relationships with sync status, version tracking, and lastSynced
-            // Using flattened structure: from.id and to.id
-            relationships:
-                "relationship,fromId,toId,syncStatus,version,lastSynced",
-
-            // Relationship types
-            relationshipTypes: "id",
-
-            // Draft tables
-            trackedEntityDrafts: "trackedEntity,orgUnit,updatedAt,isNew",
-            eventDrafts: "event,trackedEntity,programStage,updatedAt,isNew",
-
-            // Sync queue
+                "trackedEntity,orgUnit,enrollment.enrolledAt,updatedAt,syncStatus,version,lastSynced,parentEntity",
+            events: "event,trackedEntity,programStage,enrollment,occurredAt,updatedAt,syncStatus,version,lastSynced,parentEvent",
             syncQueue: "id,status,priority,type,entityId,createdAt",
-
-            // Machine state persistence
-            machineState: "id,updatedAt",
-
-            // Metadata tables
             programRules: "id,program",
             programRuleVariables: "id,program",
             dataElements: "id,name",
@@ -183,25 +144,10 @@ export class RegisterDatabase extends Dexie {
             optionSets: "[id+optionSet],id,optionSet,name,code",
             optionGroups: "[id+optionGroup],id,optionGroup,name,code",
             programs: "id,name,programType",
-            villages:
-                "village_id,village_name,District,[District+subcounty_name],[District+subcounty_name+parish_name]",
-            // Program rules cache
-            ruleCache: "key,timestamp",
-            // Metadata version tracking
             metadataVersions: "id,lastSync",
-            // Metadata sync progress tracking
             metadataSyncProgress: "id,status,updatedAt",
-            // Sync manager state persistence
             syncState: "id,status,updatedAt",
         });
-    }
-
-    /**
-     * Clear all draft data (useful after successful submissions)
-     */
-    async clearAllDrafts(): Promise<void> {
-        await this.trackedEntityDrafts.clear();
-        await this.eventDrafts.clear();
     }
 
     /**
@@ -210,10 +156,7 @@ export class RegisterDatabase extends Dexie {
     async clearAllData(): Promise<void> {
         await this.trackedEntities.clear();
         await this.events.clear();
-        await this.trackedEntityDrafts.clear();
-        await this.eventDrafts.clear();
         await this.syncQueue.clear();
-        await this.machineState.clear();
     }
 
     /**
@@ -256,26 +199,6 @@ export class RegisterDatabase extends Dexie {
     }
 
     /**
-     * Get all drafts for listing in UI
-     */
-    async getAllDrafts(): Promise<{
-        trackedEntityDrafts: FlattenedTrackedEntity[];
-        eventDrafts: FlattenedTrackedEntity["events"];
-    }> {
-        const trackedEntityDrafts = await this.trackedEntityDrafts
-            .orderBy("updatedAt")
-            .reverse()
-            .toArray();
-
-        const eventDrafts = await this.eventDrafts
-            .orderBy("updatedAt")
-            .reverse()
-            .toArray();
-
-        return { trackedEntityDrafts, eventDrafts };
-    }
-
-    /**
      * Get entities with specific sync status
      */
     async getEntitiesByStatus(
@@ -295,24 +218,11 @@ export class RegisterDatabase extends Dexie {
     }
 
     /**
-     * Get relationships with specific sync status
-     */
-    async getRelationshipsByStatus(
-        status: SyncStatus,
-    ): Promise<FlattenedRelationship[]> {
-        return await this.relationships
-            .where("syncStatus")
-            .equals(status)
-            .toArray();
-    }
-
-    /**
      * Get count of items pending sync across all tables
      */
     async getPendingChangesCount(): Promise<{
         entities: number;
         events: number;
-        relationships: number;
         total: number;
     }> {
         const entities = await this.trackedEntities
@@ -325,41 +235,12 @@ export class RegisterDatabase extends Dexie {
             .anyOf(["draft", "pending", "failed"])
             .count();
 
-        const relationships = await this.relationships
-            .where("syncStatus")
-            .anyOf(["draft", "pending", "failed"])
-            .count();
-
         return {
             entities,
             events,
-            relationships,
-            total: entities + events + relationships,
+            total: entities + events,
         };
     }
-
-    // /**
-    //  * Initialize sync metadata for new entity
-    //  */
-    // createSyncMetadata(status: SyncStatus = "draft"): SyncMetadata {
-    //     return {
-    //         syncStatus: status,
-    //         version: 1,
-    //         lastModified: new Date().toISOString(),
-    //     };
-    // }
-
-    // /**
-    //  * Update sync metadata (for use in hooks)
-    //  */
-    // updateSyncMetadata(current: Partial<SyncMetadata>): Partial<SyncMetadata> {
-    //     return {
-    //         ...current,
-    //         version: (current.version || 0) + 1,
-    //         lastModified: new Date().toISOString(),
-    //         syncStatus: "pending",
-    //     };
-    // }
 }
 
 // Export singleton database instance

@@ -1,9 +1,4 @@
-import type {
-    FlattenedTrackedEntity,
-    FlattenedEvent,
-    FlattenedRelationship,
-} from "../schemas";
-import { generateUid } from "../utils/id";
+import type { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
 import { db, type SyncOperation } from "./index";
 
 /**
@@ -125,69 +120,6 @@ export async function bulkSaveTrackedEntities(
 export async function saveEvent(event: FlattenedEvent): Promise<void> {
     await db.events.put(event);
 }
-export async function saveRelationship(
-    relationship: FlattenedRelationship,
-): Promise<void> {
-    await db.relationships.put(relationship);
-}
-
-/**
- * Get relationships by entity ID
- * Uses flattened structure (from.id) instead of nested (from.trackedEntity.trackedEntity)
- */
-export async function getRelationshipsByEntity(
-    entityId: string,
-): Promise<FlattenedRelationship[]> {
-    // Query using flattened structure
-    return await db.relationships.where("from.id").equals(entityId).toArray();
-}
-
-/**
- * Populate relationships for an entity with full child entity data
- * Converts flattened tracked entity to BasicTrackedEntity format
- */
-export async function populateRelationshipsForEntity(
-    entityId: string,
-): Promise<FlattenedRelationship[]> {
-    const relationships = await getRelationshipsByEntity(entityId);
-    const populated = await Promise.all(
-        relationships.map(async (rel) => {
-            if (rel.toId) {
-                const toEntity = await db.trackedEntities.get(rel.toId);
-
-                if (toEntity) {
-
-                    const basicEntity = {
-                        ...toEntity,
-                        attributes: Object.entries(
-                            toEntity.attributes || {},
-                        ).map(([attribute, value]) => ({
-                            attribute,
-                            value: String(value),
-                            valueType: "TEXT",
-                            createdAt: toEntity.createdAt,
-                            updatedAt: toEntity.updatedAt,
-                        })),
-                        enrollments: toEntity.enrollment
-                            ? [toEntity.enrollment]
-                            : [],
-                    };
-
-                    return {
-                        ...rel,
-                        to: {
-                            ...rel.to,
-                            trackedEntity: basicEntity as any, // Mixed type for UI compatibility
-                        },
-                    };
-                }
-            }
-            return rel;
-        }),
-    );
-
-    return populated;
-}
 
 /**
  * Get an event by ID
@@ -268,197 +200,13 @@ export async function bulkSaveEvents(events: FlattenedEvent[]): Promise<void> {
 }
 
 // ============================================================================
-// Draft Operations
-// ============================================================================
-
-/**
- * Save a tracked entity draft (for auto-save)
- */
-export async function saveTrackedEntityDraft(
-    draft: Omit<FlattenedTrackedEntity, "createdAt" | "updatedAt">,
-): Promise<FlattenedTrackedEntity> {
-    const now = new Date().toISOString();
-    const existing = await db.trackedEntityDrafts.get(draft.trackedEntity);
-
-    const completeDraft: FlattenedTrackedEntity = {
-        ...draft,
-        createdAt: existing?.createdAt || now,
-        updatedAt: now,
-    };
-
-    await db.trackedEntityDrafts.put(completeDraft);
-    return completeDraft;
-}
-
-/**
- * Get a tracked entity draft by ID
- */
-export async function getTrackedEntityDraft(
-    id: string,
-): Promise<FlattenedTrackedEntity | undefined> {
-    return await db.trackedEntityDrafts.get(id);
-}
-
-/**
- * Delete a tracked entity draft
- */
-export async function deleteTrackedEntityDraft(id: string): Promise<void> {
-    await db.trackedEntityDrafts.delete(id);
-}
-
-/**
- * Get all tracked entity drafts (paginated)
- * ✅ OPTIMIZED: Added pagination to prevent loading large draft datasets
- */
-export async function getAllTrackedEntityDrafts(
-    page: number = 1,
-    pageSize: number = 50,
-): Promise<{ drafts: FlattenedTrackedEntity[]; total: number }> {
-    const total = await db.trackedEntityDrafts.count();
-    const drafts = await db.trackedEntityDrafts
-        .orderBy("updatedAt")
-        .reverse()
-        .offset((page - 1) * pageSize)
-        .limit(pageSize)
-        .toArray();
-
-    return { drafts, total };
-}
-
-/**
- * Save an event draft (for auto-save)
- */
-export async function saveEventDraft(
-    draft: Omit<
-        FlattenedTrackedEntity["events"][number],
-        "createdAt" | "updatedAt"
-    >,
-): Promise<FlattenedTrackedEntity["events"][number]> {
-    const now = new Date().toISOString();
-    const existing = await db.eventDrafts.get(draft.event);
-
-    const completeDraft: FlattenedTrackedEntity["events"][number] = {
-        ...draft,
-        createdAt: existing?.createdAt || now,
-        updatedAt: now,
-    };
-
-    await db.eventDrafts.put(completeDraft);
-    return completeDraft;
-}
-
-/**
- * Get an event draft by ID
- */
-export async function getEventDraft(
-    id: string,
-): Promise<FlattenedTrackedEntity["events"][number] | undefined> {
-    return await db.eventDrafts.get(id);
-}
-
-/**
- * Delete an event draft
- */
-export async function deleteEventDraft(id: string): Promise<void> {
-    await db.eventDrafts.delete(id);
-}
-
-/**
- * Get all event drafts for a tracked entity (paginated)
- * ✅ OPTIMIZED: Added pagination to prevent loading large draft datasets
- */
-export async function getEventDraftsByTrackedEntity(
-    trackedEntityId: string,
-    page: number = 1,
-    pageSize: number = 50,
-): Promise<{
-    drafts: FlattenedTrackedEntity["events"];
-    total: number;
-}> {
-    const total = await db.eventDrafts
-        .where("trackedEntity")
-        .equals(trackedEntityId)
-        .count();
-
-    const drafts = await db.eventDrafts
-        .where("trackedEntity")
-        .equals(trackedEntityId)
-        .reverse()
-        .sortBy("updatedAt")
-        .then((sorted) => {
-            const start = (page - 1) * pageSize;
-            return sorted.slice(start, start + pageSize);
-        });
-
-    return { drafts, total };
-}
-
-/**
- * Get all event drafts (paginated)
- * ✅ OPTIMIZED: Added pagination to prevent loading large draft datasets
- */
-export async function getAllEventDrafts(
-    page: number = 1,
-    pageSize: number = 50,
-): Promise<{
-    drafts: FlattenedTrackedEntity["events"];
-    total: number;
-}> {
-    const total = await db.eventDrafts.count();
-    const drafts = await db.eventDrafts
-        .orderBy("updatedAt")
-        .reverse()
-        .offset((page - 1) * pageSize)
-        .limit(pageSize)
-        .toArray();
-
-    return { drafts, total };
-}
-
-/**
- * Delete old drafts (older than specified days)
- * ✅ OPTIMIZED: Auto-cleanup to prevent draft table growth
- */
-export async function deleteOldDrafts(daysOld: number = 30): Promise<{
-    trackedEntityDrafts: number;
-    eventDrafts: number;
-}> {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - daysOld);
-    const cutoffIso = cutoffDate.toISOString();
-
-    // Delete old tracked entity drafts
-    const oldTrackedEntityDrafts = await db.trackedEntityDrafts
-        .where("updatedAt")
-        .below(cutoffIso)
-        .toArray();
-
-    await db.trackedEntityDrafts.where("updatedAt").below(cutoffIso).delete();
-
-    // Delete old event drafts
-    const oldEventDrafts = await db.eventDrafts
-        .where("updatedAt")
-        .below(cutoffIso)
-        .toArray();
-
-    await db.eventDrafts.where("updatedAt").below(cutoffIso).delete();
-
-    console.log(
-        `🗑️  Cleaned up ${oldTrackedEntityDrafts.length} tracked entity drafts and ${oldEventDrafts.length} event drafts older than ${daysOld} days`,
-    );
-
-    return {
-        trackedEntityDrafts: oldTrackedEntityDrafts.length,
-        eventDrafts: oldEventDrafts.length,
-    };
-}
-
-// ============================================================================
 // Sync Queue Operations
 // ============================================================================
 
 /**
  * Add an operation to the sync queue
+ * Uses composite ID (entityId_type) to ensure only one operation exists per entity+type
+ * Multiple calls will upsert (update existing) rather than creating duplicates
  */
 export async function queueSyncOperation(
     operation: Omit<
@@ -467,12 +215,15 @@ export async function queueSyncOperation(
     >,
 ): Promise<SyncOperation> {
     const now = new Date().toISOString();
+    const compositeId = `${operation.entityId}_${operation.type}`;
+    const existing = await db.syncQueue.get(compositeId);
+
     const completeOperation: SyncOperation = {
         ...operation,
-        id: generateUid(),
+        id: compositeId,
         status: "pending",
-        attempts: 0,
-        createdAt: now,
+        attempts: existing?.attempts || 0,
+        createdAt: existing?.createdAt || now,
         updatedAt: now,
     };
 
@@ -614,39 +365,4 @@ export async function getSyncQueueStats(): Promise<{
         completed,
         total: pending + syncing + failed + completed,
     };
-}
-
-// ============================================================================
-// Machine State Operations
-// ============================================================================
-
-/**
- * Save XState machine state for persistence across page refreshes
- */
-export async function saveMachineState(
-    context: any,
-    state: string,
-): Promise<void> {
-    await db.machineState.put({
-        id: "tracker-machine",
-        context,
-        state,
-        updatedAt: new Date().toISOString(),
-    });
-}
-
-/**
- * Load XState machine state
- */
-export async function loadMachineState(): Promise<
-    { context: any; state: string } | undefined
-> {
-    return await db.machineState.get("tracker-machine");
-}
-
-/**
- * Clear machine state
- */
-export async function clearMachineState(): Promise<void> {
-    await db.machineState.delete("tracker-machine");
 }
