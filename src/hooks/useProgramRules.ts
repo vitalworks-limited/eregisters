@@ -17,6 +17,7 @@ export interface UseProgramRulesOptions {
     programStage?: string;
     program: string;
     trackedEntityAttributes?: Record<string, any>;
+    previousEvents?: Array<{ dataValues: Record<string, any> }>;
     debounceMs?: number;
     autoExecute?: boolean;
     isRegistration?: boolean;
@@ -39,6 +40,7 @@ export const useProgramRules = ({
     programStage,
     program,
     trackedEntityAttributes = {},
+    previousEvents = [],
     debounceMs = 300,
     autoExecute = false,
     isRegistration = false,
@@ -63,6 +65,7 @@ export const useProgramRules = ({
                     attributeValues,
                     program,
                     programStage,
+                    previousEvents,
                 });
 
                 setRuleResult(result);
@@ -80,6 +83,7 @@ export const useProgramRules = ({
             programRules,
             programRuleVariables,
             trackedEntityAttributes,
+            previousEvents,
             program,
             programStage,
             isRegistration,
@@ -160,9 +164,9 @@ export const useProgramRules = ({
 
 export interface UseProgramRulesWithDexieOptions extends UseProgramRulesOptions {
     onAssignments?: (assignments: Record<string, any>) => Promise<void>;
-    applyAssignmentsToForm?: boolean; // Apply to form (default: true)
-    persistAssignments?: boolean; // Persist to Dexie (default: false)
-    clearHiddenFields?: boolean; // Clear fields that become hidden (default: false)
+    applyAssignmentsToForm?: boolean;
+    persistAssignments?: boolean;
+    clearHiddenFields?: boolean;
 }
 
 export interface UseProgramRulesWithDexieReturn extends UseProgramRulesReturn {
@@ -179,6 +183,7 @@ export const useProgramRulesWithDexie = ({
     programStage,
     program,
     trackedEntityAttributes = {},
+    previousEvents = [],
     debounceMs = 300,
     autoExecute = false,
     onAssignments,
@@ -194,6 +199,7 @@ export const useProgramRulesWithDexie = ({
         programStage,
         program,
         trackedEntityAttributes,
+        previousEvents,
         debounceMs,
         autoExecute,
         isRegistration,

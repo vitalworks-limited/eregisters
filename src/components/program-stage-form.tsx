@@ -17,11 +17,13 @@ export default function ProgramStageForm({
     programStage,
     event,
     trackedEntity,
+    previousEvents,
 }: {
     form: FormInstance;
     programStage: ProgramStage;
     event: FlattenedEvent;
     trackedEntity: FlattenedTrackedEntity;
+    previousEvents?: FlattenedEvent[];
 }) {
     const {
         program,
@@ -61,6 +63,7 @@ export default function ProgramStageForm({
         persistAssignments: true,
         program: program.id,
         autoExecute: true,
+        previousEvents,
     });
     const updateFieldWithRules = useCallback(
         (fieldId: string, value: any) => {

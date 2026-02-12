@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
+import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
 
-export function useModalState<T>() {
+export function useModalState<T extends FlattenedTrackedEntity | FlattenedEvent>() {
     const [data, setData] = useState<T | null>(null);
     const [isOpen, setIsOpen] = useState(false);
 

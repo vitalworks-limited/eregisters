@@ -5,10 +5,9 @@ import {
     Program,
     ProgramRule,
     ProgramRuleVariable,
-    RelationshipType,
     TrackedEntityAttribute,
 } from "../schemas";
-import { db, MetadataVersion, Village } from "./index";
+import { db, MetadataVersion } from "./index";
 export interface MetadataUpdateInfo {
     hasUpdates: boolean;
     changedTypes: string[];
@@ -232,7 +231,7 @@ export class MetadataSync {
                         resource: "programs",
                         id: "ueBhWkWll5v",
                         params: {
-                            fields: "id,name,programSections[id,name,sortOrder,trackedEntityAttributes[id]],trackedEntityType[id,trackedEntityTypeAttributes[id]],programType,selectEnrollmentDatesInFuture,selectIncidentDatesInFuture,organisationUnits,programStages[id,repeatable,name,code,programStageDataElements[id,compulsory,renderOptionsAsRadio,dataElement[id],renderType,allowFutureDate],programStageSections[id,name,sortOrder,dataElements[id]]],programTrackedEntityAttributes[id,mandatory,searchable,renderOptionsAsRadio,renderType,sortOrder,allowFutureDate,displayInList,trackedEntityAttribute[id]]",
+                            fields: "id,name,programSections[id,name,sortOrder,trackedEntityAttributes[id]],trackedEntityType[id,trackedEntityTypeAttributes[id]],programType,selectEnrollmentDatesInFuture,selectIncidentDatesInFuture,organisationUnits[id,name],programStages[id,repeatable,name,code,programStageDataElements[id,compulsory,renderOptionsAsRadio,dataElement[id],renderType,allowFutureDate],programStageSections[id,name,sortOrder,dataElements[id]]],programTrackedEntityAttributes[id,mandatory,searchable,renderOptionsAsRadio,renderType,sortOrder,allowFutureDate,displayInList,trackedEntityAttribute[id]]",
                         },
                     },
                 })) as { program: Program };

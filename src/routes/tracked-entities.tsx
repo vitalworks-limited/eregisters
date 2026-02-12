@@ -29,7 +29,9 @@ export const TrackedEntitiesRoute = createRoute({
     path: "/tracked-entities",
     component: TrackedEntities,
     validateSearch: ClientSchema,
-    loader: async ({ context: { queryClient, engine, orgUnit } }) => {
+    loader: async ({
+        context: { queryClient, engine, orgUnit, syncManager },
+    }) => {
         const params = new URLSearchParams({
             pageSize: "1",
             page: "1",

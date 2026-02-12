@@ -2,6 +2,9 @@ import { FormItemProps, TableProps } from "antd";
 import dayjs from "dayjs";
 import { isEmpty } from "lodash";
 import {
+    Attribute,
+    Enrollment,
+    Event,
     ProgramRule,
     ProgramRuleResult,
     ProgramRuleVariable,
@@ -21,19 +24,36 @@ export const flattenTrackedEntityResponse = (te: TrackedEntityResponse) => {
 
 export const flattenTrackedEntity = ({
     trackedEntity,
-    attributes,
-    enrollments,
+    attributes = [],
+    enrollments = [],
     ...rest
 }: TrackedEntity) => {
-    const trackedEntityAttributes = (attributes || []).reduce((acc, attr) => {
+    const trackedEntityAttributes = attributes.reduce((acc, attr) => {
         acc[attr.attribute] = attr.value;
         return acc;
     }, {});
 
-    const [{ events, attributes: eAttributes, ...enrollmentDetails }] =
-        enrollments;
+    let events: Event[] = [];
+    let eAttributes: Attribute[] = [];
+    let enrollmentDetails:
+        | Omit<Enrollment, "events" | "attributes">
+        | undefined = undefined;
 
-    const enrollmentAttrs: Record<string, string> = (eAttributes || []).reduce(
+    if (enrollments.length > 0) {
+        const [
+            {
+                events: enrollmentEvents,
+                attributes: enrollmentAttributes,
+                ...details
+            },
+        ] = enrollments;
+
+        events = enrollmentEvents;
+        eAttributes = enrollmentAttributes;
+        enrollmentDetails = details;
+    }
+
+    const enrollmentAttrs: Record<string, string> = eAttributes.reduce(
         (acc, attr) => {
             acc[attr.attribute] = attr.value;
             return acc;
@@ -45,7 +65,7 @@ export const flattenTrackedEntity = ({
         ...enrollmentAttrs,
     };
     const parentEntity = allAttributes["FhyNxUVOpjh"] || "";
-    const flattenedEvents = (events || []).map((event) => {
+    const flattenedEvents = events.map((event) => {
         const eventAttrs: Record<string, string> = [
             ...event.dataValues,
             { dataElement: "occurredAt", value: event.occurredAt },
@@ -105,6 +125,7 @@ export function executeProgramRules({
     attributeValues = {},
     program,
     programStage,
+    previousEvents = [],
 }: {
     programRules: ProgramRule[];
     programRuleVariables: ProgramRuleVariable[];
@@ -112,6 +133,7 @@ export function executeProgramRules({
     attributeValues?: Record<string, any>;
     programStage?: string;
     program: string;
+    previousEvents?: Array<{ dataValues: Record<string, any> }>;
 }): ProgramRuleResult {
     const variableValues: Record<string, any> = {};
     variableValues["current_date"] = dayjs().format("YYYY-MM-DD");
@@ -122,6 +144,14 @@ export function executeProgramRules({
     for (const variable of programRuleVariables) {
         let value: any = null;
         if (
+            variable.programRuleVariableSourceType ===
+            "DATAELEMENT_PREVIOUS_EVENT"
+        ) {
+            if (variable.dataElement && previousEvents.length > 0) {
+                const prevEvent = previousEvents[previousEvents.length - 1];
+                value = prevEvent.dataValues[variable.dataElement.id] ?? null;
+            }
+        } else if (
             variable.dataElement &&
             dataValues?.hasOwnProperty(variable.dataElement.id)
         ) {

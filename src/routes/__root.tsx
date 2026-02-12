@@ -16,6 +16,7 @@ import { SyncStatus } from "../components/sync-status";
 import { db } from "../db";
 import { createMetadataSync } from "../db/metadata-sync";
 import { createSyncManager } from "../db/sync";
+import { Spinner } from "../components/spinner";
 
 const { Header } = Layout;
 const { Title, Text } = Typography;
@@ -25,8 +26,7 @@ const queryInfo = async (engine: ReturnType<typeof useDataEngine>) => {
     const updateInfo = await metadataSync.checkForUpdates();
 
     if (updateInfo.hasUpdates) {
-        await metadataSync.fullSync((progress) => {});
-    } else {
+        await metadataSync.fullSync();
     }
     const dataElements = await db.dataElements.toArray();
     const trackedEntityAttributes = await db.trackedEntityAttributes.toArray();
@@ -55,6 +55,9 @@ const queryInfo = async (engine: ReturnType<typeof useDataEngine>) => {
         ),
         program,
         programOrgUnits: new Set(program.organisationUnits.map(({ id }) => id)),
+        organisations: new Map(
+            program.organisationUnits.map((ou) => [ou.id, ou.name]),
+        ),
     };
 };
 
@@ -65,7 +68,7 @@ export const RootRoute = createRootRouteWithContext<{
     syncManager: ReturnType<typeof createSyncManager>;
 }>()({
     component: LayoutWithDrafts,
-    pendingComponent: MetadataProgress,
+    pendingComponent: Spinner,
     loader: async ({ context: { engine, syncManager } }) => {
         try {
             return await queryInfo(engine);

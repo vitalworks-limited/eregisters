@@ -1,9 +1,11 @@
+import { UserAddOutlined } from "@ant-design/icons";
 import type { FormInstance } from "antd";
-import { UserAddOutlined, CheckCircleOutlined } from "@ant-design/icons";
 import { Button, Flex, Form, Modal, Typography } from "antd";
 import React from "react";
+import { SyncStatusComp } from "./sync-status-comp";
+import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
 
-interface DataModalProps<T> {
+interface DataModalProps<T extends FlattenedTrackedEntity | FlattenedEvent> {
     open: boolean;
     data: T | null;
     onClose: () => void;
@@ -13,11 +15,12 @@ interface DataModalProps<T> {
     submitButtonText?: string;
     onValueChange?: (changedValues: any, allValues: any) => void;
     hasAddAnother?: boolean;
+    status?: string;
 }
 
 const { Text } = Typography;
 
-export function DataModal<T extends Record<string, any>>({
+export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
     open,
     data,
     onClose,
@@ -27,14 +30,19 @@ export function DataModal<T extends Record<string, any>>({
     submitButtonText = "Save",
     onValueChange,
     hasAddAnother = false,
+    status = "draft",
 }: DataModalProps<T>) {
     const [form] = Form.useForm<T>();
     const [loading, setLoading] = React.useState(false);
 
     React.useEffect(() => {
         form.resetFields();
-        if (open && data) {
-            form.setFieldsValue(data.attributes || data.dataValues);
+        if (open) {
+            if (data && "event" in data) {
+                form.setFieldsValue(data.dataValues as any);
+            } else if (data) {
+                form.setFieldsValue(data.attributes);
+            }
         } else {
             form.resetFields();
         }
@@ -91,12 +99,7 @@ export function DataModal<T extends Record<string, any>>({
                     align="center"
                     style={{ padding: "8px 0" }}
                 >
-                    <Flex gap={5} align="center">
-                        <CheckCircleOutlined style={{ color: "#52c41a" }} />
-                        <Text type="success" style={{ fontSize: 12 }}>
-                            Synced
-                        </Text>
-                    </Flex>
+                    <SyncStatusComp syncStatus={status} />
                     <Flex gap="middle">
                         <Button
                             onClick={() => {

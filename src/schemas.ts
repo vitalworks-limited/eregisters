@@ -143,7 +143,7 @@ export const ProgramSchema = z.object({
         ),
     }),
     id: UID,
-    organisationUnits: z.array(z.object({ id: UID })),
+    organisationUnits: z.array(z.object({ id: UID, name: z.string() })),
     programStages: z.array(ProgramStageSchema),
     programTrackedEntityAttributes: z.array(
         ProgramTrackedEntityAttributeSchema,

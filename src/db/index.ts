@@ -18,6 +18,7 @@ export interface SyncOperation {
     type:
         | "CREATE_TRACKED_ENTITY"
         | "UPDATE_TRACKED_ENTITY"
+        | "UPDATE_ENROLLMENT"
         | "CREATE_RELATIONSHIP"
         | "CREATE_EVENT"
         | "UPDATE_EVENT";
@@ -133,8 +134,8 @@ export class RegisterDatabase extends Dexie {
         super("MOHRegisterDB");
         this.version(1).stores({
             trackedEntities:
-                "trackedEntity,orgUnit,enrollment.enrolledAt,updatedAt,syncStatus,version,lastSynced,parentEntity",
-            events: "event,trackedEntity,programStage,enrollment,occurredAt,updatedAt,syncStatus,version,lastSynced,parentEvent",
+                "trackedEntity,orgUnit,enrollment.enrolledAt,updatedAt,syncStatus,version,lastSynced,parentEntity,[trackedEntity+parentEntity]",
+            events: "event,trackedEntity,programStage,enrollment,occurredAt,updatedAt,syncStatus,version,lastSynced,parentEvent,[event+parentEvent]",
             syncQueue: "id,status,priority,type,entityId,createdAt",
             programRules: "id,program",
             programRuleVariables: "id,program",

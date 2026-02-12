@@ -147,12 +147,8 @@ export class SyncManager {
 
                     db.trackedEntities.get(primKey).then((updated) => {
                         if (!updated) return;
-                        if (updated.syncStatus === "synced") {
-                            return;
-                        }
-
                         if (updated.syncStatus === "pending") {
-                            this.queueCreateTrackedEntity(updated, 8).catch(
+                            this.queueUpdateTrackedEntity(updated, 8).catch(
                                 (error) => {
                                     console.error(
                                         "❌ Failed to queue tracked entity update:",
@@ -210,11 +206,7 @@ export class SyncManager {
                     return;
                 }
 
-                if (
-                    !("syncStatus" in mods) &&
-                    event.syncStatus !== "draft" &&
-                    event.syncStatus !== "synced"
-                ) {
+                if (!("syncStatus" in mods)) {
                     mods.syncStatus = "pending";
                 }
                 if (!("version" in mods) && !("lastSynced" in mods)) {
@@ -226,9 +218,7 @@ export class SyncManager {
 
                     db.events.get(primKey).then((updated) => {
                         if (!updated) return;
-                        if (updated.syncStatus === "synced") {
-                            return;
-                        }
+                        if (updated.syncStatus === "synced") return;
                         if (updated.syncStatus === "pending") {
                             this.queueCreateEvent(updated, 7).catch((error) => {
                                 console.error(
@@ -418,65 +408,15 @@ export class SyncManager {
                 const batch = await this.getNextBatch(10);
                 if (batch.length === 0) break;
 
-                const eventOps = batch.filter(
-                    (op) =>
-                        op.type === "CREATE_EVENT" ||
-                        op.type === "UPDATE_EVENT",
-                );
-                const entityOps = batch.filter(
-                    (op) =>
-                        op.type === "CREATE_TRACKED_ENTITY" ||
-                        op.type === "UPDATE_TRACKED_ENTITY",
-                );
                 try {
-                    if (eventOps.length > 0) {
-                        await this.processBatchedEvents(eventOps);
-                        for (const op of eventOps) {
-                            await deleteSyncOperation(op.id);
-                            this.isSyncUpdating = true;
-                            await db.events.update(op.entityId, {
-                                syncStatus: "synced",
-                                lastSynced: new Date().toISOString(),
-                            });
-                            this.isSyncUpdating = false;
-                            syncedCount++;
-                        }
-                    }
-
-                    for (const op of entityOps) {
-                        try {
-                            await this.processSyncOperation(op);
-
-                            await deleteSyncOperation(op.id);
-                            this.isSyncUpdating = true;
-                            await db.trackedEntities.update(op.entityId, {
-                                syncStatus: "synced",
-                                lastSynced: new Date().toISOString(),
-                            });
-                            this.isSyncUpdating = false;
-
-                            syncedCount++;
-                        } catch (error: any) {
-                            console.error("❌ Sync operation failed:", error);
-                            await failSyncOperation(
-                                op.id,
-                                error.message || "Unknown error",
-                            );
-
-                            if (op.attempts >= 3) {
-                                console.error(
-                                    "🚫 Max retry attempts reached for operation:",
-                                    op.id,
-                                );
-                            }
-                        }
-                    }
+                    const count = await this.syncAll(batch);
+                    syncedCount += count;
                 } catch (error: any) {
-                    console.error("❌ Batch sync failed:", error);
-                    for (const op of eventOps) {
+                    console.error("❌ Sync batch failed:", error);
+                    for (const op of batch) {
                         await failSyncOperation(
                             op.id,
-                            error.message || "Batch sync failed",
+                            error.message || "Sync failed",
                         );
                     }
                 }
@@ -536,31 +476,44 @@ export class SyncManager {
     }
 
     /**
-     * Process batched events in single API call
-     * ✅ OPTIMIZED: Send up to 10 events in one request
+     * Build one unified DHIS2 tracker payload from all queued operations
+     * and send it in a single POST /tracker call.
+     * Returns the number of records marked as synced.
      */
-    private async processBatchedEvents(
-        operations: SyncOperation[],
-    ): Promise<void> {
-        const opsToSync: SyncOperation[] = [];
+    private async syncAll(ops: SyncOperation[]): Promise<number> {
+        const allTrackedEntities: any[] = [];
+        const allEnrollments: any[] = [];
+        const allEvents: any[] = [];
+        const syncedTeIds: string[] = [];
+        const syncedEventIds: string[] = [];
 
-        for (const op of operations) {
-            const event = await db.events.get(op.entityId);
-            if (event?.syncStatus === "synced") {
-                await deleteSyncOperation(op.id);
-                continue;
-            }
+        // Track TE IDs in this batch so we don't double-add their events
+        const teIdsInBatch = new Set<string>();
 
-            opsToSync.push(op);
-        }
+        // Helper: build DHIS2 attribute array from flat attributes map
+        const buildAttributes = (
+            attributes: Record<string, any>,
+            parentEntity?: string,
+        ) => {
+            const { enrolledAt, ...teAttributes } = attributes;
+            const finalAttributes = parentEntity
+                ? { ...teAttributes, FhyNxUVOpjh: parentEntity }
+                : teAttributes;
+            return Object.entries(finalAttributes).flatMap(
+                ([attribute, value]: [string, any]) => {
+                    if (value !== undefined && value !== null && value !== "") {
+                        return { attribute, value: String(value) };
+                    }
+                    return [];
+                },
+            );
+        };
 
-        if (opsToSync.length === 0) return;
-        const events = opsToSync.map((op) => {
-            return op.data as FlattenedEvent;
-        });
-        const allEvents = events.map(({ dataValues, ...event }) => {
-            const { occurredAt, ...othersDataElements } = dataValues;
-            let finalDataValues = othersDataElements;
+        // Helper: build DHIS2 event object from a FlattenedEvent
+        const buildEvent = (event: FlattenedEvent) => {
+            const { dataValues, ...eventRest } = event;
+            const { occurredAt, ...otherDataElements } = dataValues;
+            let finalDataValues: Record<string, any> = otherDataElements;
             if (event.parentEvent) {
                 finalDataValues = {
                     ...finalDataValues,
@@ -568,7 +521,7 @@ export class SyncManager {
                 };
             }
             return {
-                ...event,
+                ...eventRest,
                 dataValues: Object.entries(finalDataValues).flatMap(
                     ([dataElement, value]: [string, any]) => {
                         if (
@@ -577,114 +530,125 @@ export class SyncManager {
                             value !== ""
                         ) {
                             if (Array.isArray(value)) {
-                                return {
-                                    dataElement,
-                                    value: value.join(","),
-                                };
+                                return { dataElement, value: value.join(",") };
                             }
-                            return {
-                                dataElement,
-                                value,
-                            };
+                            return { dataElement, value };
                         }
                         return [];
                     },
                 ),
                 occurredAt,
             };
-        });
+        };
 
-        await this.engine.mutate({
-            resource: "tracker",
-            type: "create",
-            data: { events: allEvents },
-            params: { async: false, importStrategy: "CREATE_AND_UPDATE" },
-        });
-    }
+        // --- CREATE_TRACKED_ENTITY: send TE + enrollment + linked events ---
+        for (const op of ops) {
+            if (op.type !== "CREATE_TRACKED_ENTITY") continue;
 
-    /**
-     * Process a single sync operation
-     */
-    private async processSyncOperation(
-        operation: SyncOperation,
-    ): Promise<void> {
-        console.log(`🔄 Processing: ${operation.type} - ${operation.entityId}`);
-        try {
-            switch (operation.type) {
-                case "CREATE_TRACKED_ENTITY":
-                    await this.syncCreateTrackedEntity(operation.data);
-                    break;
+            const data = op.data as FlattenedTrackedEntity;
+            const entity = await db.trackedEntities.get(data.trackedEntity);
+            if (!entity || entity.syncStatus === "synced") continue;
 
-                case "UPDATE_TRACKED_ENTITY":
-                    await this.syncUpdateTrackedEntity(operation.data);
-                    break;
+            const { attributes, enrollment, relationships, ...rest } =
+                data as any;
 
-                case "CREATE_EVENT":
-                    await this.syncCreateEvent(operation.data);
-                    break;
-
-                case "UPDATE_EVENT":
-                    await this.syncUpdateEvent(operation.data);
-                    break;
-
-                default:
-                    throw new Error(
-                        `Unknown operation type: ${operation.type}`,
-                    );
-            }
-        } catch (error) {
-            console.error(
-                `❌ Failed: ${operation.type} - ${operation.entityId}`,
-                error,
-            );
-            throw error;
-        }
-    }
-
-    /**
-     * Sync create tracked entity to DHIS2 API
-     */
-    private async syncCreateTrackedEntity(data: any) {
-        const entity = await db.trackedEntities.get(data.trackedEntity);
-
-        if (entity?.syncStatus === "synced") return;
-        const { attributes, enrollment, events, relationships, ...rest } = data;
-        const { enrolledAt, ...othersAttributes } = attributes;
-
-        let finalAttributes = othersAttributes;
-        if (entity && entity.parentEntity) {
-            finalAttributes = {
-                ...finalAttributes,
-                FhyNxUVOpjh: entity.parentEntity,
-            };
-        }
-        const allAttributes = Object.entries(finalAttributes).flatMap(
-            ([attribute, value]: [string, any]) => {
-                if (value !== undefined && value !== null && value !== "") {
-                    return { attribute, value: String(value) };
-                }
-                return [];
-            },
-        );
-        const trackedEntities = [
-            {
+            allTrackedEntities.push({
                 ...rest,
-                attributes: allAttributes,
-            },
-        ];
-
-        const enrollments = [
-            {
+                attributes: buildAttributes(attributes, entity.parentEntity),
+            });
+            allEnrollments.push({
                 ...enrollment,
-                enrolledAt,
-            },
-        ];
+                enrolledAt: attributes.enrolledAt,
+            });
+            syncedTeIds.push(entity.trackedEntity);
+            teIdsInBatch.add(entity.trackedEntity);
 
-        const payload: any = { trackedEntities, enrollments };
+            // Pull in ALL pending events for this TE from the DB
+            const pendingEvents = await db.events
+                .where("trackedEntity")
+                .equals(entity.trackedEntity)
+                .filter((e) => e.syncStatus === "pending")
+                .toArray();
 
-        if (relationships && relationships.length > 0) {
-            payload.relationships = relationships;
+            for (const event of pendingEvents) {
+                if (syncedEventIds.includes(event.event)) continue;
+                allEvents.push(buildEvent(event));
+                syncedEventIds.push(event.event);
+            }
         }
+
+        // --- UPDATE_TRACKED_ENTITY: send only TE attributes, no enrollment ---
+        for (const op of ops) {
+            if (op.type !== "UPDATE_TRACKED_ENTITY") continue;
+
+            const data = op.data as FlattenedTrackedEntity;
+            const entity = await db.trackedEntities.get(data.trackedEntity);
+            if (!entity || entity.syncStatus === "synced") continue;
+            if (teIdsInBatch.has(entity.trackedEntity)) continue; // already handled by CREATE
+
+            const { attributes, enrollment, relationships, ...rest } =
+                data as any;
+
+            allTrackedEntities.push({
+                ...rest,
+                attributes: buildAttributes(attributes, entity.parentEntity),
+            });
+            syncedTeIds.push(entity.trackedEntity);
+            teIdsInBatch.add(entity.trackedEntity);
+
+            const pendingEvents = await db.events
+                .where("trackedEntity")
+                .equals(entity.trackedEntity)
+                .filter((e) => e.syncStatus === "pending")
+                .toArray();
+            for (const event of pendingEvents) {
+                if (syncedEventIds.includes(event.event)) continue;
+                allEvents.push(buildEvent(event));
+                syncedEventIds.push(event.event);
+            }
+        }
+        for (const op of ops) {
+            if (op.type !== "UPDATE_ENROLLMENT") continue;
+
+            const data = op.data as FlattenedTrackedEntity;
+            const { attributes, enrollment } = data as any;
+
+            allEnrollments.push({
+                ...enrollment,
+                enrolledAt: attributes.enrolledAt,
+            });
+        }
+
+        for (const op of ops) {
+            if (op.type !== "CREATE_EVENT" && op.type !== "UPDATE_EVENT")
+                continue;
+            if (syncedEventIds.includes(op.entityId)) continue;
+
+            const event = await db.events.get(op.entityId);
+            if (!event || event.syncStatus === "synced") continue;
+
+            if (teIdsInBatch.has(event.trackedEntity)) continue;
+
+            allEvents.push(buildEvent(event));
+            syncedEventIds.push(event.event);
+        }
+
+        if (
+            allTrackedEntities.length === 0 &&
+            allEnrollments.length === 0 &&
+            allEvents.length === 0
+        ) {
+            for (const op of ops) {
+                await deleteSyncOperation(op.id);
+            }
+            return 0;
+        }
+
+        const payload: any = {};
+        if (allTrackedEntities.length > 0)
+            payload.trackedEntities = allTrackedEntities;
+        if (allEnrollments.length > 0) payload.enrollments = allEnrollments;
+        if (allEvents.length > 0) payload.events = allEvents;
 
         await this.engine.mutate({
             resource: "tracker",
@@ -692,102 +656,35 @@ export class SyncManager {
             data: payload,
             params: { async: false, importStrategy: "CREATE_AND_UPDATE" },
         });
-    }
 
-    /**
-     * Sync update tracked entity to DHIS2 API
-     */
-    private async syncUpdateTrackedEntity(data: any) {
-        const entity = await db.trackedEntities.get(data.trackedEntity);
-        if (entity?.syncStatus === "synced") return;
-        const { attributes, enrollment, events, relationships, ...rest } = data;
-        const { enrolledAt, ...othersAttributes } = attributes;
+        const now = new Date().toISOString();
+        this.isSyncUpdating = true;
 
-        let finalAttributes = othersAttributes;
-        if (entity && entity.parentEntity) {
-            finalAttributes = {
-                ...finalAttributes,
-                FhyNxUVOpjh: entity.parentEntity,
-            };
+        for (const teId of syncedTeIds) {
+            await db.trackedEntities.update(teId, {
+                syncStatus: "synced",
+                lastSynced: now,
+            });
         }
-        const allAttributes = Object.entries(finalAttributes).flatMap(
-            ([attribute, value]: [string, any]) => {
-                if (value !== undefined && value !== null && value !== "") {
-                    return { attribute, value: String(value) };
-                }
-                return [];
-            },
-        );
-        const trackedEntities = [
-            {
-                ...rest,
-                attributes: allAttributes,
-            },
-        ];
-        const enrollments = [enrollment];
-        await this.engine.mutate({
-            resource: "tracker",
-            type: "create",
-            data: { trackedEntities, enrollments },
-            params: { async: false, importStrategy: "CREATE_AND_UPDATE" },
-        });
-    }
-
-    /**
-     * Sync create/update events to DHIS2 API
-     */
-    private async syncCreateEvent(data: any) {
-        const { dataValues, relationships, ...event } = data;
-        const { occurredAt, ...othersDataElements } = dataValues;
-
-        let finalDataValues = othersDataElements;
-        if (event.parentEvent) {
-            finalDataValues = {
-                ...finalDataValues,
-                Wx7x4sMAa62: event.parentEvent,
-            };
+        for (const eventId of syncedEventIds) {
+            await deleteSyncOperation(`${eventId}_CREATE_EVENT`).catch(
+                () => {},
+            );
+            await deleteSyncOperation(`${eventId}_UPDATE_EVENT`).catch(
+                () => {},
+            );
+            await db.events.update(eventId, {
+                syncStatus: "synced",
+                lastSynced: now,
+            });
         }
-        const allEvents = [
-            {
-                ...event,
-                dataValues: Object.entries(finalDataValues).flatMap(
-                    ([dataElement, value]: [string, any]) => {
-                        if (
-                            value !== undefined &&
-                            value !== null &&
-                            value !== ""
-                        ) {
-                            if (Array.isArray(value)) {
-                                return {
-                                    dataElement,
-                                    value: value.join(","),
-                                };
-                            }
-                            return {
-                                dataElement,
-                                value,
-                            };
-                        }
-                        return [];
-                    },
-                ),
-                occurredAt,
-            },
-        ];
+        for (const op of ops) {
+            await deleteSyncOperation(op.id);
+        }
 
-        await this.engine.mutate({
-            resource: "tracker",
-            type: "create",
-            data: { events: allEvents },
-            params: { async: false, importStrategy: "CREATE_AND_UPDATE" },
-        });
-    }
+        this.isSyncUpdating = false;
 
-    /**
-     * Sync update event to DHIS2 API
-     */
-    private async syncUpdateEvent(data: any) {
-        await this.syncCreateEvent(data);
+        return syncedTeIds.length + syncedEventIds.length;
     }
 
     /**
@@ -802,6 +699,54 @@ export class SyncManager {
         await queueSyncOperation({
             type: "CREATE_TRACKED_ENTITY",
             entityId: data.trackedEntity,
+            data,
+            priority,
+        });
+
+        const stats = await getSyncQueueStats();
+        await this.updateSyncState({
+            pendingCount: stats.pending + stats.failed,
+        });
+
+        if (this.isOnline && !this.isSyncing) {
+            this.startSync();
+        }
+    }
+
+    /**
+     * Queue an update-only tracked entity operation (no enrollment)
+     */
+    public async queueUpdateTrackedEntity(
+        data: any,
+        priority: number = 5,
+    ): Promise<void> {
+        await queueSyncOperation({
+            type: "UPDATE_TRACKED_ENTITY",
+            entityId: data.trackedEntity,
+            data,
+            priority,
+        });
+
+        const stats = await getSyncQueueStats();
+        await this.updateSyncState({
+            pendingCount: stats.pending + stats.failed,
+        });
+
+        if (this.isOnline && !this.isSyncing) {
+            this.startSync();
+        }
+    }
+
+    /**
+     * Queue an enrollment-only update (no TE attributes)
+     */
+    public async queueUpdateEnrollment(
+        data: any,
+        priority: number = 5,
+    ): Promise<void> {
+        await queueSyncOperation({
+            type: "UPDATE_ENROLLMENT",
+            entityId: data.enrollment.enrollment,
             data,
             priority,
         });

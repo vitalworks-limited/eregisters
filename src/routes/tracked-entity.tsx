@@ -22,30 +22,94 @@ import { z } from "zod";
 import { DataModal } from "../components/data-modal";
 import MainEventCapture from "../components/main-event-capture";
 import { TrackerRegistration } from "../components/tracker-registration";
+import { useDataEngine } from "@dhis2/app-runtime";
 import { db } from "../db";
 import { useModalState } from "../hooks/useModalState";
-import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
-import { createEmptyEvent, createEmptyTrackedEntity } from "../utils/utils";
+import {
+    FlattenedEvent,
+    FlattenedTrackedEntity,
+    TrackedEntity,
+    TrackedEntityResponse,
+} from "../schemas";
+import {
+    createEmptyEvent,
+    createEmptyTrackedEntity,
+    flattenTrackedEntity,
+    flattenTrackedEntityResponse,
+} from "../utils/utils";
 import { RootRoute } from "./__root";
+import { resourceQueryOptions } from "../query-options";
+import { QueryClient } from "@tanstack/react-query";
+import { Spinner } from "../components/spinner";
+import { SyncStatusComp } from "../components/sync-status-comp";
+
+const getPreviousEvents = async (
+    trackedEntity: string,
+    queryClient: QueryClient,
+    engine: ReturnType<typeof useDataEngine>,
+) => {
+    const events = await db.events.where({ trackedEntity }).toArray();
+    if (events.length === 0) {
+        const data = await queryClient.fetchQuery(
+            resourceQueryOptions<TrackedEntity>({
+                engine,
+                resource: `tracker/trackedEntities`,
+                queryKey: ["trackedEntities", trackedEntity],
+                id: trackedEntity,
+                params: {
+                    fields: "*",
+                },
+            }),
+        );
+        const flattened = flattenTrackedEntity(data);
+        if (flattened.events && flattened.events.length > 0) {
+            await db.events.bulkPut(flattened.events);
+        }
+        const relatedInstances = await queryClient.fetchQuery(
+            resourceQueryOptions<TrackedEntityResponse>({
+                engine,
+                resource: `tracker/trackedEntities`,
+                queryKey: ["childrenInstances", trackedEntity],
+
+                params: {
+                    fields: "*,enrollments[*,events[*]]",
+                    filter: `FhyNxUVOpjh:eq:${trackedEntity}`,
+                    program: "ueBhWkWll5v",
+                    orgUnitMode: "ACCESSIBLE",
+                },
+            }),
+        );
+        const flattenedRelated = flattenTrackedEntityResponse(relatedInstances);
+        const events = flattenedRelated.flatMap((a) => a.events);
+        await db.trackedEntities.bulkPut(flattenedRelated);
+        await db.events.bulkPut(events);
+    }
+};
+
 export const TrackedEntityRoute = createRoute({
     getParentRoute: () => RootRoute,
     path: "/tracked-entity/$trackedEntity",
-    component: TrackedEntity,
+    component: TrackedEntityComponent,
     params: z.object({
         trackedEntity: z.string(),
     }),
-    loader: async ({ params: { trackedEntity } }) => {
+    pendingComponent: Spinner,
+    loader: async ({
+        params: { trackedEntity },
+        context: { engine, queryClient },
+    }) => {
         const current = await db.trackedEntities.get(trackedEntity);
         if (!current) {
             throw new Error("Tracked entity not found in local database");
         }
+        await getPreviousEvents(trackedEntity, queryClient, engine);
         return current;
     },
 });
 
 const { Text } = Typography;
 
-function TrackedEntity() {
+function TrackedEntityComponent() {
     const {
         orgUnit: { id },
     } = RootRoute.useRouteContext();
@@ -126,6 +190,7 @@ function TrackedEntity() {
                 dataIndex: "syncStatus",
                 key: "syncStatus",
                 width: 120,
+                render: (text) => <SyncStatusComp syncStatus={text} />,
             },
             {
                 title: "Action",
@@ -183,18 +248,20 @@ function TrackedEntity() {
     }));
 
     const handleCreate = async () => {
-        const newEvent = createEmptyEvent({
-            trackedEntity: trackedEntity.trackedEntity,
-            program: enrollment.program,
-            orgUnit: enrollment.orgUnit,
-            enrollment: enrollment.enrollment,
-            programStage: "K2nxbE9ubSs",
-        });
-        await db.events.put(newEvent);
-        openModal(newEvent);
+        if (enrollment) {
+            const newEvent = createEmptyEvent({
+                trackedEntity: trackedEntity.trackedEntity,
+                program: enrollment.program,
+                orgUnit: enrollment.orgUnit,
+                enrollment: enrollment.enrollment,
+                programStage: "K2nxbE9ubSs",
+            });
+            await db.events.put(newEvent);
+            openModal(newEvent);
+        }
     };
 
-    const createPatientAndLink = (allValues: Record<string, any>) => {
+    const createPatientAndLink = async (allValues: Record<string, any>) => {
         const dataElementToAttributeMap: Record<string, string> = {
             KJ2V2JlOxFi: "Y3DE5CZWySr",
         };
@@ -275,13 +342,18 @@ function TrackedEntity() {
         const newPatient: FlattenedTrackedEntity = createEmptyTrackedEntity({
             orgUnit: id,
             attributes: initialValues,
+            parentEntity: trackedEntity.trackedEntity,
         });
+        await db.trackedEntities.put(newPatient);
         return newPatient;
     };
 
-    const onValueChange = (change: any, allValues: Record<string, any>) => {
+    const onValueChange = async (
+        change: any,
+        allValues: Record<string, any>,
+    ) => {
         if (change && change["REWqohCg4Km"] === "Yes") {
-            const patient = createPatientAndLink(allValues);
+            const patient = await createPatientAndLink(allValues);
             openChildModal(patient);
         }
     };
@@ -449,6 +521,11 @@ function TrackedEntity() {
                         form={form}
                         trackedEntity={trackedEntity}
                         mainEvent={data!}
+                        previousEvents={events
+                            .filter((e) => e.event !== data?.event)
+                            .sort((a, b) =>
+                                a.occurredAt.localeCompare(b.occurredAt),
+                            )}
                     />
                 )}
             </DataModal>
@@ -459,30 +536,39 @@ function TrackedEntity() {
                 onClose={closeChildModal}
                 hasAddAnother={true}
                 onSave={async (values, addAnother) => {
-                    await db.trackedEntities.put({
-                        ...childData!,
-                        attributes: values,
-                        syncStatus: "pending",
-                        parentEntity: trackedEntity.trackedEntity,
-                    });
-                    const childEvent = createEmptyEvent({
-                        trackedEntity: childData!.trackedEntity,
-                        program: childData!.enrollment.program,
-                        orgUnit: childData!.enrollment.orgUnit,
-                        enrollment: childData!.enrollment.enrollment,
-                        programStage: "K2nxbE9ubSs",
-                        dataValues: { occurredAt: values["enrolledAt"] },
-                    });
+                    if (childData && values && childData.enrollment) {
+                        const child: FlattenedTrackedEntity = {
+                            ...childData,
+                            attributes: values,
+                            syncStatus: "pending",
+                            parentEntity: trackedEntity.trackedEntity,
+                        };
+                        const childEvent: FlattenedEvent = createEmptyEvent({
+                            trackedEntity: childData.trackedEntity,
+                            program: childData.enrollment.program,
+                            orgUnit: childData.enrollment.orgUnit,
+                            enrollment: childData.enrollment.enrollment,
+                            programStage: "K2nxbE9ubSs",
+                            dataValues: {
+                                occurredAt:
+                                    values["enrolledAt"] ||
+                                    values["occurredAt"],
+                                UuxHHVp5CnF: "Newborn",
+                                mrKZWf2WMIC: "Child Health Services",
+                            },
+                            parentEvent: data?.event ?? "",
+                        });
 
-                    await db.events.put({
-                        ...childEvent,
-                        syncStatus: "pending",
-                        parentEvent: data!.event,
-                    });
+                        await db.trackedEntities.put(child);
+                        await db.events.put({
+                            ...childEvent,
+                            syncStatus: "pending",
+                        });
 
-                    if (addAnother) {
-                        const patient = createPatientAndLink(values);
-                        openChildModal(patient);
+                        if (addAnother) {
+                            const patient = await createPatientAndLink(values);
+                            openChildModal(patient);
+                        }
                     }
                 }}
                 title="New Born Child"

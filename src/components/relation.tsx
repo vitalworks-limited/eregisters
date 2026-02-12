@@ -1,13 +1,12 @@
 import { Form, Row, Typography } from "antd";
-import React, { useCallback } from "react";
-import { useDexiePersistence } from "../hooks/useDexiePersistence";
+import { useLiveQuery } from "dexie-react-hooks";
+import React, { useCallback, useEffect, useRef } from "react";
+import { db } from "../db";
 import { useProgramRulesWithDexie } from "../hooks/useProgramRules";
 import { RootRoute } from "../routes/__root";
 import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
 import { calculateColSpan } from "../utils/utils";
 import { DataElementField } from "./data-element-field";
-import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "../db";
 
 export default function Relation({
     section,
@@ -37,6 +36,8 @@ export default function Relation({
         ({ name }) => name === "Child Health Services",
     );
 
+    const childEventRef = useRef<typeof childEvent>(undefined);
+
     const childEvent = useLiveQuery(async () => {
         return db.events
             .where("parentEvent")
@@ -45,10 +46,19 @@ export default function Relation({
             .first();
     }, [mainEvent.event, trackedEntity.trackedEntity]);
 
-    const { updateField, updateFields } = useDexiePersistence({
-        entityType: "event",
-        entityId: childEvent?.event ?? "",
-    });
+    useEffect(() => {
+        childEventRef.current = childEvent;
+    }, [childEvent?.event]);
+
+    const persistFields = useCallback(async (fields: Record<string, any>) => {
+        const event = childEventRef.current;
+        if (!event?.event) return;
+        const current = await db.events.get(event.event);
+        if (!current) return;
+        await db.events.update(event.event, {
+            dataValues: { ...current.dataValues, ...fields },
+        });
+    }, []);
 
     const { ruleResult, executeAndApplyRules, triggerAutoExecute } =
         useProgramRulesWithDexie({
@@ -57,7 +67,7 @@ export default function Relation({
             programRuleVariables,
             programStage: "K2nxbE9ubSs",
             trackedEntityAttributes: trackedEntity.attributes,
-            onAssignments: updateFields,
+            onAssignments: persistFields,
             applyAssignmentsToForm: true,
             persistAssignments: true,
             program: program.id,
@@ -66,13 +76,15 @@ export default function Relation({
 
     const updateFieldWithRules = useCallback(
         async (fieldId: string, value: any) => {
-            updateField(fieldId, value);
             triggerAutoExecute();
-            await db.events.update(childEvent?.event ?? "", {
+            const current = await db.events.get(childEvent?.event ?? "");
+            if (!current) return;
+            await db.events.update(current.event, {
+                dataValues: { ...current.dataValues, [fieldId]: value },
                 syncStatus: "pending",
             });
         },
-        [updateField, triggerAutoExecute],
+        [triggerAutoExecute],
     );
 
     const currentDataElements = new Map(
@@ -86,6 +98,24 @@ export default function Relation({
             },
         ]),
     );
+    const executeAndApplyRulesRef = useRef(executeAndApplyRules);
+    useEffect(() => {
+        executeAndApplyRulesRef.current = executeAndApplyRules;
+    });
+
+    useEffect(() => {
+        if (!childEvent) return;
+        childEventForm.setFieldsValue({
+            ...childEvent.dataValues,
+            UuxHHVp5CnF: section === "Maternity" ? "Newborn" : "Postnatal",
+            mrKZWf2WMIC: "Child Health Services",
+        });
+        executeAndApplyRulesRef.current({
+            ...childEvent.dataValues,
+            UuxHHVp5CnF: section === "Maternity" ? "Newborn" : "Postnatal",
+            mrKZWf2WMIC: "Child Health Services",
+        });
+    }, [childEvent?.event]);
 
     return (
         <Form

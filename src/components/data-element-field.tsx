@@ -260,14 +260,102 @@ export const DataElementField = React.memo<{
                     }}
                 />
             );
-        } else if (
-            ["NUMBER", "INTEGER", "INTEGER_POSITIVE"].includes(
-                dataElement.valueType ?? "",
-            )
-        ) {
+        } else if (dataElement.valueType === "NUMBER") {
             element = (
                 <InputNumber
                     disabled={disabled}
+                    style={{
+                        width: "100%",
+                    }}
+                    onBlur={(e) => {
+                        onAutoSave(
+                            dataElement.id,
+                            e.target.value ? Number(e.target.value) : undefined,
+                        );
+                    }}
+                />
+            );
+        } else if (dataElement.valueType === "INTEGER") {
+            element = (
+                <InputNumber
+                    disabled={disabled}
+                    precision={0}
+                    style={{
+                        width: "100%",
+                    }}
+                    parser={(value) =>
+                        Number(value?.replace(/[^0-9-]/g, "")) || 0
+                    }
+                    onBlur={(e) => {
+                        onAutoSave(
+                            dataElement.id,
+                            e.target.value ? Number(e.target.value) : undefined,
+                        );
+                    }}
+                />
+            );
+        } else if (dataElement.valueType === "INTEGER_POSITIVE") {
+            element = (
+                <InputNumber
+                    disabled={disabled}
+                    precision={0}
+                    min={1}
+                    style={{
+                        width: "100%",
+                    }}
+                    parser={(value) =>
+                        Number(value?.replace(/[^0-9]/g, "")) || 0
+                    }
+                    onBlur={(e) => {
+                        onAutoSave(
+                            dataElement.id,
+                            e.target.value ? Number(e.target.value) : undefined,
+                        );
+                    }}
+                />
+            );
+        } else if (dataElement.valueType === "UNIT_INTERVAL") {
+            element = (
+                <InputNumber
+                    disabled={disabled}
+                    style={{
+                        width: "100%",
+                    }}
+                    min={0}
+                    max={1}
+										step={0.01}
+                    onBlur={(e) => {
+                        onAutoSave(
+                            dataElement.id,
+                            e.target.value ? Number(e.target.value) : undefined,
+                        );
+                    }}
+                />
+            );
+        } else if (dataElement.valueType === "INTEGER_ZERO_OR_POSITIVE") {
+            element = (
+                <InputNumber
+                    disabled={disabled}
+                    min={0}
+                    precision={0}
+                    style={{
+                        width: "100%",
+                    }}
+                    onBlur={(e) => {
+                        onAutoSave(
+                            dataElement.id,
+                            e.target.value ? Number(e.target.value) : undefined,
+                        );
+                    }}
+                />
+            );
+        } else if (dataElement.valueType === "PERCENTAGE") {
+            element = (
+                <InputNumber
+                    disabled={disabled}
+                    min={0}
+                    precision={1}
+										max={100}
                     style={{
                         width: "100%",
                     }}

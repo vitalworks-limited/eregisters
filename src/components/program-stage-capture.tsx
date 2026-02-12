@@ -34,7 +34,14 @@ export const ProgramStageCapture: React.FC<{
     trackedEntity: FlattenedTrackedEntity;
     mainEvent: FlattenedEvent;
     captureMode?: "modal" | "inline";
-}> = ({ programStage, trackedEntity, mainEvent, captureMode = "modal" }) => {
+    previousEvents?: FlattenedEvent[];
+}> = ({
+    programStage,
+    trackedEntity,
+    mainEvent,
+    previousEvents,
+    captureMode = "modal",
+}) => {
     const enrollment = trackedEntity.enrollment;
     const { data, isOpen, openModal, closeModal } =
         useModalState<FlattenedEvent>();
@@ -62,7 +69,7 @@ export const ProgramStageCapture: React.FC<{
             return db.events
                 .where("parentEvent")
                 .equals(mainEvent.event)
-								.filter((event) => event.programStage === programStage.id)
+                .filter((event) => event.programStage === programStage.id)
                 .toArray();
         }, [trackedEntity.trackedEntity, programStage.id, mainEvent.event]) ||
         [];
@@ -72,7 +79,7 @@ export const ProgramStageCapture: React.FC<{
     const columns: TableProps<FlattenedEvent>["columns"] = [
         {
             title: "Date",
-            dataIndex: "occurredAt",
+            dataIndex: ["dataValues", "occurredAt"],
             key: "date",
             render: (date) => dayjs(date).format("MMM DD, YYYY"),
         },
@@ -88,6 +95,12 @@ export const ProgramStageCapture: React.FC<{
                 };
             });
         }),
+        {
+            title: "Sync Status",
+            dataIndex: "syncStatus",
+            key: "syncStatus",
+            width: 120,
+        },
         {
             title: "Action",
             key: "action",
@@ -196,9 +209,24 @@ export const ProgramStageCapture: React.FC<{
                 open={isOpen}
                 data={data}
                 onClose={closeModal}
-                onSave={async (values) => {
+                onSave={async (values, addAnother) => {
                     if (values && data) {
-                        await db.events.update(data.event, {
+                        const filteredObj: Record<string, any> =
+                            Object.fromEntries(
+                                Object.entries(values).filter(
+                                    ([key]) =>
+                                        programStage.programStageDataElements
+                                            .map((de) => de.dataElement.id)
+                                            .includes(key) ||
+                                        key === "occurredAt",
+                                ),
+                            );
+                        await db.events.put({
+                            ...data,
+                            dataValues: {
+                                ...data.dataValues,
+                                ...filteredObj,
+                            },
                             syncStatus:
                                 mainEvent.syncStatus === "synced"
                                     ? "pending"
@@ -206,9 +234,13 @@ export const ProgramStageCapture: React.FC<{
                             parentEvent: mainEvent.event,
                         });
                     }
+                    if (addAnother) {
+                        handleCreate();
+                    }
                 }}
                 title={programStage.name}
                 submitButtonText={`Save ${programStage.name}`}
+                hasAddAnother={true}
             >
                 {(form) => (
                     <ProgramStageForm
@@ -216,6 +248,7 @@ export const ProgramStageCapture: React.FC<{
                         programStage={programStage}
                         event={data!}
                         trackedEntity={trackedEntity}
+                        previousEvents={previousEvents}
                     />
                 )}
             </DataModal>

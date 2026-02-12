@@ -1,9 +1,10 @@
 import { Tabs } from "antd";
 import { useLiveQuery } from "dexie-react-hooks";
-import React from "react";
+import React, { Key, useState } from "react";
 import { db } from "../db";
 import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
 import Relation from "./relation";
+import { createEmptyEvent } from "../utils/utils";
 
 const getChildLabel = (to: FlattenedTrackedEntity["attributes"]): string => {
     const firstName = to["KSq9EyZ8ZFi"];
@@ -21,6 +22,8 @@ export default function RelationshipEvent({
     trackedEntity: FlattenedTrackedEntity;
     mainEvent: FlattenedEvent;
 }) {
+    const [activeKey, setActiveKey] = useState<string>("");
+
     const children = useLiveQuery(async () => {
         return db.trackedEntities
             .where("parentEntity")
@@ -28,10 +31,43 @@ export default function RelationshipEvent({
             .toArray();
     }, [trackedEntity.trackedEntity]);
 
-    if (!children || children.length === 0) {
+    if (children === undefined || children.length === 0) {
         return null;
     }
 
+    const onChange = async (activeKey: Key) => {
+        const current = await db.events
+            .where("parentEvent")
+            .equals(mainEvent.event)
+            .filter((x) => x.trackedEntity === activeKey)
+            .first();
+
+        const currentChild = children.find(
+            ({ trackedEntity }) => trackedEntity === activeKey,
+        );
+
+        if (current === undefined && currentChild && currentChild.enrollment) {
+            const newEvent = createEmptyEvent({
+                trackedEntity: currentChild.trackedEntity,
+                program: currentChild.enrollment.program,
+                orgUnit: currentChild.enrollment.orgUnit,
+                enrollment: currentChild.enrollment.enrollment,
+                programStage: "K2nxbE9ubSs",
+                dataValues: {
+                    occurredAt:
+                        mainEvent.dataValues["occurredAt"] ||
+                        mainEvent.occurredAt,
+
+                    UuxHHVp5CnF:
+                        section === "Maternity" ? "Newborn" : "Postnatal",
+                    mrKZWf2WMIC: "Child Health Services",
+                },
+                parentEvent: mainEvent.event,
+            });
+            await db.events.put(newEvent);
+        }
+        setActiveKey(() => String(activeKey));
+    };
     return (
         <Tabs
             items={children.map((trackedEntity) => {
@@ -44,11 +80,13 @@ export default function RelationshipEvent({
                             key={trackedEntity.trackedEntity}
                             section={section}
                             mainEvent={mainEvent}
-														trackedEntity={trackedEntity}
+                            trackedEntity={trackedEntity}
                         />
                     ),
                 };
             })}
+            onChange={onChange}
+            accessKey={activeKey}
         />
     );
 }

@@ -45,7 +45,7 @@ export const TrackedEntitiesIndexRoute = createRoute({
             program: "ueBhWkWll5v",
             orgUnitMode: "ACCESSIBLE",
             order: "updatedAt:DESC",
-            fields: "trackedEntity,trackedEntityType,orgUnit,createdAt,updatedAt,createdAtClient,updatedAtClient,inactive,deleted,potentialDuplicate,attributes,enrollments[*,events[*]]",
+            fields: "trackedEntity,trackedEntityType,orgUnit,createdAt,updatedAt,createdAtClient,updatedAtClient,inactive,deleted,potentialDuplicate,attributes",
         });
         if (search && Object.values(search).length > 0) {
             for (const [filterKey, filterValues] of Object.entries(search)) {
@@ -79,9 +79,8 @@ export const TrackedEntitiesIndexRoute = createRoute({
                 }),
             );
             const results = flattenTrackedEntityResponse(data);
-            const events = results.flatMap((te) => te.events);
             await db.trackedEntities.bulkPut(results);
-            await db.events.bulkPut(events);
+            // await db.events.bulkPut(events);
             return results;
         }
 
@@ -94,7 +93,8 @@ function TrackedEntitiesSearch() {
         orgUnit: { id },
     } = RootRoute.useRouteContext();
     const trackedEntities = TrackedEntitiesIndexRoute.useLoaderData();
-    const { program, trackedEntityAttributes } = RootRoute.useLoaderData();
+    const { program, trackedEntityAttributes, organisations } =
+        RootRoute.useLoaderData();
     const navigate = TrackedEntitiesIndexRoute.useNavigate();
     const { data, isOpen, openModal, closeModal } =
         useModalState<FlattenedTrackedEntity>();
@@ -122,6 +122,18 @@ function TrackedEntitiesSearch() {
         ],
     };
     const columns: ColumnsType<FlattenedTrackedEntity> = [
+        {
+            displayInList: true,
+            displayFormName: "Registering Facility",
+            name: "Registering Facility",
+            id: "registeringFacility",
+            valueType: "TEXT",
+            optionSetValue: false,
+            generated: false,
+            unique: false,
+            pattern: "",
+            confidential: false,
+        },
         ...program.programTrackedEntityAttributes.map(
             ({ trackedEntityAttribute: { id }, ...rest }) => ({
                 ...rest,
@@ -152,8 +164,19 @@ function TrackedEntitiesSearch() {
                     trackedEntityAttribute.name,
                 key: trackedEntityAttribute.id,
                 render: (record) => {
-                    console.log("record in registeringFacility column", record);
-                    return record.enrollment?.orgUnitName || "N/A";
+                    return organisations.get(record.orgUnit) || "N/A";
+                },
+            };
+        }
+        if (trackedEntityAttribute.id === "oTI0DLitzFY") {
+            return {
+                title:
+                    trackedEntityAttribute.displayFormName ||
+                    trackedEntityAttribute.name,
+                key: trackedEntityAttribute.id,
+                dataIndex: ["attributes", "oTI0DLitzFY"],
+                render: (text) => {
+                    return String(text).split("(")[1]?.replace(")", "");
                 },
             };
         }

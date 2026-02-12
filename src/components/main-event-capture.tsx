@@ -35,19 +35,16 @@ const stages: Map<string, number> = new Map([
     ["wmPg6qplttg", 8],
 ]);
 
-const relationshipTypes: Map<string, string> = new Map([
-    ["opwSN351xGC", "W16c7nWGWpY"],
-    ["zKGWob5AZKP", "v3dKzBFfI7p"],
-    ["DA0Yt3V16AN", "mrdzkBOTFay"],
-]);
 export default function MainEventCapture({
     form,
     trackedEntity,
     mainEvent,
+    previousEvents,
 }: {
     form: FormInstance;
     trackedEntity: FlattenedTrackedEntity;
     mainEvent: FlattenedEvent;
+    previousEvents?: FlattenedEvent[];
 }) {
     const {
         program,
@@ -57,7 +54,11 @@ export default function MainEventCapture({
         programRules,
         programRuleVariables,
     } = RootRoute.useLoaderData();
-    // const values = Form.useWatch([], form);
+
+    const values = Form.useWatch(
+        ["zxJ9SDZtKUS", "nxthjrx18Y0", "RltyVq1d11i"],
+        form,
+    );
     const [activeKey, setActiveKey] = useState<string>(
         "K2nxbE9ubSs-bnV62fxQmoE",
     );
@@ -80,6 +81,7 @@ export default function MainEventCapture({
         persistAssignments: true,
         program: program.id,
         autoExecute: true,
+        previousEvents,
     });
 
     const updateFieldWithRules = useCallback(
@@ -118,6 +120,9 @@ export default function MainEventCapture({
     useEffect(() => {
         form.setFieldsValue(entity?.dataValues);
     }, [entity]);
+    useEffect(() => {
+        triggerAutoExecute();
+    }, [values]);
     return (
         <Flex vertical gap={10} style={{ width: "100%" }}>
             <Card size="small" styles={{ body: { padding: 10, margin: 0 } }}>
@@ -138,10 +143,10 @@ export default function MainEventCapture({
                             <DatePicker
                                 style={{ width: "100%" }}
                                 placeholder="Select date"
-                                onChange={(value) => {
-                                    updateField(
+                                onChange={() => {
+                                    updateFieldWithRules(
                                         "occurredAt",
-                                        value?.toISOString() ?? null,
+                                        form.getFieldValue("occurredAt"),
                                     );
                                 }}
                             />
@@ -183,8 +188,11 @@ export default function MainEventCapture({
                                                   .includes(input.toLowerCase())
                                             : false,
                                 }}
-                                onChange={(value) => {
-                                    updateField("mrKZWf2WMIC", value);
+                                onChange={() => {
+                                    updateFieldWithRules(
+                                        "mrKZWf2WMIC",
+                                        form.getFieldValue("mrKZWf2WMIC"),
+                                    );
                                 }}
                             />
                         </Form.Item>
@@ -231,6 +239,7 @@ export default function MainEventCapture({
                                     programStage={stage}
                                     trackedEntity={trackedEntity}
                                     mainEvent={mainEvent}
+                                    previousEvents={previousEvents}
                                 />
                             ),
                         };
@@ -251,6 +260,11 @@ export default function MainEventCapture({
                                         <Row gutter={[16, 0]}>
                                             {section.dataElements.flatMap(
                                                 (dataElement) => {
+                                                    if (
+                                                        dataElement.id ===
+                                                        "mrKZWf2WMIC"
+                                                    )
+                                                        return [];
                                                     const currentDataElement =
                                                         dataElements.get(
                                                             dataElement.id,

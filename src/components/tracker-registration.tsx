@@ -72,7 +72,6 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
     );
 
     useEffect(() => {
-			console.log("Values changed:", values);
         triggerAutoExecute();
     }, [values]);
 
