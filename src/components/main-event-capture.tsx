@@ -10,19 +10,22 @@ import {
     Tabs,
 } from "antd";
 import { orderBy } from "lodash";
-import React, { useCallback, useEffect, useState } from "react";
-import { useProgramRulesWithDexie } from "../hooks/useProgramRules";
+import React, { useEffect, useState } from "react";
 import { RootRoute } from "../routes/__root";
-import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
 import {
-    calculateColSpan,
+    FlattenedEnrollment,
+    FlattenedEvent,
+    FlattenedTrackedEntity,
+} from "../schemas";
+import {
+    buildCurrentDataElements,
     createGetValueProps,
     createNormalize,
 } from "../utils/utils";
-import { DataElementField } from "./data-element-field";
 import RelationshipEvent from "./relationship-event";
-import { useDexiePersistence } from "../hooks/useDexiePersistence";
+import { useEventForm } from "../hooks/useEventForm";
 import { ProgramStageCapture } from "./program-stage-capture";
+import { DataElementRenderer } from "./data-element-renderer";
 
 const stages: Map<string, number> = new Map([
     ["x5x1cHHjg00", 7],
@@ -40,20 +43,16 @@ export default function MainEventCapture({
     trackedEntity,
     mainEvent,
     previousEvents,
+    enrollment,
 }: {
     form: FormInstance;
     trackedEntity: FlattenedTrackedEntity;
     mainEvent: FlattenedEvent;
     previousEvents?: FlattenedEvent[];
+    enrollment: FlattenedEnrollment;
 }) {
-    const {
-        program,
-        dataElements,
-        optionGroups,
-        optionSets,
-        programRules,
-        programRuleVariables,
-    } = RootRoute.useLoaderData();
+    const { program, optionSets, programRules, programRuleVariables } =
+        RootRoute.useLoaderData();
 
     const values = Form.useWatch(
         ["zxJ9SDZtKUS", "nxthjrx18Y0", "RltyVq1d11i"],
@@ -63,34 +62,26 @@ export default function MainEventCapture({
         "K2nxbE9ubSs-bnV62fxQmoE",
     );
 
-    const { updateField, updateFields, entity } =
-        useDexiePersistence<FlattenedEvent>({
-            entityType: "event",
-            entityId: mainEvent.event,
-            debounceMs: 100,
-        });
-
-    const { ruleResult, triggerAutoExecute } = useProgramRulesWithDexie({
-        form,
-        programRules,
-        programRuleVariables,
-        programStage: "K2nxbE9ubSs",
-        trackedEntityAttributes: trackedEntity.attributes,
-        onAssignments: updateFields,
-        applyAssignmentsToForm: true,
-        persistAssignments: true,
-        program: program.id,
-        autoExecute: true,
-        previousEvents,
-    });
-
-    const updateFieldWithRules = useCallback(
-        (fieldId: string, value: any) => {
-            updateField(fieldId, value);
-            triggerAutoExecute();
-        },
-        [updateField, triggerAutoExecute],
+    const mainStage = program.programStages.find(
+        (s) => s.id === "K2nxbE9ubSs",
     );
+    const mainStageDataElements = new Set(
+        mainStage?.programStageDataElements.map((psde) => psde.dataElement.id) ??
+            [],
+    );
+
+    const { ruleResult, updateFieldWithRules, entity, executeAndApplyRules } =
+        useEventForm({
+            form,
+            event: mainEvent,
+            trackedEntity,
+            programStageId: "K2nxbE9ubSs",
+            programRules,
+            programRuleVariables,
+            programId: program.id,
+            previousEvents,
+            allowedDataElements: mainStageDataElements,
+        });
 
     const [serviceTypes, setServiceTypes] = useState<
         Array<{
@@ -121,7 +112,7 @@ export default function MainEventCapture({
         form.setFieldsValue(entity?.dataValues);
     }, [entity]);
     useEffect(() => {
-        triggerAutoExecute();
+        executeAndApplyRules();
     }, [values]);
     return (
         <Flex vertical gap={10} style={{ width: "100%" }}>
@@ -209,19 +200,7 @@ export default function MainEventCapture({
                     "sortOrder",
                     "asc",
                 ).flatMap((stage) => {
-                    const currentDataElements = new Map(
-                        stage.programStageDataElements.map((psde) => [
-                            psde.dataElement.id,
-                            {
-                                allowFutureDate: psde.allowFutureDate,
-                                renderOptionsAsRadio:
-                                    psde.renderType !== undefined,
-                                compulsory: psde.compulsory,
-                                desktopRenderType:
-                                    psde.renderType?.DESKTOP?.type,
-                            },
-                        ]),
-                    );
+                    const currentDataElements = buildCurrentDataElements(stage);
 
                     if (stage.id === "opwSN351xGC") {
                         return [];
@@ -240,6 +219,7 @@ export default function MainEventCapture({
                                     trackedEntity={trackedEntity}
                                     mainEvent={mainEvent}
                                     previousEvents={previousEvents}
+                                    enrollment={enrollment}
                                 />
                             ),
                         };
@@ -265,156 +245,24 @@ export default function MainEventCapture({
                                                         "mrKZWf2WMIC"
                                                     )
                                                         return [];
-                                                    const currentDataElement =
-                                                        dataElements.get(
-                                                            dataElement.id,
-                                                        );
-                                                    const {
-                                                        compulsory = false,
-                                                        desktopRenderType,
-                                                    } =
-                                                        currentDataElements.get(
-                                                            dataElement.id,
-                                                        ) || {};
-
-                                                    const optionSet =
-                                                        currentDataElement
-                                                            ?.optionSet?.id ??
-                                                        "";
-
-                                                    const hiddenOptions =
-                                                        ruleResult
-                                                            .hiddenOptions[
-                                                            dataElement.id
-                                                        ];
-
-                                                    const shownOptionGroups =
-                                                        ruleResult
-                                                            .shownOptionGroups[
-                                                            dataElement.id
-                                                        ] || new Set<string>();
-
-                                                    let finalOptions =
-                                                        optionSets
-                                                            .get(optionSet)
-                                                            ?.flatMap((o) => {
-                                                                if (
-                                                                    hiddenOptions?.has(
-                                                                        o.id,
-                                                                    )
-                                                                ) {
-                                                                    return [];
-                                                                }
-                                                                return o;
-                                                            });
-
-                                                    if (
-                                                        ruleResult.hiddenFields.has(
-                                                            dataElement.id,
-                                                        )
-                                                    ) {
-                                                        return [];
-                                                    }
-
-                                                    if (
-                                                        shownOptionGroups.size >
-                                                        0
-                                                    ) {
-                                                        const currentOptions =
-                                                            optionGroups.get(
-                                                                shownOptionGroups
-                                                                    .values()
-                                                                    .next()
-                                                                    .value,
-                                                            ) ?? [];
-                                                        finalOptions =
-                                                            currentOptions.map(
-                                                                ({
-                                                                    code,
-                                                                    id,
-                                                                    name,
-                                                                }) => ({
-                                                                    id,
-                                                                    code,
-                                                                    name,
-                                                                    optionSet,
-                                                                }),
-                                                            );
-                                                    }
-
-                                                    const errors =
-                                                        ruleResult.errors.filter(
-                                                            (msg) =>
-                                                                msg.key ===
-                                                                dataElement.id,
-                                                        );
-                                                    const messages =
-                                                        ruleResult.messages.filter(
-                                                            (msg) =>
-                                                                msg.key ===
-                                                                dataElement.id,
-                                                        );
-                                                    const warnings =
-                                                        ruleResult.warnings.filter(
-                                                            (msg) =>
-                                                                msg.key ===
-                                                                dataElement.id,
-                                                        );
-
                                                     return (
-                                                        <DataElementField
-                                                            dataElement={
-                                                                currentDataElement!
-                                                            }
-                                                            hidden={false}
-                                                            desktopRenderType={
-                                                                desktopRenderType!
-                                                            }
-                                                            finalOptions={
-                                                                finalOptions
-                                                            }
-                                                            messages={messages}
-                                                            warnings={warnings}
-                                                            errors={errors}
-                                                            required={
-                                                                compulsory
-                                                            }
-                                                            disabled={
-                                                                dataElement.id in
-                                                                ruleResult.assignments
-                                                            }
+                                                        <DataElementRenderer
                                                             key={dataElement.id}
+                                                            dataElementId={
+                                                                dataElement.id
+                                                            }
+                                                            currentDataElements={
+                                                                currentDataElements
+                                                            }
+                                                            ruleResult={
+                                                                ruleResult
+                                                            }
+                                                            sectionLength={
+                                                                section
+                                                                    .dataElements
+                                                                    .length
+                                                            }
                                                             form={form}
-                                                            xs={calculateColSpan(
-                                                                section
-                                                                    .dataElements
-                                                                    .length,
-                                                                24,
-                                                            )}
-                                                            sm={calculateColSpan(
-                                                                section
-                                                                    .dataElements
-                                                                    .length,
-                                                                24,
-                                                            )}
-                                                            md={calculateColSpan(
-                                                                section
-                                                                    .dataElements
-                                                                    .length,
-                                                                24,
-                                                            )}
-                                                            lg={calculateColSpan(
-                                                                section
-                                                                    .dataElements
-                                                                    .length,
-                                                                12,
-                                                            )}
-                                                            xl={calculateColSpan(
-                                                                section
-                                                                    .dataElements
-                                                                    .length,
-                                                                6,
-                                                            )}
                                                             onAutoSave={
                                                                 updateFieldWithRules
                                                             }

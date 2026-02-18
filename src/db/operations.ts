@@ -238,7 +238,6 @@ export async function queueSyncOperation(
 export async function getNextSyncOperation(): Promise<
     SyncOperation | undefined
 > {
-    // Get pending operations
     const pendingOps = await db.syncQueue
         .where("status")
         .equals("pending")
@@ -254,8 +253,6 @@ export async function getNextSyncOperation(): Promise<
     const retryableFailedOps = failedOps
         .filter((op) => {
             if (op.attempts >= 3) return false;
-
-            // Implement exponential backoff: 5s, 15s, 45s
             const backoffDelay = Math.pow(3, op.attempts) * 5000;
             const lastAttempt = new Date(op.updatedAt);
             const timeSinceLastAttempt = now.getTime() - lastAttempt.getTime();

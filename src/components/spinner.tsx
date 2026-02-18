@@ -12,7 +12,7 @@ export const Spinner: FC<{ height?: string,component?: React.ReactNode }> = ({ h
 						gap={8}
         >
             <Spin indicator={<Loading3QuartersOutlined spin />} />
-						{component && <div>{component}</div>}
+						{component}
         </Flex>
     );
 };

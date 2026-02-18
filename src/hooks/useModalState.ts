@@ -1,14 +1,27 @@
 import { useState, useCallback } from "react";
-import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
+import {
+    FlattenedEnrollment,
+    FlattenedEvent,
+    FlattenedTrackedEntity,
+} from "../schemas";
 
-export function useModalState<T extends FlattenedTrackedEntity | FlattenedEvent>() {
+export function useModalState<
+    T extends FlattenedTrackedEntity | FlattenedEvent,
+>() {
     const [data, setData] = useState<T | null>(null);
+    const [enrollment, setEnrollment] = useState<FlattenedEnrollment | null>(
+        null,
+    );
     const [isOpen, setIsOpen] = useState(false);
 
-    const openModal = useCallback((modalData: T) => {
-        setData(modalData);
-        setIsOpen(true);
-    }, []);
+    const openModal = useCallback(
+        (modalData: T, enrollment: FlattenedEnrollment) => {
+            setData(modalData);
+            setEnrollment(enrollment);
+            setIsOpen(true);
+        },
+        [],
+    );
 
     const closeModal = useCallback(() => {
         setIsOpen(false);
@@ -21,6 +34,7 @@ export function useModalState<T extends FlattenedTrackedEntity | FlattenedEvent>
 
     return {
         data,
+        enrollment,
         isOpen,
         openModal,
         closeModal,

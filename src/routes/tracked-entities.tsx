@@ -16,10 +16,11 @@ import {
     Typography,
 } from "antd";
 import dayjs from "dayjs";
+import { useLiveQuery } from "dexie-react-hooks";
 import React from "react";
 import { DataElementField } from "../components/data-element-field";
-import { resourceQueryOptions } from "../query-options";
-import { ClientSchema, TrackedEntityResponse } from "../schemas";
+import { db } from "../db";
+import { ClientSchema } from "../schemas";
 import { RootRoute } from "./__root";
 
 const { Content } = Layout;
@@ -29,90 +30,26 @@ export const TrackedEntitiesRoute = createRoute({
     path: "/tracked-entities",
     component: TrackedEntities,
     validateSearch: ClientSchema,
-    loader: async ({
-        context: { queryClient, engine, orgUnit, syncManager },
-    }) => {
-        const params = new URLSearchParams({
-            pageSize: "1",
-            page: "1",
-            totalPages: "true",
-            program: "ueBhWkWll5v",
-            orgUnitMode: "ACCESSIBLE",
-            fields: "trackedEntity",
-        });
-        const params2 = new URLSearchParams({
-            pageSize: "1",
-            page: "1",
-            totalPages: "true",
-            program: "ueBhWkWll5v",
-            orgUnitMode: "ACCESSIBLE",
-            fields: "trackedEntity",
-            enrollmentEnrolledAfter: dayjs().format("YYYY-MM-DD"),
-            enrollmentEnrolledBefore: dayjs().format("YYYY-MM-DD"),
-        });
-        const params3 = new URLSearchParams({
-            pageSize: "1",
-            page: "1",
-            totalPages: "true",
-            program: "ueBhWkWll5v",
-            orgUnitMode: "ACCESSIBLE",
-            fields: "event",
-            status: "SCHEDULE",
-            scheduledAfter: dayjs().format("YYYY-MM-DD"),
-        });
-
-        const {
-            pager: { total },
-        } = await queryClient.ensureQueryData(
-            resourceQueryOptions<TrackedEntityResponse>({
-                engine,
-                resource: `tracker/trackedEntities?${params.toString()}`,
-                queryKey: [
-                    "trackedEntities",
-                    orgUnit.id,
-                    Array.from(params.values()).sort().join(","),
-                ],
-                refetchInterval: 1 * 60 * 1000,
-            }),
-        );
-        const {
-            pager: { total: enrollments },
-        } = await queryClient.ensureQueryData(
-            resourceQueryOptions<TrackedEntityResponse>({
-                engine,
-                resource: `tracker/trackedEntities?${params2.toString()}`,
-                queryKey: [
-                    "trackedEntities",
-                    orgUnit.id,
-                    Array.from(params2.values()).sort().join(","),
-                ],
-                refetchInterval: 1 * 60 * 1000,
-            }),
-        );
-        const {
-            pager: { total: appointments },
-        } = await queryClient.ensureQueryData(
-            resourceQueryOptions<TrackedEntityResponse>({
-                engine,
-                resource: `tracker/events?${params3.toString()}`,
-                queryKey: [
-                    "events",
-                    orgUnit.id,
-                    Array.from(params3.values()).sort().join(","),
-                ],
-                refetchInterval: 1 * 60 * 1000,
-            }),
-        );
-        return { total, enrollments, appointments };
-    },
 });
 
 function TrackedEntities() {
     const [form] = Form.useForm();
     const { program, trackedEntityAttributes, optionSets } =
         RootRoute.useLoaderData();
-    const { total, enrollments, appointments } =
-        TrackedEntitiesRoute.useLoaderData();
+
+    const total =
+        useLiveQuery(async () => {
+            return db.trackedEntities.count();
+        }, []) ?? 0;
+    const enrollments =
+        useLiveQuery(async () => {
+            return db.enrollments
+                .filter(({ enrolledAt }) => {
+                    return dayjs(enrolledAt).isSame(dayjs(), "day");
+                })
+                .count();
+        }, []) ?? 0;
+    const appointments = 0;
     const navigate = TrackedEntitiesRoute.useNavigate();
     const { search } = TrackedEntitiesRoute.useSearch();
 

@@ -17,17 +17,16 @@ import type { ColumnsType } from "antd/es/table";
 import React from "react";
 import { DataModal } from "../components/data-modal";
 import NoPatientsCard from "../components/no-patient-card";
+import { TrackerRegistration } from "../components/tracker-registration";
+import { db } from "../db";
 import { useModalState } from "../hooks/useModalState";
-import { resourceQueryOptions } from "../query-options";
-import { FlattenedTrackedEntity, TrackedEntityResponse } from "../schemas";
+import { FlattenedTrackedEntity } from "../schemas";
 import {
+    createEmptyEnrollment,
     createEmptyTrackedEntity,
-    flattenTrackedEntityResponse,
 } from "../utils/utils";
 import { RootRoute } from "./__root";
 import { TrackedEntitiesRoute } from "./tracked-entities";
-import { TrackerRegistration } from "../components/tracker-registration";
-import { db } from "../db";
 
 const { Text } = Typography;
 export const TrackedEntitiesIndexRoute = createRoute({
@@ -36,26 +35,11 @@ export const TrackedEntitiesIndexRoute = createRoute({
     component: TrackedEntitiesSearch,
     loaderDeps: ({ search }) => ({ search }),
     loader: async ({
-        context: { queryClient, engine },
         deps: {
             search: { search },
         },
     }) => {
-        const params = new URLSearchParams({
-            program: "ueBhWkWll5v",
-            orgUnitMode: "ACCESSIBLE",
-            order: "updatedAt:DESC",
-            fields: "trackedEntity,trackedEntityType,orgUnit,createdAt,updatedAt,createdAtClient,updatedAtClient,inactive,deleted,potentialDuplicate,attributes",
-        });
         if (search && Object.values(search).length > 0) {
-            for (const [filterKey, filterValues] of Object.entries(search)) {
-                if (filterValues && filterValues) {
-                    params.append(
-                        `filter`,
-                        `${filterKey}:ilike:${filterValues}`,
-                    );
-                }
-            }
             const localSearch = await db.trackedEntities
                 .filter((te) => {
                     return Object.entries(search).every(
@@ -67,21 +51,7 @@ export const TrackedEntitiesIndexRoute = createRoute({
                     );
                 })
                 .toArray();
-
-            if (localSearch.length > 0) {
-                return localSearch;
-            }
-            const data = await queryClient.fetchQuery(
-                resourceQueryOptions<TrackedEntityResponse>({
-                    engine,
-                    resource: `tracker/trackedEntities?${params.toString()}`,
-                    queryKey: ["trackedEntities", search],
-                }),
-            );
-            const results = flattenTrackedEntityResponse(data);
-            await db.trackedEntities.bulkPut(results);
-            // await db.events.bulkPut(events);
-            return results;
+            return localSearch;
         }
 
         return [];
@@ -89,22 +59,29 @@ export const TrackedEntitiesIndexRoute = createRoute({
 });
 
 function TrackedEntitiesSearch() {
-    const {
-        orgUnit: { id },
-    } = RootRoute.useRouteContext();
     const trackedEntities = TrackedEntitiesIndexRoute.useLoaderData();
-    const { program, trackedEntityAttributes, organisations } =
-        RootRoute.useLoaderData();
+    const {
+        program,
+        trackedEntityAttributes,
+        organisations,
+        orgUnit: { id },
+    } = RootRoute.useLoaderData();
     const navigate = TrackedEntitiesIndexRoute.useNavigate();
-    const { data, isOpen, openModal, closeModal } =
+    const { data, enrollment, isOpen, openModal, closeModal } =
         useModalState<FlattenedTrackedEntity>();
-    const { orgUnits, search } = TrackedEntitiesRoute.useSearch();
+    const { search } = TrackedEntitiesRoute.useSearch();
     const handleCreate = async () => {
-        const newPatient: FlattenedTrackedEntity = createEmptyTrackedEntity({
+        const newPatient = createEmptyTrackedEntity({
             orgUnit: id,
         });
+        const newEnrollment = createEmptyEnrollment({
+            orgUnit: id,
+            trackedEntity: newPatient.trackedEntity,
+        });
+
         await db.trackedEntities.put(newPatient);
-        openModal(newPatient);
+        await db.enrollments.put(newEnrollment);
+        openModal(newPatient, newEnrollment);
     };
 
     const actionMenu: MenuProps = {
@@ -253,7 +230,6 @@ function TrackedEntitiesSearch() {
                         onClick: () => {
                             navigate({
                                 to: `/tracked-entity/$trackedEntity`,
-                                search: { orgUnits },
                                 params: { trackedEntity: record.trackedEntity },
                             });
                         },
@@ -266,9 +242,10 @@ function TrackedEntitiesSearch() {
             <DataModal<FlattenedTrackedEntity>
                 open={isOpen}
                 data={data}
+                enrollment={enrollment}
                 onClose={closeModal}
-                onSave={async (values, addAnother) => {
-                    if (values && data) {
+                onSave={async ({ values, enrollment, addAnother }) => {
+                    if (values && data && enrollment) {
                         await db.trackedEntities.put({
                             ...data,
                             attributes: {
@@ -277,7 +254,24 @@ function TrackedEntitiesSearch() {
                             },
                             syncStatus: "pending",
                         });
-                        if (!addAnother) {
+                        await db.enrollments.put({
+                            ...enrollment,
+                            attributes: { ...enrollment.attributes, ...values },
+                            syncStatus: "pending",
+                        });
+
+                        if (addAnother) {
+                            const newPatient = createEmptyTrackedEntity({
+                                orgUnit: id,
+                            });
+                            const newEnrollment = createEmptyEnrollment({
+                                orgUnit: id,
+                                trackedEntity: newPatient.trackedEntityType,
+                            });
+                            await db.trackedEntities.put(newPatient);
+                            await db.enrollments.put(newEnrollment);
+                            openModal(newPatient, newEnrollment);
+                        } else {
                             navigate({
                                 to: `/tracked-entity/$trackedEntity`,
                                 search: {
@@ -288,14 +282,6 @@ function TrackedEntitiesSearch() {
                                 },
                             });
                         }
-                    }
-                    if (addAnother) {
-                        const newPatient: FlattenedTrackedEntity =
-                            createEmptyTrackedEntity({
-                                orgUnit: id,
-                            });
-                        await db.trackedEntities.put(newPatient);
-                        openModal(newPatient);
                     }
                 }}
                 title="Register New Client"

@@ -2,6 +2,7 @@ import { useDataEngine } from "@dhis2/app-runtime";
 import dayjs from "dayjs";
 import {
     DataElement,
+    OrgUnit,
     Program,
     ProgramRule,
     ProgramRuleVariable,
@@ -37,6 +38,7 @@ export interface MetadataSyncState {
 }
 
 const METADATA_TYPES = [
+    "me",
     "programs",
     "dataElements",
     "attributes",
@@ -69,27 +71,23 @@ export class MetadataSync {
     }
 
     private async initializeFromPersistedState() {
-        try {
-            const persistedProgress = await db.metadataSyncProgress.get(
-                "metadata-sync-progress",
-            );
-            if (persistedProgress) {
-                // Restore state, but reset syncing/checking to idle
-                const status =
-                    persistedProgress.status === "syncing" ||
-                    persistedProgress.status === "checking"
-                        ? "idle"
-                        : persistedProgress.status;
+        const persistedProgress = await db.metadataSyncProgress.get(
+            "metadata-sync-progress",
+        );
+        if (persistedProgress) {
+            // Restore state, but reset syncing/checking to idle
+            const status =
+                persistedProgress.status === "syncing" ||
+                persistedProgress.status === "checking"
+                    ? "idle"
+                    : persistedProgress.status;
 
-                this.currentState = {
-                    status,
-                    progress: persistedProgress.progress,
-                    error: persistedProgress.error,
-                    lastSync: persistedProgress.lastSync,
-                };
-            }
-        } catch (error) {
-            console.error("Failed to restore sync state:", error);
+            this.currentState = {
+                status,
+                progress: persistedProgress.progress,
+                error: persistedProgress.error,
+                lastSync: persistedProgress.lastSync,
+            };
         }
     }
 
@@ -113,30 +111,19 @@ export class MetadataSync {
     }
     private async setState(state: MetadataSyncState) {
         this.currentState = state;
-
-        // Persist state to IndexedDB synchronously
-        try {
-            await db.metadataSyncProgress.put({
-                id: "metadata-sync-progress",
-                status: state.status,
-                progress: state.progress,
-                error: state.error,
-                lastSync: state.lastSync,
-                updatedAt: new Date().toISOString(),
-            });
-        } catch (error) {
-            console.error("Failed to persist sync state:", error);
-        }
+        await db.metadataSyncProgress.put({
+            id: "metadata-sync-progress",
+            status: state.status,
+            progress: state.progress,
+            error: state.error,
+            lastSync: state.lastSync,
+            updatedAt: new Date().toISOString(),
+        });
     }
 
     async getCurrentVersion(): Promise<MetadataVersion | null> {
-        try {
-            const version = await db.metadataVersions.get("metadata-version");
-            return version || null;
-        } catch (error) {
-            console.error("Failed to get metadata version:", error);
-            return null;
-        }
+        const version = await db.metadataVersions.get("metadata-version");
+        return version || null;
     }
     async isMetadataStale(): Promise<boolean> {
         const version = await this.getCurrentVersion();
@@ -198,33 +185,39 @@ export class MetadataSync {
     async checkForUpdates(): Promise<MetadataUpdateInfo> {
         this.setState({ status: "checking" });
 
-        try {
-            const currentVersion = await this.getCurrentVersion();
-            if (!currentVersion) {
-                return {
-                    hasUpdates: true,
-                    changedTypes: [...METADATA_TYPES],
-                };
-            }
-            const isStale = await this.isMetadataStale();
+        const currentVersion = await this.getCurrentVersion();
+        if (!currentVersion) {
             return {
-                hasUpdates: isStale,
-                changedTypes: isStale ? [...METADATA_TYPES] : [],
-                lastSync: currentVersion.lastSync,
+                hasUpdates: true,
+                changedTypes: [...METADATA_TYPES],
             };
-        } catch (error) {
-            console.error("Failed to check for metadata updates:", error);
-            this.setState({ status: "error", error: String(error) });
-            throw error;
-        } finally {
-            if (this.currentState.status === "checking") {
-                this.setState({ status: "idle" });
-            }
         }
+        const isStale = await this.isMetadataStale();
+        return {
+            hasUpdates: isStale,
+            changedTypes: isStale ? [...METADATA_TYPES] : [],
+            lastSync: currentVersion.lastSync,
+        };
     }
     private async fetchMetadata(type: MetadataType): Promise<void> {
         let data: any;
         switch (type) {
+            case "me":
+                data = (await this.engine.query({
+                    me: {
+                        resource: "me",
+                        params: {
+                            fields: "organisationUnits[id,name,level,parent,leaf]",
+                        },
+                    },
+                })) as {
+                    me: {
+                        organisationUnits: OrgUnit[];
+                        id: string;
+                    };
+                };
+                break;
+
             case "programs":
                 data = (await this.engine.query({
                     program: {
@@ -341,7 +334,7 @@ export class MetadataSync {
                 const optionSetsLastSync =
                     await this.getLastSyncTimestamp(type);
                 const optionSetsParams: any = {
-                    fields: "id,options[id,name,code]",
+                    fields: "id,options[id,name,code,sortOrder]",
                     paging: false,
                 };
                 if (optionSetsLastSync) {
@@ -373,14 +366,11 @@ export class MetadataSync {
                 const optionGroupsLastSync =
                     await this.getLastSyncTimestamp(type);
                 const optionGroupsParams: any = {
-                    fields: "id,options[id,name,code]",
+                    fields: "id,options[id,name,code,sortOrder]",
                     paging: false,
                 };
                 if (optionGroupsLastSync) {
                     optionGroupsParams.filter = `lastUpdated:gt:${optionGroupsLastSync}`;
-                    console.log(
-                        `📅 Incremental sync for optionGroups since ${optionGroupsLastSync}`,
-                    );
                 }
                 data = (await this.engine.query({
                     optionGroups: {
@@ -403,6 +393,11 @@ export class MetadataSync {
         }
         await this.queueWrite(async () => {
             switch (type) {
+                case "me":
+                    await db.organisationUnits.bulkPut(
+                        data.me.organisationUnits,
+                    );
+                    break;
                 case "programs":
                     await db.programs.put(data.program);
                     break;
@@ -497,52 +492,45 @@ export class MetadataSync {
     ): Promise<void> {
         this.setState({ status: "syncing" });
 
-        try {
-            const total = types.length;
-            let completed = 0;
+        const total = types.length;
+        let completed = 0;
 
-            for (const type of types) {
-                const progress: MetadataSyncProgress = {
-                    total,
-                    completed,
-                    current: type,
-                    percentage: Math.round((completed / total) * 100),
-                };
-
-                this.setState({ status: "syncing", progress });
-                onProgress?.(progress);
-                await this.fetchMetadata(type);
-                completed++;
-            }
-
-            await this.queueWrite(async () => {
-                const version =
-                    await db.metadataVersions.get("metadata-version");
-                if (version) {
-                    version.lastSync = new Date().toISOString();
-                    await db.metadataVersions.put(version);
-                }
-            });
-
-            const finalProgress: MetadataSyncProgress = {
+        for (const type of types) {
+            const progress: MetadataSyncProgress = {
                 total,
                 completed,
-                current: "Complete",
-                percentage: 100,
+                current: type,
+                percentage: Math.round((completed / total) * 100),
             };
-            this.setState({
-                status: "success",
-                progress: finalProgress,
-                lastSync: dayjs().toISOString(),
-            });
-            onProgress?.(finalProgress);
 
-            console.log("✅ Metadata sync complete");
-        } catch (error) {
-            console.error("❌ Metadata sync failed:", error);
-            this.setState({ status: "error", error: String(error) });
-            throw error;
+            this.setState({ status: "syncing", progress });
+            onProgress?.(progress);
+            await this.fetchMetadata(type);
+            completed++;
         }
+
+        await this.queueWrite(async () => {
+            const version = await db.metadataVersions.get("metadata-version");
+            if (version) {
+                version.lastSync = new Date().toISOString();
+                await db.metadataVersions.put(version);
+            }
+        });
+
+        const finalProgress: MetadataSyncProgress = {
+            total,
+            completed,
+            current: "Complete",
+            percentage: 100,
+        };
+        this.setState({
+            status: "success",
+            progress: finalProgress,
+            lastSync: dayjs().toISOString(),
+        });
+        onProgress?.(finalProgress);
+
+        console.log("✅ Metadata sync complete");
     }
     async syncMetadataParallel(
         types: MetadataType[] = [...METADATA_TYPES],
@@ -550,79 +538,67 @@ export class MetadataSync {
     ): Promise<void> {
         this.setState({ status: "syncing" });
 
-        try {
-            const total = types.length;
-            const completedTypes: string[] = [];
-            const fetchPromises = types.map(async (type) => {
-                try {
-                    await this.fetchMetadata(type);
-                    completedTypes.push(type);
-                    const completed = completedTypes.length;
+        const total = types.length;
+        const completedTypes: string[] = [];
+        const fetchPromises = types.map(async (type) => {
+            await this.fetchMetadata(type);
+            completedTypes.push(type);
+            const completed = completedTypes.length;
 
-                    const progress: MetadataSyncProgress = {
-                        total,
-                        completed,
-                        current: type,
-                        percentage: Math.round((completed / total) * 100),
-                    };
-
-                    this.setState({ status: "syncing", progress });
-                    onProgress?.(progress);
-
-                    console.log(`✅ ${type} synced (${completed}/${total})`);
-
-                    return { type, success: true };
-                } catch (error) {
-                    console.error(`❌ Failed to sync ${type}:`, error);
-                    return { type, success: false, error };
-                }
-            });
-            const results = await Promise.allSettled(fetchPromises);
-            const failures = results
-                .filter(
-                    (r) =>
-                        r.status === "rejected" ||
-                        (r.status === "fulfilled" && !(r.value as any).success),
-                )
-                .map((r) =>
-                    r.status === "rejected" ? r.reason : (r as any).value.error,
-                );
-
-            if (failures.length > 0) {
-                throw new Error(
-                    `Failed to sync ${failures.length} metadata type(s)`,
-                );
-            }
-
-            await this.queueWrite(async () => {
-                const version =
-                    await db.metadataVersions.get("metadata-version");
-                if (version) {
-                    version.lastSync = new Date().toISOString();
-                    await db.metadataVersions.put(version);
-                }
-            });
-
-            const finalProgress: MetadataSyncProgress = {
+            const progress: MetadataSyncProgress = {
                 total,
-                completed: completedTypes.length,
-                current: "Complete",
-                percentage: 100,
+                completed,
+                current: type,
+                percentage: Math.round((completed / total) * 100),
             };
 
-            this.setState({
-                status: "success",
-                progress: finalProgress,
-                lastSync: new Date().toISOString(),
-            });
-            onProgress?.(finalProgress);
+            this.setState({ status: "syncing", progress });
+            onProgress?.(progress);
 
-            console.log("✅ Metadata sync complete (parallel)");
-        } catch (error) {
-            console.error("❌ Metadata sync failed:", error);
-            this.setState({ status: "error", error: String(error) });
-            throw error;
+            console.log(`✅ ${type} synced (${completed}/${total})`);
+
+            return { type, success: true };
+        });
+        const results = await Promise.allSettled(fetchPromises);
+        const failures = results
+            .filter(
+                (r) =>
+                    r.status === "rejected" ||
+                    (r.status === "fulfilled" && !(r.value as any).success),
+            )
+            .map((r) =>
+                r.status === "rejected" ? r.reason : (r as any).value.error,
+            );
+
+        if (failures.length > 0) {
+            throw new Error(
+                `Failed to sync ${failures.length} metadata type(s)`,
+            );
         }
+
+        await this.queueWrite(async () => {
+            const version = await db.metadataVersions.get("metadata-version");
+            if (version) {
+                version.lastSync = new Date().toISOString();
+                await db.metadataVersions.put(version);
+            }
+        });
+
+        const finalProgress: MetadataSyncProgress = {
+            total,
+            completed: completedTypes.length,
+            current: "Complete",
+            percentage: 100,
+        };
+
+        this.setState({
+            status: "success",
+            progress: finalProgress,
+            lastSync: new Date().toISOString(),
+        });
+        onProgress?.(finalProgress);
+
+        console.log("✅ Metadata sync complete (parallel)");
     }
     async fullSync(
         onProgress?: (progress: MetadataSyncProgress) => void,
@@ -638,6 +614,21 @@ export class MetadataSync {
         return this.syncMetadataBatched([...METADATA_TYPES], onProgress);
     }
 
+    /**
+     * Sync all metadata, optionally from the beginning (ignoring lastUpdated cursors).
+     * - fromStart: true  → clears all per-type version timestamps, forces full re-fetch
+     * - fromStart: false → uses lastUpdated incremental sync (same as syncChangedMetadata)
+     */
+    async syncAllMetadata(
+        options: { fromStart?: boolean } = {},
+        onProgress?: (progress: MetadataSyncProgress) => void,
+    ): Promise<void> {
+        if (options.fromStart) {
+            return this.forceFullSync(onProgress);
+        }
+        return this.syncChangedMetadata(onProgress);
+    }
+
     async syncMetadataBatched(
         types: MetadataType[] = [...METADATA_TYPES],
         onProgress?: (progress: MetadataSyncProgress) => void,
@@ -645,66 +636,52 @@ export class MetadataSync {
     ): Promise<void> {
         this.setState({ status: "syncing" });
 
-        try {
-            const total = types.length;
-            let completed = 0;
+        const total = types.length;
+        let completed = 0;
 
-            for (let i = 0; i < types.length; i += batchSize) {
-                const batch = types.slice(i, i + batchSize);
-                const batchPromises = batch.map(async (type) => {
-                    try {
-                        await this.fetchMetadata(type);
-                        completed++;
+        for (let i = 0; i < types.length; i += batchSize) {
+            const batch = types.slice(i, i + batchSize);
+            const batchPromises = batch.map(async (type) => {
+                await this.fetchMetadata(type);
+                completed++;
 
-                        const progress: MetadataSyncProgress = {
-                            total,
-                            completed,
-                            current: type,
-                            percentage: Math.round((completed / total) * 100),
-                        };
+                const progress: MetadataSyncProgress = {
+                    total,
+                    completed,
+                    current: type,
+                    percentage: Math.round((completed / total) * 100),
+                };
 
-                        this.setState({ status: "syncing", progress });
-                        onProgress?.(progress);
+                this.setState({ status: "syncing", progress });
+                onProgress?.(progress);
 
-                        console.log(
-                            `✅ ${type} synced (${completed}/${total})`,
-                        );
-                    } catch (error) {
-                        console.error(`❌ Failed to sync ${type}:`, error);
-                        throw error;
-                    }
-                });
-                await Promise.all(batchPromises);
-            }
-            await this.queueWrite(async () => {
-                const version =
-                    await db.metadataVersions.get("metadata-version");
-                if (version) {
-                    version.lastSync = new Date().toISOString();
-                    await db.metadataVersions.put(version);
-                }
+                console.log(`✅ ${type} synced (${completed}/${total})`);
             });
-
-            const finalProgress: MetadataSyncProgress = {
-                total,
-                completed,
-                current: "Complete",
-                percentage: 100,
-            };
-
-            this.setState({
-                status: "success",
-                progress: finalProgress,
-                lastSync: new Date().toISOString(),
-            });
-            onProgress?.(finalProgress);
-
-            console.log("✅ Metadata sync complete (batched)");
-        } catch (error) {
-            console.error("❌ Metadata sync failed:", error);
-            this.setState({ status: "error", error: String(error) });
-            throw error;
+            await Promise.all(batchPromises);
         }
+        await this.queueWrite(async () => {
+            const version = await db.metadataVersions.get("metadata-version");
+            if (version) {
+                version.lastSync = new Date().toISOString();
+                await db.metadataVersions.put(version);
+            }
+        });
+
+        const finalProgress: MetadataSyncProgress = {
+            total,
+            completed,
+            current: "Complete",
+            percentage: 100,
+        };
+
+        this.setState({
+            status: "success",
+            progress: finalProgress,
+            lastSync: new Date().toISOString(),
+        });
+        onProgress?.(finalProgress);
+
+        console.log("✅ Metadata sync complete (batched)");
     }
     /**
      * Delete all metadata from local database

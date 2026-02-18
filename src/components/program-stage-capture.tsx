@@ -7,7 +7,7 @@ import {
     Button,
     Flex,
     message,
-    Modal,
+    Popconfirm,
     Table,
     TableProps,
     Typography,
@@ -19,6 +19,7 @@ import { db } from "../db";
 import { useModalState } from "../hooks/useModalState";
 import { RootRoute } from "../routes/__root";
 import {
+    FlattenedEnrollment,
     FlattenedEvent,
     FlattenedTrackedEntity,
     ProgramStage,
@@ -35,14 +36,15 @@ export const ProgramStageCapture: React.FC<{
     mainEvent: FlattenedEvent;
     captureMode?: "modal" | "inline";
     previousEvents?: FlattenedEvent[];
+    enrollment: FlattenedEnrollment;
 }> = ({
     programStage,
     trackedEntity,
     mainEvent,
     previousEvents,
     captureMode = "modal",
+    enrollment,
 }) => {
-    const enrollment = trackedEntity.enrollment;
     const { data, isOpen, openModal, closeModal } =
         useModalState<FlattenedEvent>();
     const { dataElements, optionSets } = RootRoute.useLoaderData();
@@ -60,7 +62,7 @@ export const ProgramStageCapture: React.FC<{
             },
         });
         await db.events.put(newEvent);
-        openModal(newEvent);
+        openModal(newEvent, enrollment);
     };
 
     const events =
@@ -108,44 +110,36 @@ export const ProgramStageCapture: React.FC<{
             fixed: "right",
             render: (_, record) => (
                 <Flex gap="small" align="center">
-                    <Button
-                        danger
-                        onClick={() => {
-                            Modal.confirm({
-                                title: "Delete Event",
-                                content:
-                                    "Are you sure you want to delete this event? This action cannot be undone.",
-                                okText: "Delete",
-                                okType: "danger",
-                                onOk: async () => {
-                                    try {
-                                        await db.events.delete(record.event);
-                                        message.success(
-                                            "Event deleted successfully",
-                                        );
-                                    } catch (error) {
-                                        console.error(
-                                            "Failed to delete event:",
-                                            error,
-                                        );
-                                        message.error("Failed to delete event");
-                                    }
-                                },
-                            });
+                    <Popconfirm
+                        title="Delete Event"
+                        description="Are you sure you want to delete this event? This action cannot be undone."
+                        okText="Delete"
+                        okType="danger"
+                        onConfirm={async () => {
+                            try {
+                                await db.events.delete(record.event);
+                                message.success("Event deleted successfully");
+                            } catch (error) {
+                                console.error("Failed to delete event:", error);
+                                message.error("Failed to delete event");
+                            }
                         }}
                     >
-                        Delete
-                    </Button>
+                        <Button danger>Delete</Button>
+                    </Popconfirm>
                     <Button
                         icon={<EyeOutlined />}
                         onClick={() =>
-                            openModal({
-                                ...record,
-                                dataValues: {
-                                    ...record.dataValues,
-                                    occurredAt: record.occurredAt,
+                            openModal(
+                                {
+                                    ...record,
+                                    dataValues: {
+                                        ...record.dataValues,
+                                        occurredAt: record.occurredAt,
+                                    },
                                 },
-                            })
+                                enrollment,
+                            )
                         }
                     >
                         View
@@ -209,11 +203,15 @@ export const ProgramStageCapture: React.FC<{
                 open={isOpen}
                 data={data}
                 onClose={closeModal}
-                onSave={async (values, addAnother) => {
+                enrollment={enrollment}
+                onSave={async ({ values, addAnother }) => {
                     if (values && data) {
-                        const filteredObj: Record<string, any> =
+                        const dataValues: Record<string, any> =
                             Object.fromEntries(
-                                Object.entries(values).filter(
+                                Object.entries({
+                                    ...data.dataValues,
+                                    ...values,
+                                }).filter(
                                     ([key]) =>
                                         programStage.programStageDataElements
                                             .map((de) => de.dataElement.id)
@@ -223,19 +221,16 @@ export const ProgramStageCapture: React.FC<{
                             );
                         await db.events.put({
                             ...data,
-                            dataValues: {
-                                ...data.dataValues,
-                                ...filteredObj,
-                            },
+                            dataValues,
                             syncStatus:
                                 mainEvent.syncStatus === "synced"
                                     ? "pending"
                                     : "draft",
                             parentEvent: mainEvent.event,
                         });
-                    }
-                    if (addAnother) {
-                        handleCreate();
+                        if (addAnother) {
+                            handleCreate();
+                        }
                     }
                 }}
                 title={programStage.name}

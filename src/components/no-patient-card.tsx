@@ -4,7 +4,10 @@ import React from "react";
 import { db } from "../db";
 import { useModalState } from "../hooks/useModalState";
 import { FlattenedTrackedEntity } from "../schemas";
-import { createEmptyTrackedEntity } from "../utils/utils";
+import {
+    createEmptyEnrollment,
+    createEmptyTrackedEntity,
+} from "../utils/utils";
 import { DataModal } from "./data-modal";
 import { TrackerRegistration } from "./tracker-registration";
 import { RootRoute } from "../routes/__root";
@@ -14,17 +17,22 @@ const { Title, Text } = Typography;
 const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
     const {
         orgUnit: { id },
-    } = RootRoute.useRouteContext();
+    } = RootRoute.useLoaderData();
     const navigate = TrackedEntitiesRoute.useNavigate();
-    const { data, isOpen, openModal, closeModal } =
+    const { enrollment, data, isOpen, openModal, closeModal } =
         useModalState<FlattenedTrackedEntity>();
 
     const handleCreate = async () => {
         const newPatient: FlattenedTrackedEntity = createEmptyTrackedEntity({
             orgUnit: id,
         });
+        const newEnrollment = createEmptyEnrollment({
+            orgUnit: id,
+            trackedEntity: newPatient.trackedEntity,
+        });
         await db.trackedEntities.put(newPatient);
-        openModal(newPatient);
+        await db.enrollments.put(newEnrollment);
+        openModal(newPatient, newEnrollment);
     };
 
     return (
@@ -79,8 +87,9 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
                 open={isOpen}
                 data={data}
                 onClose={closeModal}
-                onSave={async (values, addAnother) => {
-                    if (values && data) {
+                enrollment={enrollment}
+                onSave={async ({ values, enrollment, addAnother }) => {
+                    if (values && data && enrollment) {
                         await db.trackedEntities.put({
                             ...data,
                             attributes: {
@@ -89,8 +98,24 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
                             },
                             syncStatus: "pending",
                         });
+                        await db.enrollments.put({
+                            ...enrollment,
+                            attributes: { ...enrollment.attributes, ...values },
+                            syncStatus: "pending",
+                        });
+                        if (addAnother) {
+                            const newPatient = createEmptyTrackedEntity({
+                                orgUnit: id,
+                            });
+                            const newEnrollment = createEmptyEnrollment({
+                                orgUnit: id,
+                                trackedEntity: newPatient.trackedEntityType,
+                            });
 
-                        if (!addAnother) {
+                            await db.trackedEntities.put(newPatient);
+                            await db.enrollments.put(newEnrollment);
+                            openModal(newPatient, newEnrollment);
+                        } else {
                             navigate({
                                 to: `/tracked-entity/$trackedEntity`,
                                 search: {
@@ -101,14 +126,6 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
                                 },
                             });
                         }
-                    }
-                    if (addAnother) {
-                        const newPatient: FlattenedTrackedEntity =
-                            createEmptyTrackedEntity({
-                                orgUnit: id,
-                            });
-                        await db.trackedEntities.put(newPatient);
-                        openModal(newPatient);
                     }
                 }}
                 title="Register New Client"

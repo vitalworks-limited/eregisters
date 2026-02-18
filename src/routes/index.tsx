@@ -9,8 +9,7 @@ export const IndexRoute = createRoute({
             to: "/tracked-entities",
             search: (prev) => ({
                 ...prev,
-								search: undefined,
-								orgUnits: prev.orgUnits || "",
+                search: undefined,
             }),
         });
     },

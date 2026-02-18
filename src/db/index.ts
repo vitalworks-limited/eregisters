@@ -14,14 +14,11 @@ import {
 
 export type SyncStatus = "draft" | "pending" | "syncing" | "synced" | "failed";
 export interface SyncOperation {
-    id: string; // Composite ID format: {entityId}_{type} for automatic deduplication
+    id: string;
     type:
-        | "CREATE_TRACKED_ENTITY"
-        | "UPDATE_TRACKED_ENTITY"
-        | "UPDATE_ENROLLMENT"
-        | "CREATE_RELATIONSHIP"
-        | "CREATE_EVENT"
-        | "UPDATE_EVENT";
+        | "CREATE_ENROLLMENT"
+        | "CREATE_OR_UPDATE_TRACKED_ENTITY"
+        | "CREATE_UPDATE_EVENT";
     entityId: string;
     data: FlattenedEnrollment | FlattenedTrackedEntity | FlattenedEvent;
     status: "pending" | "syncing" | "failed" | "completed";
@@ -97,12 +94,15 @@ export interface SyncState {
     status: "idle" | "syncing" | "online" | "offline";
     isOnline: boolean;
     isSyncing: boolean;
-    lastSyncAt?: string; // ISO 8601 timestamp
+    lastSyncAt?: string; // ISO 8601 — last successful push sync
+    lastPullAt?: string; // ISO 8601 — last successful data pull from DHIS2
     lastSyncDuration?: number; // Duration in milliseconds
     lastSyncCount?: number; // Number of items synced
     lastError?: string;
     pendingCount: number;
     updatedAt: string; // ISO 8601 timestamp
+    // Per-orgUnit pull cursors: orgUnitId → lastPullAt ISO string
+    pullVersions?: Record<string, string>;
 }
 
 /**
@@ -110,16 +110,29 @@ export interface SyncState {
  */
 export class RegisterDatabase extends Dexie {
     trackedEntities!: Table<FlattenedTrackedEntity, string>;
+    enrollments!: Table<FlattenedEnrollment, string>;
     events!: Table<FlattenedEvent, string>;
     syncQueue!: Table<SyncOperation, string>;
     programRules!: Table<ProgramRule, string>;
     programRuleVariables!: Table<ProgramRuleVariable, string>;
     optionGroups!: Table<
-        { id: string; name: string; code: string; optionGroup: string },
+        {
+            id: string;
+            name: string;
+            code: string;
+            optionGroup: string;
+            sortOrder: number;
+        },
         string
     >;
     optionSets!: Table<
-        { id: string; name: string; code: string; optionSet: string },
+        {
+            id: string;
+            name: string;
+            code: string;
+            optionSet: string;
+            sortOrder: number;
+        },
         string
     >;
     dataElements!: Table<DataElement, string>;
@@ -134,14 +147,16 @@ export class RegisterDatabase extends Dexie {
         super("MOHRegisterDB");
         this.version(1).stores({
             trackedEntities:
-                "trackedEntity,orgUnit,enrollment.enrolledAt,updatedAt,syncStatus,version,lastSynced,parentEntity,[trackedEntity+parentEntity]",
-            events: "event,trackedEntity,programStage,enrollment,occurredAt,updatedAt,syncStatus,version,lastSynced,parentEvent,[event+parentEvent]",
+                "trackedEntity,orgUnit,createdAt,updatedAt,syncStatus,version,lastSynced,parentEntity,[trackedEntity+parentEntity]",
+            events: "event,trackedEntity,programStage,enrollment,occurredAt,updatedAt,createdAt,syncStatus,version,lastSynced,parentEvent,[event+parentEvent]",
+            enrollments:
+                "enrollment,trackedEntity,enrolledAt,version,syncStatus,lastSynced,createdAt,updatedAt",
             syncQueue: "id,status,priority,type,entityId,createdAt",
             programRules: "id,program",
             programRuleVariables: "id,program",
             dataElements: "id,name",
             trackedEntityAttributes: "id,name",
-            organisationUnits: "[id+user],id,title,user",
+            organisationUnits: "id,title,user",
             optionSets: "[id+optionSet],id,optionSet,name,code",
             optionGroups: "[id+optionGroup],id,optionGroup,name,code",
             programs: "id,name,programType",

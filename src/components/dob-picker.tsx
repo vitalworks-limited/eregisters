@@ -10,9 +10,7 @@ function dobFromAge(years = 0, months = 0, days = 0) {
         .subtract(days, "day");
 }
 
-function ageFromDob(dob: dayjs.Dayjs) {
-    const now = dayjs();
-
+function ageFromDob(now: dayjs.Dayjs, dob: dayjs.Dayjs) {
     const years = now.diff(dob, "year");
     const months = now.subtract(years, "year").diff(dob, "month");
     const days = now
@@ -40,18 +38,20 @@ export default function DobPicker({
     const [months, setMonths] = useState<number | null>(null);
     const [days, setDays] = useState<number | null>(null);
     const fieldValue = form.getFieldValue(dataElement.id);
-    const dateValue = fieldValue && typeof fieldValue === 'string'
-        ? dayjs(fieldValue)
-        : fieldValue;
+    const enrolledAt = form.getFieldValue("enrolledAt");
+    const dateValue =
+        fieldValue && typeof fieldValue === "string"
+            ? dayjs(fieldValue)
+            : fieldValue;
 
     useEffect(() => {
-        if (dateValue && dayjs.isDayjs(dateValue)) {
-            const age = ageFromDob(dateValue);
+        if (dateValue && dayjs.isDayjs(dateValue) && enrolledAt) {
+            const age = ageFromDob(dayjs(enrolledAt), dateValue);
             setYears(age.years);
             setMonths(age.months);
             setDays(age.days);
         }
-    }, [dateValue?.format('YYYY-MM-DD')]);
+    }, [dateValue?.format("YYYY-MM-DD"), enrolledAt]);
     const handleAgeChange = (
         newYears: number | null,
         newMonths: number | null,
@@ -65,18 +65,18 @@ export default function DobPicker({
             newMonths ?? 0,
             newDays ?? 0,
         );
-        const dobString = calculatedDob.format('YYYY-MM-DD');
+        const dobString = calculatedDob.format("YYYY-MM-DD");
         form.setFieldValue(dataElement.id, dobString);
         onAutoSave?.(dataElement.id, dobString);
     };
 
     const handleDateChange = (date: dayjs.Dayjs | null) => {
-        if (date) {
-            const age = ageFromDob(date);
+        if (date && enrolledAt) {
+            const age = ageFromDob(dayjs(enrolledAt), date);
             setYears(age.years);
             setMonths(age.months);
             setDays(age.days);
-            const dobString = date.format('YYYY-MM-DD');
+            const dobString = date.format("YYYY-MM-DD");
             form.setFieldValue(dataElement.id, dobString);
             onAutoSave?.(dataElement.id, dobString);
         } else {
@@ -97,7 +97,7 @@ export default function DobPicker({
                 disabled={disabled}
                 disabledDate={(d) => d && d.isAfter(dayjs())}
             />
-            <Flex gap={8} style={{ width: "100%" }} >
+            <Flex gap={8} style={{ width: "100%" }}>
                 <Flex gap={5} style={{ flex: 1 }} align="center">
                     <Text style={{ fontSize: 12 }}>Years</Text>
                     <InputNumber

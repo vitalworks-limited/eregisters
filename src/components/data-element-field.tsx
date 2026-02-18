@@ -8,6 +8,7 @@ import {
     InputNumber,
     Radio,
     Select,
+    DatePickerProps,
 } from "antd";
 import React from "react";
 import {
@@ -41,6 +42,7 @@ export const DataElementField = React.memo<{
     onAutoSave: (dataElementId: string, value: any) => void;
     desktopRenderType?: RenderType["type"];
     disabled?: boolean;
+    disabledDate?: DatePickerProps["disabledDate"];
 }>(
     ({
         dataElement,
@@ -58,6 +60,7 @@ export const DataElementField = React.memo<{
         customLabel,
         desktopRenderType,
         onAutoSave,
+				disabledDate,
         disabled = false,
     }) => {
         if (hidden) return null;
@@ -136,7 +139,6 @@ export const DataElementField = React.memo<{
                 desktopRenderType,
             )
         ) {
-            // Use Form.useWatch to track current value for unselect functionality
             const currentValue = Form.useWatch(dataElement.id, form);
 
             element = (
@@ -233,6 +235,7 @@ export const DataElementField = React.memo<{
                                 : undefined,
                         );
                     }}
+                    disabledDate={disabledDate}
                 />
             );
         } else if (isDate(dataElement.valueType)) {
@@ -248,6 +251,7 @@ export const DataElementField = React.memo<{
                             date ? date.format("YYYY-MM-DD") : undefined,
                         );
                     }}
+                    disabledDate={disabledDate}
                 />
             );
         } else if (dataElement.valueType === "LONG_TEXT") {
@@ -323,7 +327,7 @@ export const DataElementField = React.memo<{
                     }}
                     min={0}
                     max={1}
-										step={0.01}
+                    step={0.01}
                     onBlur={(e) => {
                         onAutoSave(
                             dataElement.id,
@@ -355,7 +359,7 @@ export const DataElementField = React.memo<{
                     disabled={disabled}
                     min={0}
                     precision={1}
-										max={100}
+                    max={100}
                     style={{
                         width: "100%",
                     }}

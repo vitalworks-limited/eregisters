@@ -4,19 +4,26 @@ import { createMetadataSync, type MetadataSync } from "./metadata-sync";
 import {
     deleteSyncOperation,
     failSyncOperation,
-    getNextSyncOperation,
     getSyncQueueStats,
     queueSyncOperation,
     updateSyncOperation,
 } from "./operations";
-import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
+import {
+    FlattenedEnrollment,
+    FlattenedEvent,
+    FlattenedTrackedEntity,
+    TrackedEntity,
+} from "../schemas";
+import {
+    flattenEnrollment,
+    flattenEvent,
+    flattenTrackedEntity,
+} from "../utils/utils";
 
-/**
- * Sync Manager for MOH Registers Application
- *
- * Handles synchronization between local IndexedDB and remote DHIS2 API.
- * Provides offline-first capabilities with automatic background sync.
- */
+export interface PullOptions {
+    fromStart?: boolean;
+    orgUnit?: string;
+}
 
 export type SyncStatus = "idle" | "syncing" | "online" | "offline";
 
@@ -50,6 +57,7 @@ export class SyncManager {
     private pullTimer?: NodeJS.Timeout;
     private cleanupInterval?: NodeJS.Timeout;
     private metadataCheckInterval?: NodeJS.Timeout;
+    private scheduledSyncTimer?: NodeJS.Timeout;
     private metadataSync: MetadataSync;
 
     constructor(engine: ReturnType<typeof useDataEngine>) {
@@ -63,7 +71,7 @@ export class SyncManager {
     /**
      * Initialize sync state in database if not exists
      */
-    private async initializeSyncState(): Promise<void> {
+    private async initializeSyncState() {
         const existingState = await db.syncState.get("current");
         if (!existingState) {
             await db.syncState.put({
@@ -82,7 +90,7 @@ export class SyncManager {
      */
     private async updateSyncState(
         updates: Partial<Omit<SyncState, "id" | "updatedAt">>,
-    ): Promise<void> {
+    ) {
         const currentState = await db.syncState.get("current");
         if (!currentState) {
             await this.initializeSyncState();
@@ -108,14 +116,12 @@ export class SyncManager {
 
                 db.trackedEntities.get(primKey).then((created) => {
                     if (created && created.syncStatus === "pending") {
-                        this.queueCreateTrackedEntity(created, 8).catch(
-                            (error) => {
-                                console.error(
-                                    "❌ Failed to queue tracked entity sync:",
-                                    error,
-                                );
-                            },
-                        );
+                        this.queueTrackedEntity(created, 8).catch((error) => {
+                            console.error(
+                                "❌ Failed to queue tracked entity sync:",
+                                error,
+                            );
+                        });
                     } else if (created && created.syncStatus === "draft") {
                         console.log(
                             "⏸️  Tracked entity is draft, skipping sync queue:",
@@ -148,7 +154,7 @@ export class SyncManager {
                     db.trackedEntities.get(primKey).then((updated) => {
                         if (!updated) return;
                         if (updated.syncStatus === "pending") {
-                            this.queueUpdateTrackedEntity(updated, 8).catch(
+                            this.queueTrackedEntity(updated, 8).catch(
                                 (error) => {
                                     console.error(
                                         "❌ Failed to queue tracked entity update:",
@@ -164,9 +170,64 @@ export class SyncManager {
 
         db.trackedEntities.hook("deleting", (primKey, obj, transaction) => {});
 
-        // ============================================================
-        // EVENTS HOOKS
-        // ============================================================
+        db.enrollments.hook("creating", (primKey, obj, transaction) => {
+            const entity = obj;
+            if (!entity.syncStatus) {
+                entity.syncStatus = "pending";
+                entity.version = 1;
+                entity.updatedAt = new Date().toISOString();
+            }
+
+            transaction.on("complete", () => {
+                if (this.isSyncUpdating) return;
+                db.enrollments.get(primKey).then((created) => {
+                    if (created && created.syncStatus === "pending") {
+                        this.queueEnrollment(created, 8).catch((error) => {
+                            console.error(
+                                "❌ Failed to queue tracked entity sync:",
+                                error,
+                            );
+                        });
+                    }
+                });
+            });
+        });
+
+        db.enrollments.hook(
+            "updating",
+            (modifications, primKey, obj, transaction) => {
+                const enrollment = obj;
+                const mods: Partial<FlattenedEnrollment> = modifications;
+                if (
+                    !("syncStatus" in mods) &&
+                    enrollment.syncStatus !== "draft" &&
+                    enrollment.syncStatus !== "synced"
+                ) {
+                    mods.syncStatus = "pending";
+                }
+                if (!("version" in mods) && !("lastSynced" in mods)) {
+                    mods.version = (enrollment.version || 0) + 1;
+                    mods.updatedAt = new Date().toISOString();
+                }
+
+                transaction.on("complete", () => {
+                    if (this.isSyncUpdating) return;
+
+                    db.enrollments.get(primKey).then((updated) => {
+                        if (!updated) return;
+                        if (updated.syncStatus === "pending") {
+                            this.queueEnrollment(updated, 8).catch((error) => {
+                                console.error(
+                                    "❌ Failed to queue tracked entity update:",
+                                    error,
+                                );
+                            });
+                        }
+                    });
+                });
+            },
+        );
+
         db.events.hook("creating", (primKey, obj, transaction) => {
             const event = obj;
             if (!event.syncStatus) {
@@ -176,21 +237,14 @@ export class SyncManager {
             }
             transaction.on("complete", () => {
                 if (this.isSyncUpdating) return;
-
                 db.events.get(primKey).then((created) => {
-                    console.log("🎣 Hook: Creating event", created);
                     if (created && created.syncStatus === "pending") {
-                        this.queueCreateEvent(created, 7).catch((error) => {
+                        this.queueEvent(created, 7).catch((error) => {
                             console.error(
                                 "❌ Failed to queue event sync:",
                                 error,
                             );
                         });
-                    } else if (created && created.syncStatus === "draft") {
-                        console.log(
-                            "⏸️  Event is draft, skipping sync queue:",
-                            primKey,
-                        );
                     }
                 });
             });
@@ -215,12 +269,11 @@ export class SyncManager {
                 }
                 transaction.on("complete", () => {
                     if (this.isSyncUpdating) return;
-
                     db.events.get(primKey).then((updated) => {
                         if (!updated) return;
                         if (updated.syncStatus === "synced") return;
                         if (updated.syncStatus === "pending") {
-                            this.queueCreateEvent(updated, 7).catch((error) => {
+                            this.queueEvent(updated, 7).catch((error) => {
                                 console.error(
                                     "❌ Failed to queue event update:",
                                     error,
@@ -242,7 +295,6 @@ export class SyncManager {
      */
     private setupOnlineListener(): void {
         window.addEventListener("online", () => {
-            console.log("📡 Network connection restored");
             this.isOnline = true;
             this.updateSyncState({
                 status: "online",
@@ -252,7 +304,6 @@ export class SyncManager {
         });
 
         window.addEventListener("offline", () => {
-            console.log("📡 Network connection lost");
             this.isOnline = false;
             this.updateSyncState({
                 status: "offline",
@@ -285,14 +336,6 @@ export class SyncManager {
             error: state.lastError,
         };
     }
-
-    /**
-     * Start automatic background sync
-     * ✅ OPTIMIZED: Default interval increased to 5 minutes (was 30 seconds)
-     * Syncs every 5 minutes when online to reduce unnecessary sync checks
-     * ✅ OPTIMIZED: Auto-cleanup of old drafts runs daily
-     * ✅ NEW: Metadata staleness checks every 30 minutes
-     */
     public startAutoSync(intervalMs: number = 300000): void {
         if (this.syncInterval) {
             return;
@@ -311,6 +354,7 @@ export class SyncManager {
             });
         }
         this.startMetadataChecks();
+        this.startPeriodicPull();
     }
 
     /**
@@ -357,13 +401,14 @@ export class SyncManager {
     }
 
     /**
-     * Check if metadata is stale and notify user
-     * Does not automatically sync - user must trigger manual sync via UI
+     * Check if metadata is stale and automatically sync changed types
      */
-    private async checkMetadataFreshness(): Promise<void> {
+    private async checkMetadataFreshness() {
         try {
             const isStale = await this.metadataSync.isMetadataStale();
             if (isStale) {
+                console.log("📋 Metadata is stale — syncing changed types...");
+                await this.metadataSync.syncChangedMetadata();
             } else {
                 console.log("📋 Metadata is fresh");
             }
@@ -384,11 +429,19 @@ export class SyncManager {
      * Manually trigger a sync operation
      * ✅ OPTIMIZED: Batch operations for better network performance
      */
-    public async startSync(): Promise<void> {
+    private scheduleSync() {
+        if (this.scheduledSyncTimer) clearTimeout(this.scheduledSyncTimer);
+        this.scheduledSyncTimer = setTimeout(() => {
+            if (this.isOnline && !this.isSyncing) {
+                this.startSync();
+            }
+        }, 50);
+    }
+
+    public async startSync() {
         if (!this.isOnline) {
             return;
         }
-
         if (this.isSyncing) {
             return;
         }
@@ -402,7 +455,6 @@ export class SyncManager {
         });
 
         try {
-            console.log("🔄 Starting sync...");
             let syncedCount = 0;
             while (this.isOnline) {
                 const batch = await this.getNextBatch(10);
@@ -447,50 +499,45 @@ export class SyncManager {
             this.isSyncing = false;
         }
     }
-
-    /**
-     * Get next batch of sync operations
-     * ✅ OPTIMIZED: Fetch multiple operations at once
-     */
     private async getNextBatch(size: number): Promise<SyncOperation[]> {
-        const operations: SyncOperation[] = [];
+        const pendingOps = await db.syncQueue
+            .where("status")
+            .equals("pending")
+            .limit(size)
+            .toArray();
 
-        for (let i = 0; i < size; i++) {
-            const op = await getNextSyncOperation();
-            if (!op) break;
+        const now = new Date();
+        const failedOps = await db.syncQueue
+            .where("status")
+            .equals("failed")
+            .toArray();
+        const retryableFailedOps = failedOps.filter((op) => {
+            if (op.attempts >= 3) return false;
+            const backoffDelay = Math.pow(3, op.attempts) * 5000;
+            const timeSinceLastAttempt =
+                now.getTime() - new Date(op.updatedAt).getTime();
+            return timeSinceLastAttempt >= backoffDelay;
+        });
 
-            if (op.status === "failed") {
-                console.log(
-                    `🔄 Retrying failed operation (attempt ${op.attempts + 1}/3): ${op.type} - ${op.entityId}`,
-                );
-            }
+        const ops = [...pendingOps, ...retryableFailedOps].slice(0, size);
+
+        for (const op of ops) {
             await updateSyncOperation(op.id, {
                 status: "syncing",
                 attempts: op.attempts + 1,
             });
-
-            operations.push(op);
         }
 
-        return operations;
+        return ops;
     }
 
-    /**
-     * Build one unified DHIS2 tracker payload from all queued operations
-     * and send it in a single POST /tracker call.
-     * Returns the number of records marked as synced.
-     */
     private async syncAll(ops: SyncOperation[]): Promise<number> {
         const allTrackedEntities: any[] = [];
         const allEnrollments: any[] = [];
         const allEvents: any[] = [];
         const syncedTeIds: string[] = [];
         const syncedEventIds: string[] = [];
-
-        // Track TE IDs in this batch so we don't double-add their events
-        const teIdsInBatch = new Set<string>();
-
-        // Helper: build DHIS2 attribute array from flat attributes map
+        const syncedEnrollmentIds: string[] = [];
         const buildAttributes = (
             attributes: Record<string, any>,
             parentEntity?: string,
@@ -508,8 +555,6 @@ export class SyncManager {
                 },
             );
         };
-
-        // Helper: build DHIS2 event object from a FlattenedEvent
         const buildEvent = (event: FlattenedEvent) => {
             const { dataValues, ...eventRest } = event;
             const { occurredAt, ...otherDataElements } = dataValues;
@@ -541,97 +586,42 @@ export class SyncManager {
             };
         };
 
-        // --- CREATE_TRACKED_ENTITY: send TE + enrollment + linked events ---
         for (const op of ops) {
-            if (op.type !== "CREATE_TRACKED_ENTITY") continue;
-
-            const data = op.data as FlattenedTrackedEntity;
-            const entity = await db.trackedEntities.get(data.trackedEntity);
-            if (!entity || entity.syncStatus === "synced") continue;
-
-            const { attributes, enrollment, relationships, ...rest } =
-                data as any;
-
-            allTrackedEntities.push({
-                ...rest,
-                attributes: buildAttributes(attributes, entity.parentEntity),
-            });
-            allEnrollments.push({
-                ...enrollment,
-                enrolledAt: attributes.enrolledAt,
-            });
-            syncedTeIds.push(entity.trackedEntity);
-            teIdsInBatch.add(entity.trackedEntity);
-
-            // Pull in ALL pending events for this TE from the DB
-            const pendingEvents = await db.events
-                .where("trackedEntity")
-                .equals(entity.trackedEntity)
-                .filter((e) => e.syncStatus === "pending")
-                .toArray();
-
-            for (const event of pendingEvents) {
-                if (syncedEventIds.includes(event.event)) continue;
+            if (op.type === "CREATE_OR_UPDATE_TRACKED_ENTITY") {
+                const data = op.data as FlattenedTrackedEntity;
+                const entity = await db.trackedEntities.get(data.trackedEntity);
+                if (!entity || entity.syncStatus === "synced") continue;
+                const { attributes, ...rest } = data;
+                allTrackedEntities.push({
+                    ...rest,
+                    attributes: buildAttributes(
+                        attributes,
+                        entity.parentEntity,
+                    ),
+                });
+                syncedTeIds.push(data.trackedEntity);
+            }
+            if (op.type === "CREATE_UPDATE_EVENT") {
+                const data = op.data as FlattenedEvent;
+                const event = await db.events.get(data.event);
+                if (!event || event.syncStatus === "synced") continue;
                 allEvents.push(buildEvent(event));
-                syncedEventIds.push(event.event);
+                syncedEventIds.push(data.event);
+            }
+            if (op.type === "CREATE_ENROLLMENT") {
+                const data = op.data as FlattenedEnrollment;
+                const enrollment = await db.enrollments.get(data.enrollment);
+                if (!enrollment || enrollment.syncStatus === "synced") continue;
+                const { attributes, ...rest } = data;
+                allEnrollments.push({
+                    ...rest,
+                    attributes: buildAttributes(attributes),
+                });
+                syncedEnrollmentIds.push(data.enrollment);
             }
         }
 
-        // --- UPDATE_TRACKED_ENTITY: send only TE attributes, no enrollment ---
-        for (const op of ops) {
-            if (op.type !== "UPDATE_TRACKED_ENTITY") continue;
-
-            const data = op.data as FlattenedTrackedEntity;
-            const entity = await db.trackedEntities.get(data.trackedEntity);
-            if (!entity || entity.syncStatus === "synced") continue;
-            if (teIdsInBatch.has(entity.trackedEntity)) continue; // already handled by CREATE
-
-            const { attributes, enrollment, relationships, ...rest } =
-                data as any;
-
-            allTrackedEntities.push({
-                ...rest,
-                attributes: buildAttributes(attributes, entity.parentEntity),
-            });
-            syncedTeIds.push(entity.trackedEntity);
-            teIdsInBatch.add(entity.trackedEntity);
-
-            const pendingEvents = await db.events
-                .where("trackedEntity")
-                .equals(entity.trackedEntity)
-                .filter((e) => e.syncStatus === "pending")
-                .toArray();
-            for (const event of pendingEvents) {
-                if (syncedEventIds.includes(event.event)) continue;
-                allEvents.push(buildEvent(event));
-                syncedEventIds.push(event.event);
-            }
-        }
-        for (const op of ops) {
-            if (op.type !== "UPDATE_ENROLLMENT") continue;
-
-            const data = op.data as FlattenedTrackedEntity;
-            const { attributes, enrollment } = data as any;
-
-            allEnrollments.push({
-                ...enrollment,
-                enrolledAt: attributes.enrolledAt,
-            });
-        }
-
-        for (const op of ops) {
-            if (op.type !== "CREATE_EVENT" && op.type !== "UPDATE_EVENT")
-                continue;
-            if (syncedEventIds.includes(op.entityId)) continue;
-
-            const event = await db.events.get(op.entityId);
-            if (!event || event.syncStatus === "synced") continue;
-
-            if (teIdsInBatch.has(event.trackedEntity)) continue;
-
-            allEvents.push(buildEvent(event));
-            syncedEventIds.push(event.event);
-        }
+        console.log(allEnrollments, allEvents, allEnrollments);
 
         if (
             allTrackedEntities.length === 0 &&
@@ -656,24 +646,26 @@ export class SyncManager {
             data: payload,
             params: { async: false, importStrategy: "CREATE_AND_UPDATE" },
         });
-
         const now = new Date().toISOString();
         this.isSyncUpdating = true;
 
         for (const teId of syncedTeIds) {
+            await deleteSyncOperation(teId).catch(() => {});
             await db.trackedEntities.update(teId, {
                 syncStatus: "synced",
                 lastSynced: now,
             });
         }
         for (const eventId of syncedEventIds) {
-            await deleteSyncOperation(`${eventId}_CREATE_EVENT`).catch(
-                () => {},
-            );
-            await deleteSyncOperation(`${eventId}_UPDATE_EVENT`).catch(
-                () => {},
-            );
+            await deleteSyncOperation(eventId).catch(() => {});
             await db.events.update(eventId, {
+                syncStatus: "synced",
+                lastSynced: now,
+            });
+        }
+        for (const enrollmentId of syncedEnrollmentIds) {
+            await deleteSyncOperation(enrollmentId).catch(() => {});
+            await db.enrollments.update(enrollmentId, {
                 syncStatus: "synced",
                 lastSynced: now,
             });
@@ -681,9 +673,7 @@ export class SyncManager {
         for (const op of ops) {
             await deleteSyncOperation(op.id);
         }
-
         this.isSyncUpdating = false;
-
         return syncedTeIds.length + syncedEventIds.length;
     }
 
@@ -691,13 +681,9 @@ export class SyncManager {
      * Queue a create tracked entity operation
      * Uses composite ID for automatic deduplication at database level
      */
-    public async queueCreateTrackedEntity(
-        data: any,
-        priority: number = 5,
-    ): Promise<void> {
-
+    public async queueTrackedEntity(data: any, priority: number = 5) {
         await queueSyncOperation({
-            type: "CREATE_TRACKED_ENTITY",
+            type: "CREATE_OR_UPDATE_TRACKED_ENTITY",
             entityId: data.trackedEntity,
             data,
             priority,
@@ -708,44 +694,12 @@ export class SyncManager {
             pendingCount: stats.pending + stats.failed,
         });
 
-        if (this.isOnline && !this.isSyncing) {
-            this.startSync();
-        }
+        this.scheduleSync();
     }
 
-    /**
-     * Queue an update-only tracked entity operation (no enrollment)
-     */
-    public async queueUpdateTrackedEntity(
-        data: any,
-        priority: number = 5,
-    ): Promise<void> {
+    public async queueEnrollment(data: any, priority: number = 5) {
         await queueSyncOperation({
-            type: "UPDATE_TRACKED_ENTITY",
-            entityId: data.trackedEntity,
-            data,
-            priority,
-        });
-
-        const stats = await getSyncQueueStats();
-        await this.updateSyncState({
-            pendingCount: stats.pending + stats.failed,
-        });
-
-        if (this.isOnline && !this.isSyncing) {
-            this.startSync();
-        }
-    }
-
-    /**
-     * Queue an enrollment-only update (no TE attributes)
-     */
-    public async queueUpdateEnrollment(
-        data: any,
-        priority: number = 5,
-    ): Promise<void> {
-        await queueSyncOperation({
-            type: "UPDATE_ENROLLMENT",
+            type: "CREATE_ENROLLMENT",
             entityId: data.enrollment.enrollment,
             data,
             priority,
@@ -756,29 +710,17 @@ export class SyncManager {
             pendingCount: stats.pending + stats.failed,
         });
 
-        if (this.isOnline && !this.isSyncing) {
-            this.startSync();
-        }
+        this.scheduleSync();
     }
 
-    /**
-     * Queue a create/update event operation
-     * ✅ OPTIMIZED: Check for duplicates before queueing
-     */
-    public async queueCreateEvent(
-        data: any,
-        priority: number = 5,
-    ): Promise<void> {
+    public async queueEvent(data: any, priority: number = 5) {
         const event = await db.events.get(data.event);
         if (event?.syncStatus === "synced") {
-            console.log(
-                `⏭️  Skipping already synced: CREATE_EVENT - ${data.event}`,
-            );
             return;
         }
 
         await queueSyncOperation({
-            type: "CREATE_EVENT",
+            type: "CREATE_UPDATE_EVENT",
             entityId: data.event,
             data,
             priority,
@@ -789,9 +731,7 @@ export class SyncManager {
             pendingCount: stats.pending + stats.failed,
         });
 
-        if (this.isOnline && !this.isSyncing) {
-            this.startSync();
-        }
+        this.scheduleSync();
     }
 
     /**
@@ -801,34 +741,116 @@ export class SyncManager {
         return this.isOnline;
     }
 
-    private async pullFromServer() {
+    private async pullFromServer(options: PullOptions = {}) {
         if (this.isPulling || !this.isOnline) {
             return;
         }
         this.isPulling = true;
 
-        this.isPulling = false;
+        try {
+            const syncState = await db.syncState.get("current");
+            let orgUnitIds: string[] = [];
+            if (options.orgUnit) {
+                orgUnitIds = [options.orgUnit];
+            } else {
+                const allOrgUnits = await db.organisationUnits.toArray();
+                const seen = new Set<string>();
+                for (const ou of allOrgUnits) {
+                    if (!seen.has(ou.id)) {
+                        seen.add(ou.id);
+                        orgUnitIds.push(ou.id);
+                    }
+                }
+            }
+            if (orgUnitIds.length === 0) return;
+            const programs = await db.programs.toArray();
+            const program = programs[0];
+            if (!program) return;
+            const now = new Date().toISOString();
+            const pullVersions = syncState?.pullVersions ?? {};
+            for (const orgUnitId of orgUnitIds) {
+                const lastPullAt = options.fromStart
+                    ? undefined
+                    : pullVersions[orgUnitId];
+
+                const params: Record<string, any> = {
+                    program: program.id,
+                    orgUnit: orgUnitId,
+                    ouMode: "SELECTED",
+                    fields: "*,enrollments[*,events[*]]",
+                    paging: false,
+                };
+
+                if (lastPullAt) {
+                    params.updatedAfter = lastPullAt;
+                }
+                const response = (await this.engine.query({
+                    trackedEntities: {
+                        resource: "tracker/trackedEntities",
+                        params,
+                    },
+                })) as {
+                    trackedEntities: { trackedEntities: TrackedEntity[] };
+                };
+                const instances = response.trackedEntities.trackedEntities;
+                if (instances.length > 0) {
+                    this.isSyncUpdating = true;
+                    for (const raw of instances) {
+                        const flattened = flattenTrackedEntity(raw);
+                        await db.trackedEntities.put({
+                            ...flattened,
+                            syncStatus: "synced",
+                            lastSynced: now,
+                        });
+
+                        for (const rawEnrollment of raw.enrollments ?? []) {
+                            await db.enrollments.put(
+                                flattenEnrollment(rawEnrollment),
+                            );
+                            for (const rawEvent of rawEnrollment.events ?? []) {
+                                await db.events.put(flattenEvent(rawEvent));
+                            }
+                        }
+                    }
+                    this.isSyncUpdating = false;
+                }
+                pullVersions[orgUnitId] = now;
+            }
+
+            await this.updateSyncState({
+                lastPullAt: now,
+                pullVersions,
+            });
+        } catch (error) {
+            console.error("❌ Data pull failed:", error);
+        } finally {
+            this.isPulling = false;
+        }
     }
 
-    private startPeriodicPull() {
-        // Initial pull
+    private startPeriodicPull(): void {
+        if (this.pullTimer) return;
+
         if (this.isOnline) {
-            this.pullFromServer();
+            this.pullFromServer().catch((e) =>
+                console.error("❌ Initial pull error:", e),
+            );
         }
 
         this.pullTimer = setInterval(() => {
             if (this.isOnline && !this.isPulling) {
-                this.pullFromServer();
+                this.pullFromServer().catch((e) =>
+                    console.error("❌ Periodic pull error:", e),
+                );
             }
         }, SYNC_CONFIG.pullInterval);
     }
 
-    public async pullNow() {
-        if (this.isOnline) {
-            await this.pullFromServer();
-        } else {
+    public async pullNow(options: PullOptions = {}) {
+        if (!this.isOnline) {
             throw new Error("Cannot pull while offline");
         }
+        await this.pullFromServer(options);
     }
 }
 

@@ -3,13 +3,22 @@ import type { FormInstance } from "antd";
 import { Button, Flex, Form, Modal, Typography } from "antd";
 import React from "react";
 import { SyncStatusComp } from "./sync-status-comp";
-import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
+import {
+    FlattenedEnrollment,
+    FlattenedEvent,
+    FlattenedTrackedEntity,
+} from "../schemas";
 
 interface DataModalProps<T extends FlattenedTrackedEntity | FlattenedEvent> {
     open: boolean;
     data: T | null;
     onClose: () => void;
-    onSave: (values: T, addAnother?: boolean) => void | Promise<void>;
+    onSave: (currentInfo: {
+        values: Record<string, any>;
+        enrollment: FlattenedEnrollment | null;
+        addAnother?: boolean;
+    }) => void | Promise<void>;
+    enrollment: FlattenedEnrollment | null;
     title?: string;
     children: (form: FormInstance) => React.ReactNode;
     submitButtonText?: string;
@@ -31,6 +40,7 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
     onValueChange,
     hasAddAnother = false,
     status = "draft",
+    enrollment,
 }: DataModalProps<T>) {
     const [form] = Form.useForm<T>();
     const [loading, setLoading] = React.useState(false);
@@ -52,7 +62,7 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
         try {
             const values = await form.validateFields();
             setLoading(true);
-            await onSave(values, addAnother);
+            await onSave({ values, enrollment, addAnother });
             if (!addAnother) {
                 onClose();
             }
@@ -139,6 +149,7 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
                                     paddingRight: 32,
                                 }}
                                 onClick={() => handleOk(true)}
+                                loading={loading}
                             >
                                 {submitButtonText} & add another
                             </Button>

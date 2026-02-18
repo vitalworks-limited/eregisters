@@ -8,6 +8,7 @@ import {
     ProgramRule,
     ProgramRuleResult,
     ProgramRuleVariable,
+    ProgramStage,
     ProgramTrackedEntityAttribute,
     TrackedEntity,
     TrackedEntityResponse,
@@ -22,10 +23,53 @@ export const flattenTrackedEntityResponse = (te: TrackedEntityResponse) => {
     });
 };
 
+export const flattenEnrollment = ({
+    attributes,
+    ...otherDetails
+}: Enrollment) => {
+    const enrollmentAttrs: Record<string, any> = attributes.reduce(
+        (acc, attr) => {
+            acc[attr.attribute] = attr.value;
+            return acc;
+        },
+        {},
+    );
+    return {
+        ...otherDetails,
+        syncStatus: "synced",
+        version: 1,
+        lastSynced: new Date().toISOString(),
+        syncError: "",
+        attributes: enrollmentAttrs,
+    };
+};
+
+export const flattenEvent = ({
+    dataValues,
+    occurredAt,
+    ...otherEventDetails
+}: Event) => {
+    const eventAttrs: Record<string, string> = [
+        ...dataValues,
+        { dataElement: "occurredAt", value: occurredAt },
+    ].reduce((acc, dv) => {
+        acc[dv.dataElement] = dv.value;
+        return acc;
+    }, {});
+    return {
+        ...otherEventDetails,
+        dataValues: eventAttrs,
+        syncStatus: "synced",
+        version: 1,
+        lastSynced: new Date().toISOString(),
+        syncError: "",
+        parentEvent: eventAttrs["Wx7x4sMAa62"] || "",
+        occurredAt,
+    };
+};
+
 export const flattenTrackedEntity = ({
-    trackedEntity,
-    attributes = [],
-    enrollments = [],
+    attributes,
     ...rest
 }: TrackedEntity) => {
     const trackedEntityAttributes = attributes.reduce((acc, attr) => {
@@ -33,69 +77,16 @@ export const flattenTrackedEntity = ({
         return acc;
     }, {});
 
-    let events: Event[] = [];
-    let eAttributes: Attribute[] = [];
-    let enrollmentDetails:
-        | Omit<Enrollment, "events" | "attributes">
-        | undefined = undefined;
-
-    if (enrollments.length > 0) {
-        const [
-            {
-                events: enrollmentEvents,
-                attributes: enrollmentAttributes,
-                ...details
-            },
-        ] = enrollments;
-
-        events = enrollmentEvents;
-        eAttributes = enrollmentAttributes;
-        enrollmentDetails = details;
-    }
-
-    const enrollmentAttrs: Record<string, string> = eAttributes.reduce(
-        (acc, attr) => {
-            acc[attr.attribute] = attr.value;
-            return acc;
-        },
-        {},
-    );
-    const allAttributes = {
-        ...trackedEntityAttributes,
-        ...enrollmentAttrs,
-    };
-    const parentEntity = allAttributes["FhyNxUVOpjh"] || "";
-    const flattenedEvents = events.map((event) => {
-        const eventAttrs: Record<string, string> = [
-            ...event.dataValues,
-            { dataElement: "occurredAt", value: event.occurredAt },
-        ].reduce((acc, dv) => {
-            acc[dv.dataElement] = dv.value;
-            return acc;
-        }, {});
-
-        return {
-            ...event,
-            dataValues: eventAttrs,
-            syncStatus: "synced",
-            version: 1,
-            lastSynced: new Date().toISOString(),
-            syncError: "",
-            parentEvent: eventAttrs["Wx7x4sMAa62"] || "",
-        };
-    });
+    const parentEntity = trackedEntityAttributes["FhyNxUVOpjh"] || "";
 
     return {
         ...rest,
-        attributes: allAttributes,
-        enrollment: enrollmentDetails,
-        events: flattenedEvents,
-        trackedEntity,
         syncStatus: "synced",
         version: 1,
         lastSynced: new Date().toISOString(),
         syncError: "",
         parentEntity,
+        attributes: trackedEntityAttributes,
     };
 };
 
@@ -888,20 +879,6 @@ export const createEmptyTrackedEntity = ({
     return {
         orgUnit,
         attributes,
-        enrollment: {
-            createdAt: dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
-            program: "ueBhWkWll5v",
-            deleted: false,
-            orgUnit,
-            trackedEntity,
-            enrollment: generateUid(),
-            enrolledAt: dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
-            occurredAt: dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
-            status: "ACTIVE",
-            updatedAt: dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
-            followUp: false,
-        },
-        events: [],
         trackedEntityType: "QG9qZrGHLzV",
         createdAt: dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
         updatedAt: dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
@@ -915,6 +892,36 @@ export const createEmptyTrackedEntity = ({
         syncStatus: "draft",
         version: 1,
         parentEntity,
+        enrollments: [],
+    };
+};
+
+export const createEmptyEnrollment = ({
+    orgUnit,
+    trackedEntity,
+    attributes = {},
+}: {
+    orgUnit: string;
+    trackedEntity: string;
+    attributes?: Record<string, string>;
+}): ReturnType<typeof flattenEnrollment> => {
+    return {
+        createdAt: dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
+        program: "ueBhWkWll5v",
+        deleted: false,
+        orgUnit,
+        trackedEntity,
+        enrollment: generateUid(),
+        enrolledAt: dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
+        occurredAt: dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
+        status: "ACTIVE",
+        updatedAt: dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
+        followUp: false,
+        lastSynced: "",
+        syncError: "",
+        syncStatus: "draft",
+        version: 1,
+        attributes,
     };
 };
 
@@ -934,7 +941,7 @@ export const createEmptyEvent = ({
     programStage: string;
     parentEvent?: string;
     dataValues?: Record<string, any>;
-}) => {
+}): ReturnType<typeof flattenEvent> => {
     const eventId = generateUid();
     const now = dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ");
     return {
@@ -951,9 +958,6 @@ export const createEmptyEvent = ({
         deleted: false,
         createdAt: now,
         updatedAt: now,
-        createdAtClient: now,
-        updatedAtClient: now,
-        relationships: [],
         lastSynced: "",
         syncError: "",
         syncStatus: "draft",
@@ -1040,3 +1044,17 @@ export const spans = new Map<string, number>([
     ["PKuyTiVCR89", 5],
     ["oTI0DLitzFY", 9],
 ]);
+
+export function buildCurrentDataElements(programStage: ProgramStage) {
+    return new Map(
+        programStage.programStageDataElements.map((psde) => [
+            psde.dataElement.id,
+            {
+                allowFutureDate: psde.allowFutureDate,
+                renderOptionsAsRadio: psde.renderType !== undefined,
+                compulsory: psde.compulsory,
+                desktopRenderType: psde.renderType?.DESKTOP?.type,
+            },
+        ]),
+    );
+}

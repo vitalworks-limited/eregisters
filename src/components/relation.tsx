@@ -5,8 +5,8 @@ import { db } from "../db";
 import { useProgramRulesWithDexie } from "../hooks/useProgramRules";
 import { RootRoute } from "../routes/__root";
 import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
-import { calculateColSpan } from "../utils/utils";
-import { DataElementField } from "./data-element-field";
+import { buildCurrentDataElements } from "../utils/utils";
+import { DataElementRenderer } from "./data-element-renderer";
 
 export default function Relation({
     section,
@@ -17,14 +17,8 @@ export default function Relation({
     mainEvent: FlattenedEvent;
     trackedEntity: FlattenedTrackedEntity;
 }) {
-    const {
-        program,
-        dataElements,
-        optionGroups,
-        optionSets,
-        programRuleVariables,
-        programRules,
-    } = RootRoute.useLoaderData();
+    const { program, programRuleVariables, programRules } =
+        RootRoute.useLoaderData();
 
     const [childEventForm] = Form.useForm();
 
@@ -87,17 +81,7 @@ export default function Relation({
         [triggerAutoExecute],
     );
 
-    const currentDataElements = new Map(
-        stage.programStageDataElements.map((psde) => [
-            psde.dataElement.id,
-            {
-                allowFutureDate: psde.allowFutureDate,
-                renderOptionsAsRadio: psde.renderType !== undefined,
-                compulsory: psde.compulsory,
-                desktopRenderType: psde.renderType?.DESKTOP?.type,
-            },
-        ]),
-    );
+    const currentDataElements = buildCurrentDataElements(stage);
     const executeAndApplyRulesRef = useRef(executeAndApplyRules);
     useEffect(() => {
         executeAndApplyRulesRef.current = executeAndApplyRules;
@@ -127,93 +111,17 @@ export default function Relation({
                 {section}
             </Typography.Title>
             <Row gutter={[16, 0]}>
-                {currentSection.dataElements.flatMap((dataElement) => {
-                    const currentDataElement = dataElements.get(dataElement.id);
-                    const { compulsory = false, desktopRenderType } =
-                        currentDataElements.get(dataElement.id) || {};
-
-                    const optionSet = currentDataElement?.optionSet?.id ?? "";
-
-                    const hiddenOptions =
-                        ruleResult.hiddenOptions[dataElement.id];
-
-                    const shownOptionGroups =
-                        ruleResult.shownOptionGroups[dataElement.id] ||
-                        new Set<string>();
-
-                    let finalOptions = optionSets
-                        .get(optionSet)
-                        ?.flatMap((o) => {
-                            if (hiddenOptions?.has(o.id)) {
-                                return [];
-                            }
-                            return o;
-                        });
-
-                    if (ruleResult.hiddenFields.has(dataElement.id)) {
-                        return [];
-                    }
-
-                    if (shownOptionGroups.size > 0) {
-                        const currentOptions =
-                            optionGroups.get(
-                                shownOptionGroups.values().next().value,
-                            ) ?? [];
-                        finalOptions = currentOptions.map(
-                            ({ code, id, name }) => ({
-                                id,
-                                code,
-                                name,
-                                optionSet,
-                            }),
-                        );
-                    }
-                    const errors = ruleResult.errors.filter(
-                        (msg) => msg.key === dataElement.id,
-                    );
-                    const messages = ruleResult.messages.filter(
-                        (msg) => msg.key === dataElement.id,
-                    );
-                    const warnings = ruleResult.warnings.filter(
-                        (msg) => msg.key === dataElement.id,
-                    );
-
-                    return (
-                        <DataElementField
-                            dataElement={currentDataElement!}
-                            hidden={false}
-                            desktopRenderType={desktopRenderType!}
-                            finalOptions={finalOptions}
-                            messages={messages}
-                            warnings={warnings}
-                            errors={errors}
-                            required={compulsory}
-                            key={dataElement.id}
-                            form={childEventForm}
-                            onAutoSave={updateFieldWithRules}
-                            xs={calculateColSpan(
-                                currentSection.dataElements.length,
-                                24,
-                            )}
-                            sm={calculateColSpan(
-                                currentSection.dataElements.length,
-                                24,
-                            )}
-                            md={calculateColSpan(
-                                currentSection.dataElements.length,
-                                24,
-                            )}
-                            lg={calculateColSpan(
-                                currentSection.dataElements.length,
-                                12,
-                            )}
-                            xl={calculateColSpan(
-                                currentSection.dataElements.length,
-                                6,
-                            )}
-                        />
-                    );
-                })}
+                {currentSection.dataElements.map((dataElement) => (
+                    <DataElementRenderer
+                        key={dataElement.id}
+                        dataElementId={dataElement.id}
+                        currentDataElements={currentDataElements}
+                        ruleResult={ruleResult}
+                        sectionLength={currentSection.dataElements.length}
+                        form={childEventForm}
+                        onAutoSave={updateFieldWithRules}
+                    />
+                ))}
             </Row>
         </Form>
     );

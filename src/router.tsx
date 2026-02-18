@@ -1,16 +1,15 @@
-import { QueryClient } from "@tanstack/react-query";
 import {
     createHashHistory,
     createRouter,
     ErrorComponent,
 } from "@tanstack/react-router";
 import React from "react";
+import { Spinner } from "./components/spinner";
 import { RootRoute } from "./routes/__root";
 import { IndexRoute } from "./routes/index";
-import { TrackedEntityRoute } from "./routes/tracked-entity";
 import { TrackedEntitiesRoute } from "./routes/tracked-entities";
-import { Spinner } from "./components/spinner";
 import { TrackedEntitiesIndexRoute } from "./routes/tracked-entities.index";
+import { TrackedEntityRoute } from "./routes/tracked-entity";
 
 const routeTree = RootRoute.addChildren([
     IndexRoute,
@@ -23,9 +22,6 @@ export const router = createRouter({
     defaultErrorComponent: ({ error }) => <ErrorComponent error={error} />,
     history: createHashHistory(),
     context: {
-        queryClient: new QueryClient(),
-        engine: undefined!,
-        orgUnit: undefined!,
         syncManager: undefined!,
     },
     defaultPreload: "intent",

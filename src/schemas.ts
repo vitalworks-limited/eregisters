@@ -2,6 +2,8 @@ import { GetProp, TablePaginationConfig, TreeSelectProps } from "antd";
 import { FilterValue } from "antd/es/table/interface";
 import z from "zod";
 import {
+    flattenEnrollment,
+    flattenEvent,
     flattenTrackedEntity,
     flattenTrackedEntityResponse,
 } from "./utils/utils";
@@ -37,7 +39,6 @@ export const UserSchema = z.object({
 });
 
 export const ClientSchema = z.object({
-    orgUnits: z.string().optional(),
     search: z.record(z.string(), z.string()).optional(),
 });
 
@@ -279,7 +280,7 @@ export const EnrollmentsSchema = z.object({
     deleted: z.boolean(),
     createdBy: UserSchema.optional(),
     updatedBy: UserSchema.optional(),
-    events: z.array(EventSchema),
+    events: z.array(EventSchema).optional(),
     attributes: z.array(AttributeSchema),
     notes: z.array(z.unknown()).optional(),
 });
@@ -424,8 +425,8 @@ export type FlattenedTrackedEntity = ReturnType<typeof flattenTrackedEntity>;
 export type FlattenedTrackedEntities = ReturnType<
     typeof flattenTrackedEntityResponse
 >;
-export type FlattenedEvent = FlattenedTrackedEntity["events"][number];
-export type FlattenedEnrollment = FlattenedTrackedEntity["enrollment"];
+export type FlattenedEvent = ReturnType<typeof flattenEvent>;
+export type FlattenedEnrollment = ReturnType<typeof flattenEnrollment>;
 
 export interface Village {
     village_id: string;

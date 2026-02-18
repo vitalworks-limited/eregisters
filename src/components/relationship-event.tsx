@@ -46,12 +46,18 @@ export default function RelationshipEvent({
             ({ trackedEntity }) => trackedEntity === activeKey,
         );
 
-        if (current === undefined && currentChild && currentChild.enrollment) {
+        const childEnrollment = currentChild
+            ? await db.enrollments
+                  .where({ trackedEntity: currentChild.trackedEntity })
+                  .first()
+            : undefined;
+
+        if (current === undefined && currentChild && childEnrollment) {
             const newEvent = createEmptyEvent({
                 trackedEntity: currentChild.trackedEntity,
-                program: currentChild.enrollment.program,
-                orgUnit: currentChild.enrollment.orgUnit,
-                enrollment: currentChild.enrollment.enrollment,
+                program: childEnrollment.program,
+                orgUnit: childEnrollment.orgUnit,
+                enrollment: childEnrollment.enrollment,
                 programStage: "K2nxbE9ubSs",
                 dataValues: {
                     occurredAt:
@@ -87,6 +93,7 @@ export default function RelationshipEvent({
             })}
             onChange={onChange}
             accessKey={activeKey}
+						activeKey={activeKey}
         />
     );
 }
