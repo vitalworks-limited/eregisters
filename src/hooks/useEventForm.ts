@@ -39,19 +39,6 @@ export function useEventForm({
             debounceMs: 100,
         });
 
-    const filteredUpdateFields = useCallback(
-        async (fields: Record<string, any>) => {
-            if (!allowedDataElements) return updateFields(fields);
-            const filtered = Object.fromEntries(
-                Object.entries(fields).filter(([key]) =>
-                    allowedDataElements.has(key),
-                ),
-            );
-            if (Object.keys(filtered).length > 0) return updateFields(filtered);
-        },
-        [updateFields, allowedDataElements],
-    );
-
     const { ruleResult, triggerAutoExecute, executeAndApplyRules } =
         useProgramRulesWithDexie({
             form,
@@ -59,12 +46,13 @@ export function useEventForm({
             programRuleVariables,
             programStage: programStageId,
             trackedEntityAttributes: trackedEntity.attributes,
-            onAssignments: filteredUpdateFields,
+            onAssignments: updateFields,
             applyAssignmentsToForm: true,
             persistAssignments: true,
             program: programId,
             autoExecute: true,
             previousEvents,
+            allowedDataElements,
         });
 
     const updateFieldWithRules = useCallback(

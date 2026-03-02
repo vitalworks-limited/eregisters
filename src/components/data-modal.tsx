@@ -65,6 +65,8 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
             await onSave({ values, enrollment, addAnother });
             if (!addAnother) {
                 onClose();
+            } else {
+                form.resetFields();
             }
         } catch (error) {
             console.error("Validation failed:", error);

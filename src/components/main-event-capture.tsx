@@ -10,7 +10,7 @@ import {
     Tabs,
 } from "antd";
 import { orderBy } from "lodash";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { RootRoute } from "../routes/__root";
 import {
     FlattenedEnrollment,
@@ -26,6 +26,7 @@ import RelationshipEvent from "./relationship-event";
 import { useEventForm } from "../hooks/useEventForm";
 import { ProgramStageCapture } from "./program-stage-capture";
 import { DataElementRenderer } from "./data-element-renderer";
+import dayjs from "dayjs";
 
 const stages: Map<string, number> = new Map([
     ["x5x1cHHjg00", 7],
@@ -54,20 +55,23 @@ export default function MainEventCapture({
     const { program, optionSets, programRules, programRuleVariables } =
         RootRoute.useLoaderData();
 
-    const values = Form.useWatch(
-        ["zxJ9SDZtKUS", "nxthjrx18Y0", "RltyVq1d11i"],
-        form,
-    );
+    // const values = Form.useWatch(
+    //     ["zxJ9SDZtKUS", "nxthjrx18Y0", "RltyVq1d11i"],
+    //     form,
+    // );
+    const currentServices = Form.useWatch("mrKZWf2WMIC", form);
+    const ageAtVisit = Form.useWatch("zxJ9SDZtKUS", form);
+    const nutritionalBMI = Form.useWatch("nxthjrx18Y0", form);
+    const ageBMI = Form.useWatch("RltyVq1d11i", form);
     const [activeKey, setActiveKey] = useState<string>(
         "K2nxbE9ubSs-bnV62fxQmoE",
     );
 
-    const mainStage = program.programStages.find(
-        (s) => s.id === "K2nxbE9ubSs",
-    );
+    const mainStage = program.programStages.find((s) => s.id === "K2nxbE9ubSs");
     const mainStageDataElements = new Set(
-        mainStage?.programStageDataElements.map((psde) => psde.dataElement.id) ??
-            [],
+        mainStage?.programStageDataElements.map(
+            (psde) => psde.dataElement.id,
+        ) ?? [],
     );
 
     const { ruleResult, updateFieldWithRules, entity, executeAndApplyRules } =
@@ -108,12 +112,28 @@ export default function MainEventCapture({
     const handleTabChange = (active: string) => {
         setActiveKey(() => active);
     };
+    const executeAndApplyRulesRef = useRef(executeAndApplyRules);
     useEffect(() => {
-        form.setFieldsValue(entity?.dataValues);
-    }, [entity]);
+        executeAndApplyRulesRef.current = executeAndApplyRules;
+    });
+
+    const lastEventRef = useRef<string | undefined>(undefined);
+
     useEffect(() => {
-        executeAndApplyRules();
-    }, [values]);
+        if (!entity?.dataValues) return;
+        form.setFieldsValue(entity.dataValues);
+        lastEventRef.current = entity.event;
+        executeAndApplyRulesRef.current(entity.dataValues);
+    }, [entity?.event, form]);
+    useEffect(() => {
+        if (!mainEvent?.event || !mainEvent?.dataValues) return;
+        executeAndApplyRulesRef.current(mainEvent.dataValues);
+    }, [mainEvent]);
+
+    useEffect(() => {
+        const formValues = form.getFieldsValue();
+        executeAndApplyRulesRef.current(formValues);
+    }, [currentServices, activeKey, ageAtVisit, ageAtVisit, nutritionalBMI]);
     return (
         <Flex vertical gap={10} style={{ width: "100%" }}>
             <Card size="small" styles={{ body: { padding: 10, margin: 0 } }}>
@@ -140,6 +160,7 @@ export default function MainEventCapture({
                                         form.getFieldValue("occurredAt"),
                                     );
                                 }}
+                                disabledDate={(date) => date.isAfter(dayjs())}
                             />
                         </Form.Item>
                     </Col>
@@ -202,14 +223,39 @@ export default function MainEventCapture({
                 ).flatMap((stage) => {
                     const currentDataElements = buildCurrentDataElements(stage);
 
-                    if (stage.id === "opwSN351xGC") {
+                    if (
+                        currentServices &&
+                        stage.id === "opwSN351xGC" &&
+                        String(currentServices)
+                            .split(",")
+                            .some((a) =>
+                                [
+                                    "TB",
+                                    "DR-TB",
+                                    "Leprosy",
+                                    "ART",
+                                    "HTS",
+                                ].includes(a),
+                            )
+                    ) {
+                        return {
+                            key: stage.id,
+                            label: stage.name,
+                            children: (
+                                <ProgramStageCapture
+                                    programStage={stage}
+                                    trackedEntity={trackedEntity}
+                                    mainEvent={mainEvent}
+                                    previousEvents={previousEvents}
+                                    enrollment={enrollment}
+                                />
+                            ),
+                        };
+                    } else if (stage.id === "opwSN351xGC") {
                         return [];
                     }
-                    if (
-                        ["opwSN351xGC", "zKGWob5AZKP", "DA0Yt3V16AN"].includes(
-                            stage.id,
-                        )
-                    ) {
+
+                    if (["zKGWob5AZKP", "DA0Yt3V16AN"].includes(stage.id)) {
                         return {
                             key: stage.id,
                             label: stage.name,

@@ -2,10 +2,8 @@ import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
 import React, { useState } from "react";
 
 import { CloudDownloadOutlined, HomeOutlined } from "@ant-design/icons";
-import { App, Button, Layout, Space, Tooltip, Typography } from "antd";
+import { App, Button, Layout, Space, Tooltip, Typography, Flex } from "antd";
 import { groupBy } from "lodash";
-
-import { Flex } from "antd";
 
 import MetadataSyncComponent from "../components/metadata-sync";
 import { Spinner } from "../components/spinner";
@@ -116,55 +114,48 @@ function LayoutWithDrafts() {
     const { orgUnit } = RootRoute.useLoaderData();
 
     return (
-        <>
-            <Layout
+        <Layout
+            style={{
+                minHeight: "calc(100vh - 48px)",
+                background: "#f0f2f5",
+            }}
+        >
+            <Header
                 style={{
-                    minHeight: "calc(100vh - 48px)",
-                    background: "#f0f2f5",
+                    background: "#fff",
+                    padding: "0 16px",
+                    display: "flex",
+                    alignItems: "center",
+                    alignContent: "center",
+                    justifyItems: "center",
+                    justifyContent: "space-between",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
                 }}
             >
-                <Header
-                    style={{
-                        background: "#fff",
-                        padding: "0 16px",
-                        display: "flex",
-                        alignItems: "center",
-                        alignContent: "center",
-                        justifyItems: "center",
-                        justifyContent: "space-between",
-                        boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-                    }}
-                >
-                    <Flex align="center" gap="large">
-                        <img
-                            src="https://upload.wikimedia.org/wikipedia/commons/7/7c/Coat_of_arms_of_Uganda.svg"
-                            alt="Uganda Coat of Arms"
-                            style={{ height: 54 }}
-                        />
-                        <Title
-                            level={3}
-                            style={{ margin: 0, color: "#1f4788" }}
-                        >
-                            Medical{" "}
-                            <Text style={{ fontWeight: 300 }}>eRegistry</Text>
-                        </Title>
-                    </Flex>
+                <Flex align="center" gap="large">
+                    <img
+                        src="https://upload.wikimedia.org/wikipedia/commons/7/7c/Coat_of_arms_of_Uganda.svg"
+                        alt="Uganda Coat of Arms"
+                        style={{ height: 54 }}
+                    />
+                    <Title level={3} style={{ margin: 0, color: "#1f4788" }}>
+                        Medical{" "}
+                        <Text style={{ fontWeight: 300 }}>eRegistry</Text>
+                    </Title>
+                </Flex>
 
-                    <Space>
-                        <HomeOutlined
-                            style={{ fontSize: 20, color: "#1890ff" }}
-                        />
-                        <Text strong>{orgUnit.name}</Text>
-                        <SyncStatus syncManager={syncManager} />
-                        <PullButton syncManager={syncManager} />
-                        <MetadataSyncComponent
-                            metadataSync={syncManager.getMetadataSync()}
-                        />
-                    </Space>
-                </Header>
+                <Space>
+                    <HomeOutlined style={{ fontSize: 20, color: "#1890ff" }} />
+                    <Text strong>{orgUnit.name}</Text>
+                    <SyncStatus syncManager={syncManager} />
+                    <PullButton syncManager={syncManager} />
+                    <MetadataSyncComponent
+                        metadataSync={syncManager.getMetadataSync()}
+                    />
+                </Space>
+            </Header>
 
-                <Outlet />
-            </Layout>
-        </>
+            <Outlet />
+        </Layout>
     );
 }

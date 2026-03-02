@@ -25,6 +25,7 @@ export const flattenTrackedEntityResponse = (te: TrackedEntityResponse) => {
 
 export const flattenEnrollment = ({
     attributes,
+    events,
     ...otherDetails
 }: Enrollment) => {
     const enrollmentAttrs: Record<string, any> = attributes.reduce(
@@ -70,6 +71,7 @@ export const flattenEvent = ({
 
 export const flattenTrackedEntity = ({
     attributes,
+    enrollments,
     ...rest
 }: TrackedEntity) => {
     const trackedEntityAttributes = attributes.reduce((acc, attr) => {
@@ -892,7 +894,6 @@ export const createEmptyTrackedEntity = ({
         syncStatus: "draft",
         version: 1,
         parentEntity,
-        enrollments: [],
     };
 };
 

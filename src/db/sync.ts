@@ -621,8 +621,6 @@ export class SyncManager {
             }
         }
 
-        console.log(allEnrollments, allEvents, allEnrollments);
-
         if (
             allTrackedEntities.length === 0 &&
             allEnrollments.length === 0 &&

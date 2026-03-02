@@ -44,9 +44,9 @@ export const TrackedEntitiesIndexRoute = createRoute({
                 .filter((te) => {
                     return Object.entries(search).every(
                         ([filterKey, filterValue]) => {
-                            return te.attributes[filterKey]?.includes(
-                                filterValue,
-                            );
+                            return String(te.attributes[filterKey])
+                                .toLowerCase()
+                                .includes(filterValue.toLowerCase());
                         },
                     );
                 })
@@ -266,7 +266,7 @@ function TrackedEntitiesSearch() {
                             });
                             const newEnrollment = createEmptyEnrollment({
                                 orgUnit: id,
-                                trackedEntity: newPatient.trackedEntityType,
+                                trackedEntity: newPatient.trackedEntity,
                             });
                             await db.trackedEntities.put(newPatient);
                             await db.enrollments.put(newEnrollment);

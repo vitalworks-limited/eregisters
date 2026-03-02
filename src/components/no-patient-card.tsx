@@ -109,7 +109,7 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
                             });
                             const newEnrollment = createEmptyEnrollment({
                                 orgUnit: id,
-                                trackedEntity: newPatient.trackedEntityType,
+                                trackedEntity: newPatient.trackedEntity,
                             });
 
                             await db.trackedEntities.put(newPatient);

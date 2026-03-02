@@ -1,6 +1,7 @@
-import { CalendarOutlined, CaretRightOutlined } from "@ant-design/icons";
 import { createRoute } from "@tanstack/react-router";
 import type { DescriptionsProps, TableProps } from "antd";
+import { CalendarOutlined, CaretRightOutlined } from "@ant-design/icons";
+
 import {
     Button,
     Card,
@@ -73,6 +74,13 @@ function TrackedEntityComponent() {
         isOpen: childIsOpen,
         openModal: openChildModal,
         closeModal: closeChildModal,
+    } = useModalState<FlattenedTrackedEntity>();
+
+    const {
+        data: trackedEntityData,
+        isOpen: trackedEntityIsOpen,
+        openModal: openTrackedEntityModal,
+        closeModal: closeTrackedEntityModal,
     } = useModalState<FlattenedTrackedEntity>();
     const {
         trackedEntityAttributes,
@@ -184,9 +192,10 @@ function TrackedEntityComponent() {
         ],
         [],
     );
-    const items: DescriptionsProps["items"] = Object.entries(
-        trackedEntity.attributes || {},
-    ).map(([key, value]) => ({
+    const items: DescriptionsProps["items"] = Object.entries({
+        ...trackedEntity.attributes,
+        ...enrollment.attributes,
+    }).map(([key, value]) => ({
         key: key,
         label: keys.get(key) || key,
         children: <Text>{String(value)}</Text>,
@@ -390,7 +399,26 @@ function TrackedEntityComponent() {
                                             items={items}
                                         />
                                     ),
-                                    extra: <Button>Edit</Button>,
+                                    extra: (
+                                        <Button
+                                            onClick={() =>
+                                                openTrackedEntityModal(
+                                                    {
+                                                        ...trackedEntity,
+                                                        attributes: {
+                                                            ...trackedEntity.attributes,
+                                                            enrolledAt:
+                                                                enrollment.enrolledAt,
+                                                            ...enrollment.attributes,
+                                                        },
+                                                    },
+                                                    enrollment,
+                                                )
+                                            }
+                                        >
+                                            Edit
+                                        </Button>
+                                    ),
                                 },
                             ]}
                             styles={{ body: { padding: 0, margin: 0 } }}
@@ -533,6 +561,36 @@ function TrackedEntityComponent() {
                 }}
                 title="New Born Child"
                 submitButtonText="Save Child"
+            >
+                {(form) => (
+                    <TrackerRegistration
+                        trackedEntity={trackedEntity}
+                        form={form}
+                    />
+                )}
+            </DataModal>
+
+            <DataModal<FlattenedTrackedEntity>
+                open={trackedEntityIsOpen}
+                data={trackedEntityData}
+                onClose={closeTrackedEntityModal}
+                enrollment={enrollment}
+                onSave={async ({ values }) => {
+                    if (trackedEntityData && values) {
+                        const trackedEntity: FlattenedTrackedEntity = {
+                            ...trackedEntityData,
+                            attributes: {
+                                ...trackedEntityData.attributes,
+                                ...values,
+                            },
+                            syncStatus: "pending",
+                        };
+
+                        await db.trackedEntities.put(trackedEntity);
+                    }
+                }}
+                title="Edit Client"
+                submitButtonText="Save Client"
             >
                 {(form) => (
                     <TrackerRegistration

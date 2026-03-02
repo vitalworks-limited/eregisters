@@ -29,6 +29,9 @@ export default function Relation({
     const [currentSection] = stage.programStageSections.filter(
         ({ name }) => name === "Child Health Services",
     );
+    const triageSection = stage.programStageSections.find(
+        ({ name }) => name === "Triage",
+    );
 
     const childEventRef = useRef<typeof childEvent>(undefined);
 
@@ -66,6 +69,7 @@ export default function Relation({
             persistAssignments: true,
             program: program.id,
             autoExecute: true,
+            clearHiddenFields: false,
         });
 
     const updateFieldWithRules = useCallback(
@@ -74,14 +78,21 @@ export default function Relation({
             const current = await db.events.get(childEvent?.event ?? "");
             if (!current) return;
             await db.events.update(current.event, {
-                dataValues: { ...current.dataValues, [fieldId]: value },
+                dataValues: {
+                    ...current.dataValues,
+                    [fieldId]: value,
+                    mrKZWf2WMIC: "Child Health Services",
+                },
                 syncStatus: "pending",
             });
         },
         [triggerAutoExecute],
     );
 
-    const currentDataElements = buildCurrentDataElements(stage);
+    const currentDataElements = buildCurrentDataElements({
+        ...stage,
+        programStageDataElements: [...stage.programStageDataElements],
+    });
     const executeAndApplyRulesRef = useRef(executeAndApplyRules);
     useEffect(() => {
         executeAndApplyRulesRef.current = executeAndApplyRules;
@@ -89,16 +100,19 @@ export default function Relation({
 
     useEffect(() => {
         if (!childEvent) return;
-        childEventForm.setFieldsValue({
-            ...childEvent.dataValues,
-            UuxHHVp5CnF: section === "Maternity" ? "Newborn" : "Postnatal",
-            mrKZWf2WMIC: "Child Health Services",
-        });
-        executeAndApplyRulesRef.current({
-            ...childEvent.dataValues,
-            UuxHHVp5CnF: section === "Maternity" ? "Newborn" : "Postnatal",
-            mrKZWf2WMIC: "Child Health Services",
-        });
+        if (childEvent.dataValues["UuxHHVp5CnF"]) {
+            childEventForm.setFieldsValue(childEvent.dataValues);
+            executeAndApplyRulesRef.current(childEvent.dataValues);
+        } else {
+            childEventForm.setFieldsValue({
+                ...childEvent.dataValues,
+                UuxHHVp5CnF: section === "Maternity" ? "Newborn" : "Postnatal",
+            });
+            executeAndApplyRulesRef.current({
+                ...childEvent.dataValues,
+                UuxHHVp5CnF: section === "Maternity" ? "Newborn" : "Postnatal",
+            });
+        }
     }, [childEvent?.event]);
 
     return (
@@ -110,6 +124,19 @@ export default function Relation({
             <Typography.Title level={4} style={{ marginBottom: 16 }}>
                 {section}
             </Typography.Title>
+            <Row gutter={[16, 0]}>
+                {triageSection?.dataElements.map((dataElement) => (
+                    <DataElementRenderer
+                        key={dataElement.id}
+                        dataElementId={dataElement.id}
+                        currentDataElements={currentDataElements}
+                        ruleResult={ruleResult}
+                        sectionLength={triageSection.dataElements.length}
+                        form={childEventForm}
+                        onAutoSave={updateFieldWithRules}
+                    />
+                ))}
+            </Row>
             <Row gutter={[16, 0]}>
                 {currentSection.dataElements.map((dataElement) => (
                     <DataElementRenderer

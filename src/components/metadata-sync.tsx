@@ -34,6 +34,7 @@ export default function MetadataSyncComponent({
         state,
         syncChangedMetadata,
         checkForUpdates,
+        forceFullSync,
         isSyncing,
         isChecking,
         hasError,
@@ -73,9 +74,7 @@ export default function MetadataSyncComponent({
             } else if (!stale) {
                 console.log("✅ Metadata is fresh, no sync needed");
             } else {
-                console.log(
-                    "⏸️ Sync skipped (already syncing or checking)",
-                );
+                console.log("⏸️ Sync skipped (already syncing or checking)");
             }
         } catch (error) {
             console.error("Auto-sync check failed:", error);
@@ -190,7 +189,7 @@ export default function MetadataSyncComponent({
                 <Button
                     type="primary"
                     icon={<ReloadOutlined />}
-                    onClick={handleSync}
+                    onClick={() => forceFullSync()}
                     loading={isSyncing}
                     size="small"
                 >

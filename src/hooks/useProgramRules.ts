@@ -167,6 +167,7 @@ export interface UseProgramRulesWithDexieOptions extends UseProgramRulesOptions 
     applyAssignmentsToForm?: boolean;
     persistAssignments?: boolean;
     clearHiddenFields?: boolean;
+    allowedDataElements?: Set<string>;
 }
 
 export interface UseProgramRulesWithDexieReturn extends UseProgramRulesReturn {
@@ -191,6 +192,7 @@ export const useProgramRulesWithDexie = ({
     persistAssignments = false,
     clearHiddenFields = false,
     isRegistration = false,
+    allowedDataElements,
 }: UseProgramRulesWithDexieOptions): UseProgramRulesWithDexieReturn => {
     const basicRules = useProgramRules({
         form,
@@ -236,13 +238,20 @@ export const useProgramRulesWithDexie = ({
                     }
                 }
             }
-            allAssignments = { ...allAssignments, ...result.assignments };
+            const filteredAssignments = allowedDataElements
+                ? Object.fromEntries(
+                      Object.entries(result.assignments).filter(([k]) =>
+                          allowedDataElements.has(k),
+                      ),
+                  )
+                : result.assignments;
+            allAssignments = { ...allAssignments, ...filteredAssignments };
             if (applyAssignmentsToForm) {
-                form.setFieldsValue(result.assignments);
+                form.setFieldsValue(filteredAssignments);
             }
             if (persistAssignments && onAssignments) {
                 try {
-                    await onAssignments(result.assignments);
+                    await onAssignments(filteredAssignments);
                 } catch (error) {
                     console.error("Failed to persist assignments:", error);
                 }
@@ -256,6 +265,7 @@ export const useProgramRulesWithDexie = ({
             persistAssignments,
             onAssignments,
             clearHiddenFields,
+            allowedDataElements,
         ],
     );
 

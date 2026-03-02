@@ -82,7 +82,6 @@ export function useDexiePersistence<
     }, [entityId, entityType]);
     const updateField = useCallback(
         (fieldId: string, value: any) => {
-            console.log(`Updating field ${fieldId} with value:`, value);
             batchQueueRef.current[fieldId] = value;
 
             if (timerRef.current) {
