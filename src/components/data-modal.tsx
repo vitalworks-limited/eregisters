@@ -22,7 +22,6 @@ interface DataModalProps<T extends FlattenedTrackedEntity | FlattenedEvent> {
     title?: string;
     children: (form: FormInstance) => React.ReactNode;
     submitButtonText?: string;
-    onValueChange?: (changedValues: any, allValues: any) => void;
     hasAddAnother?: boolean;
     status?: string;
 }
@@ -37,7 +36,6 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
     title = "Edit Data",
     children,
     submitButtonText = "Save",
-    onValueChange,
     hasAddAnother = false,
     status = "draft",
     enrollment,
@@ -46,10 +44,9 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
     const [loading, setLoading] = React.useState(false);
 
     React.useEffect(() => {
-        form.resetFields();
         if (open) {
             if (data && "event" in data) {
-                form.setFieldsValue(data.dataValues as any);
+                form.setFieldsValue(data.dataValues);
             } else if (data) {
                 form.setFieldsValue(data.attributes);
             }
@@ -65,8 +62,6 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
             await onSave({ values, enrollment, addAnother });
             if (!addAnother) {
                 onClose();
-            } else {
-                form.resetFields();
             }
         } catch (error) {
             console.error("Validation failed:", error);
@@ -170,14 +165,7 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
                 },
             }}
         >
-            <Form
-                form={form}
-                layout="vertical"
-                preserve={false}
-                onValuesChange={onValueChange}
-            >
-                {children(form)}
-            </Form>
+            {children(form)}
         </Modal>
     );
 }

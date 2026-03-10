@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { RootRoute } from "../routes/__root";
 
-import { Card, Form, FormInstance, Row } from "antd";
+import { Card, FormInstance, Row } from "antd";
 import { useEventForm } from "../hooks/useEventForm";
 import {
     FlattenedEvent,
@@ -16,13 +16,11 @@ export default function ProgramStageForm({
     programStage,
     event,
     trackedEntity,
-    previousEvents,
 }: {
     form: FormInstance;
     programStage: ProgramStage;
     event: FlattenedEvent;
     trackedEntity: FlattenedTrackedEntity;
-    previousEvents?: FlattenedEvent[];
 }) {
     const { program, programRules, programRuleVariables } =
         RootRoute.useLoaderData();
@@ -30,23 +28,17 @@ export default function ProgramStageForm({
     const currentDataElements = buildCurrentDataElements(programStage);
     const allowedDataElements = new Set(currentDataElements.keys());
 
-    const { ruleResult, updateFieldWithRules, entity, executeAndApplyRules } =
+    const { ruleResult, handleFieldChange, entity, executeAndApplyRules } =
         useEventForm({
             form,
             event,
-            trackedEntity,
+            trackedEntityId: trackedEntity.trackedEntity,
             programStageId: programStage.id,
             programRules,
             programRuleVariables,
             programId: program.id,
-            previousEvents,
             allowedDataElements,
         });
-
-    const executeAndApplyRulesRef = useRef(executeAndApplyRules);
-    useEffect(() => {
-        executeAndApplyRulesRef.current = executeAndApplyRules;
-    });
 
     // Track if we've executed rules for the current event
     const lastEventRef = useRef<string | undefined>(undefined);
@@ -55,8 +47,8 @@ export default function ProgramStageForm({
         if (!entity?.dataValues) return;
         form.setFieldsValue(entity.dataValues);
         lastEventRef.current = entity.event;
-        executeAndApplyRulesRef.current(entity.dataValues);
-    }, [entity?.event, form]);
+        executeAndApplyRules(entity.dataValues);
+    }, [entity?.event, form, executeAndApplyRules]);
 
     // Execute rules when event prop changes (e.g., modal opens with data)
     useEffect(() => {
@@ -64,13 +56,13 @@ export default function ProgramStageForm({
 
         // Use event.dataValues directly instead of form.getFieldsValue()
         // because the form may not have all fields rendered yet
-        executeAndApplyRulesRef.current(event.dataValues);
-    }, [event]);
+        executeAndApplyRules(event.dataValues);
+    }, [event, executeAndApplyRules]);
 
     return (
         <Card>
             {programStage.programStageSections.flatMap((section) => {
-                if (ruleResult.hiddenSections.has(section.id)) return [];
+                if (ruleResult.hiddenSections.includes(section.id)) return [];
                 return (
                     <Row gutter={[16, 0]} key={section.id}>
                         {section.dataElements.map((dataElement) => (
@@ -81,7 +73,7 @@ export default function ProgramStageForm({
                                 ruleResult={ruleResult}
                                 sectionLength={section.dataElements.length}
                                 form={form}
-                                onAutoSave={updateFieldWithRules}
+                                onFieldChange={handleFieldChange}
                             />
                         ))}
                     </Row>

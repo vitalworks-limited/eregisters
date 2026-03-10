@@ -1,10 +1,14 @@
 import { Tabs } from "antd";
-import { useLiveQuery } from "dexie-react-hooks";
+import { eq, useLiveSuspenseQuery } from "@tanstack/react-db";
 import React, { Key, useState } from "react";
-import { db } from "../db";
 import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
 import Relation from "./relation";
 import { createEmptyEvent } from "../utils/utils";
+import {
+    enrollmentsCollection,
+    eventsCollection,
+    trackedEntitiesCollection,
+} from "../collections";
 
 const getChildLabel = (to: FlattenedTrackedEntity["attributes"]): string => {
     const firstName = to["KSq9EyZ8ZFi"];
@@ -15,7 +19,7 @@ const getChildLabel = (to: FlattenedTrackedEntity["attributes"]): string => {
 
 export default function RelationshipEvent({
     section,
-    trackedEntity,
+    trackedEntity: tei,
     mainEvent,
 }: {
     section: string;
@@ -24,32 +28,38 @@ export default function RelationshipEvent({
 }) {
     const [activeKey, setActiveKey] = useState<string>("");
 
-    const children = useLiveQuery(async () => {
-        return db.trackedEntities
-            .where("parentEntity")
-            .equals(trackedEntity.trackedEntity)
-            .toArray();
-    }, [trackedEntity.trackedEntity]);
+    const { data: children } = useLiveSuspenseQuery((q) =>
+        q
+            .from({ trackedEntity: trackedEntitiesCollection })
+            .where(({ trackedEntity }) =>
+                eq(trackedEntity.parentEntity, tei.trackedEntity),
+            ),
+    );
 
-    if (children === undefined || children.length === 0) {
+    const { data: events } = useLiveSuspenseQuery((q) =>
+        q
+            .from({ event: eventsCollection })
+            .where(({ event }) => eq(event.parentEvent, mainEvent.event)),
+    );
+    const { data: enrollments } = useLiveSuspenseQuery((q) =>
+        q.from({ enrollment: enrollmentsCollection }),
+    );
+
+    if (children.length === 0) {
         return null;
     }
 
     const onChange = async (activeKey: Key) => {
-        const current = await db.events
-            .where("parentEvent")
-            .equals(mainEvent.event)
-            .filter((x) => x.trackedEntity === activeKey)
-            .first();
+        const current = events.find((x) => x.trackedEntity === activeKey);
 
         const currentChild = children.find(
             ({ trackedEntity }) => trackedEntity === activeKey,
         );
 
         const childEnrollment = currentChild
-            ? await db.enrollments
-                  .where({ trackedEntity: currentChild.trackedEntity })
-                  .first()
+            ? enrollments.find(
+                  (e) => e.trackedEntity === currentChild.trackedEntity,
+              )
             : undefined;
 
         if (current === undefined && currentChild && childEnrollment) {
@@ -70,7 +80,11 @@ export default function RelationshipEvent({
                 },
                 parentEvent: mainEvent.event,
             });
-            await db.events.put(newEvent);
+            const tx = eventsCollection.insert({
+                ...newEvent,
+                syncStatus: "pending",
+            });
+            await tx.isPersisted.promise;
         }
         setActiveKey(() => String(activeKey));
     };
@@ -93,7 +107,7 @@ export default function RelationshipEvent({
             })}
             onChange={onChange}
             accessKey={activeKey}
-						activeKey={activeKey}
+            activeKey={activeKey}
         />
     );
 }

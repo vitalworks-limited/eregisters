@@ -1,13 +1,17 @@
 import { Card, Flex, Form, FormInstance, Row } from "antd";
-import React, { useCallback, useEffect } from "react";
-import { useProgramRulesWithDexie } from "../hooks/useProgramRules";
+import dayjs from "dayjs";
+import React, { useCallback, useEffect, useMemo } from "react";
+import { trackedEntitiesCollection } from "../collections";
+import { useRuleResultPersistence } from "../hooks/useRuleResultPersistence";
 import { RootRoute } from "../routes/__root";
 import { FlattenedTrackedEntity } from "../schemas";
-import { spans } from "../utils/utils";
-import { useDexiePersistence } from "../hooks/useDexiePersistence";
-import { DataElementRenderer } from "./data-element-renderer";
+import {
+    buildCurrentAttributes,
+    executeProgramRules,
+    spans,
+} from "../utils/utils";
 import { DataElementField } from "./data-element-field";
-import dayjs from "dayjs";
+import { DataElementRenderer } from "./data-element-renderer";
 
 export interface TrackerRegistrationProps {
     trackedEntity: FlattenedTrackedEntity;
@@ -18,54 +22,99 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
     trackedEntity,
     form,
 }) => {
+    const allValues = Form.useWatch([], form);
     const { program, programRuleVariables, programRules } =
         RootRoute.useLoaderData();
 
-    const allAttributes = new Map(
-        program.programTrackedEntityAttributes.map(
-            ({ mandatory, renderType, trackedEntityAttribute: { id } }) => [
-                id,
-                {
-                    compulsory: mandatory,
-                    desktopRenderType: renderType?.DESKTOP?.type,
-                },
-            ],
-        ),
+    const allAttributes = buildCurrentAttributes(program);
+    const mainStageDataElements = useMemo(
+        () =>
+            new Set(
+                program.programTrackedEntityAttributes.map(
+                    ({ trackedEntityAttribute }) => trackedEntityAttribute.id,
+                ),
+            ),
+        [],
     );
-
-    const { updateField, updateFields } =
-        useDexiePersistence<FlattenedTrackedEntity>({
-            entityType: "trackedEntity",
-            entityId: trackedEntity.trackedEntity,
-        });
-
-    const values = Form.useWatch("xcYGVzmcWvi", form);
-
-    const { ruleResult, triggerAutoExecute } = useProgramRulesWithDexie({
-        form,
-        programRules,
-        programRuleVariables,
-        trackedEntityAttributes: trackedEntity.attributes,
-        onAssignments: updateFields,
-        applyAssignmentsToForm: true,
-        persistAssignments: true,
-        clearHiddenFields: true,
-        program: program.id,
-        isRegistration: true,
-        autoExecute: true,
+    const { ruleResult, saveRuleResult } = useRuleResultPersistence({
+        formType: "registration",
     });
 
-    const updateFieldWithRules = useCallback(
-        (fieldId: string, value: any) => {
-            updateField(fieldId, value);
-            triggerAutoExecute();
-        },
-        [updateField, triggerAutoExecute],
-    );
+    const handleFieldChange = useCallback((fieldId: string, value: any) => {
+        form.setFieldValue(fieldId, value);
+        const currentData = form.getFieldsValue();
+        const result = executeProgramRules({
+            programRules,
+            programRuleVariables,
+            attributeValues: currentData,
+            program: program.id,
+        });
+        saveRuleResult(result);
+        const filteredAssignments = Object.fromEntries(
+            Object.entries(result.assignments).filter(([k]) =>
+                mainStageDataElements.has(k),
+            ),
+        );
+        if (Object.keys(filteredAssignments).length > 0) {
+            form.setFieldsValue(filteredAssignments);
+        }
+        if (result.hiddenFields.length > 0) {
+            const fieldsToClear: Record<string, any> = {};
+            result.hiddenFields.forEach((hiddenFieldId) => {
+                const currentValue = currentData[hiddenFieldId];
+                if (
+                    currentValue !== undefined &&
+                    currentValue !== null &&
+                    currentValue !== ""
+                ) {
+                    fieldsToClear[hiddenFieldId] = undefined;
+                    form.setFieldValue(hiddenFieldId, undefined);
+                }
+            });
+        }
+        trackedEntitiesCollection.utils.insertLocally({
+            ...trackedEntity,
+            attributes: { ...trackedEntity.attributes, ...currentData },
+        });
+    }, []);
 
     useEffect(() => {
-        triggerAutoExecute();
-    }, [values]);
+        const currentData = form.getFieldsValue();
+        const result = executeProgramRules({
+            programRules,
+            programRuleVariables,
+            attributeValues: currentData,
+            program: program.id,
+        });
+        saveRuleResult(result);
+        const filteredAssignments = Object.fromEntries(
+            Object.entries(result.assignments).filter(([k]) =>
+                mainStageDataElements.has(k),
+            ),
+        );
+        if (Object.keys(filteredAssignments).length > 0) {
+            form.setFieldsValue(filteredAssignments);
+        }
+        if (result.hiddenFields.length > 0) {
+            const fieldsToClear: Record<string, any> = {};
+            result.hiddenFields.forEach((hiddenFieldId) => {
+                const currentValue = currentData[hiddenFieldId];
+                if (
+                    currentValue !== undefined &&
+                    currentValue !== null &&
+                    currentValue !== ""
+                ) {
+                    fieldsToClear[hiddenFieldId] = undefined;
+                    form.setFieldValue(hiddenFieldId, undefined);
+                }
+            });
+        }
+    }, [allValues]);
+
+    useEffect(() => {
+        const currentData = form.getFieldsValue();
+        form.setFieldsValue({ ...currentData, ...trackedEntity.attributes });
+    }, []);
 
     return (
         <Flex vertical gap={10}>
@@ -101,7 +150,7 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
                         md={24}
                         lg={24}
                         xl={24}
-                        onAutoSave={updateFieldWithRules}
+                        onFieldChange={handleFieldChange}
                         disabledDate={(date) => {
                             if (program.selectEnrollmentDatesInFuture)
                                 return true;
@@ -113,7 +162,7 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
             {program.programSections.map(
                 ({ name, trackedEntityAttributes: tei, id }) => {
                     const allAreHidden = tei.every(({ id }) =>
-                        ruleResult.hiddenFields.has(id),
+                        ruleResult.hiddenFields.includes(id),
                     );
                     if (allAreHidden) return null;
                     return (
@@ -134,7 +183,7 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
                                         form={form}
                                         mode="attribute"
                                         xl={spans.get(id) ?? undefined}
-                                        onAutoSave={updateFieldWithRules}
+                                        onFieldChange={handleFieldChange}
                                     />
                                 ))}
                             </Row>

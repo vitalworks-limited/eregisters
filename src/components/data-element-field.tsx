@@ -10,7 +10,7 @@ import {
     Select,
     DatePickerProps,
 } from "antd";
-import React from "react";
+import React, { useCallback } from "react";
 import {
     DataElement,
     Message,
@@ -39,7 +39,7 @@ export const DataElementField = React.memo<{
     xl?: number;
     form: FormInstance<FlattenedTrackedEntity | FlattenedEvent>;
     customLabel?: string;
-    onAutoSave: (dataElementId: string, value: any) => void;
+    onFieldChange: (dataElementId: string, value: any) => void;
     desktopRenderType?: RenderType["type"];
     disabled?: boolean;
     disabledDate?: DatePickerProps["disabledDate"];
@@ -59,40 +59,94 @@ export const DataElementField = React.memo<{
         form,
         customLabel,
         desktopRenderType,
-        onAutoSave,
-				disabledDate,
+        onFieldChange,
+        disabledDate,
         disabled = false,
     }) => {
         if (hidden) return null;
-        const isTextInput =
-            !dataElement.optionSetValue &&
-            !["BOOLEAN", "AGE"].includes(dataElement.valueType ?? "") &&
-            !isDate(dataElement.valueType);
+        // Stable filter function for Select dropdowns
+        const filterOption = useCallback((input: string, option: any) => {
+            if (!option) return false;
+            return (
+                option.name.toLowerCase().includes(input.toLowerCase()) ||
+                option.code.toLowerCase().includes(input.toLowerCase())
+            );
+        }, []);
 
         let element: React.ReactNode = (
             <Input
                 disabled={disabled}
-                onBlur={
-                    isTextInput
-                        ? (e) => {
-                              onAutoSave(dataElement.id, e.target.value);
-                          }
-                        : undefined
-                }
+                onChange={(e) => {
+                    onFieldChange(dataElement.id, e.target.value);
+                }}
                 allowClear
             />
         );
+
         if (dataElement.id === "oTI0DLitzFY") {
             element = (
                 <VillageSelect
                     form={form}
                     watchFields={[
-                        { fieldId: "XjgpfkoxffK", label: "District" },
                         {
-                            fieldId: "PKuyTiVCR89",
+                            fieldId: [
+                                "XjgpfkoxffK",
+                                "lpAaZa1cKCB",
+                                "sOBCVNIm1kX",
+                            ],
+                            label: "District",
+                        },
+                        {
+                            fieldId: [
+                                "PKuyTiVCR89",
+                                "lqbqW3iYmKl",
+                                "qbxJxuZCyKu",
+                            ],
                             label: "Subcounty",
                         },
-                        { fieldId: "W87HAtUHJjB", label: "Parish" },
+                        {
+                            fieldId: [
+                                "W87HAtUHJjB",
+                                "BiergDUeQra",
+                                "SjvgaRn8m7Y",
+                            ],
+                            label: "Parish",
+                        },
+                    ]}
+                    syncParentFields
+                    allowDirectSearch
+                    sortField="village_name"
+                    filterFields={["pixScollYA6", "YoteNDkoIwM"]}
+                />
+            );
+        } else if (dataElement.id === "pixScollYA6") {
+            element = (
+                <VillageSelect
+                    form={form}
+                    watchFields={[
+                        { fieldId: "lpAaZa1cKCB", label: "District" },
+                        {
+                            fieldId: "lqbqW3iYmKl",
+                            label: "Subcounty",
+                        },
+                        { fieldId: "BiergDUeQra", label: "Parish" },
+                    ]}
+                    syncParentFields
+                    allowDirectSearch
+                    sortField="village_name"
+                />
+            );
+        } else if (dataElement.id === "YoteNDkoIwM") {
+            element = (
+                <VillageSelect
+                    form={form}
+                    watchFields={[
+                        { fieldId: "sOBCVNIm1kX", label: "District" },
+                        {
+                            fieldId: "qbxJxuZCyKu",
+                            label: "Subcounty",
+                        },
+                        { fieldId: "SjvgaRn8m7Y", label: "Parish" },
                     ]}
                     syncParentFields
                     allowDirectSearch
@@ -116,19 +170,9 @@ export const DataElementField = React.memo<{
                     allowClear
                     mode="multiple"
                     onChange={(value) => {
-                        onAutoSave(dataElement.id, value);
+                        onFieldChange(dataElement.id, value);
                     }}
-                    showSearch={{
-                        filterOption: (input, option) =>
-                            option
-                                ? option.name
-                                      .toLowerCase()
-                                      .includes(input.toLowerCase()) ||
-                                  option.code
-                                      .toLowerCase()
-                                      .includes(input.toLowerCase())
-                                : false,
-                    }}
+                    showSearch={{ filterOption }}
                 />
             );
         } else if (
@@ -139,33 +183,40 @@ export const DataElementField = React.memo<{
                 desktopRenderType,
             )
         ) {
-            const currentValue = Form.useWatch(dataElement.id, form);
+            // Use callback-based approach instead of Form.useWatch
+            // This prevents unnecessary re-renders and improves radio button responsiveness
+            const handleRadioChange = useCallback(
+                (e: any) => {
+                    const value = e.target.value;
+                    onFieldChange(dataElement.id, value);
+                },
+                [dataElement.id, onFieldChange],
+            );
+
+            const handleRadioClick = useCallback(
+                (code: string) => (e: any) => {
+                    // Allow clicking selected radio to deselect it
+                    const currentValue = form.getFieldValue(dataElement.id);
+                    if (currentValue === code) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onFieldChange(dataElement.id, undefined);
+                    }
+                },
+                [dataElement.id, form, onFieldChange],
+            );
 
             element = (
                 <Radio.Group
                     disabled={disabled}
                     vertical={desktopRenderType === "VERTICAL_RADIOBUTTONS"}
-                    value={currentValue}
-                    onChange={(e) => {
-                        onAutoSave(dataElement.id, e.target.value);
-                    }}
+                    onChange={handleRadioChange}
                 >
                     {finalOptions?.map((o) => (
                         <Radio
                             key={o.code}
                             value={o.code}
-                            onClick={(e) => {
-                                // Allow clicking selected radio to deselect it
-                                if (currentValue === o.code) {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    form.setFieldValue(
-                                        dataElement.id,
-                                        undefined,
-                                    );
-                                    onAutoSave(dataElement.id, undefined);
-                                }
-                            }}
+                            onClick={handleRadioClick(o.code)}
                         >
                             {o.name}
                         </Radio>
@@ -184,19 +235,9 @@ export const DataElementField = React.memo<{
                     }}
                     allowClear
                     onChange={(value) => {
-                        onAutoSave(dataElement.id, value);
+                        onFieldChange(dataElement.id, value);
                     }}
-                    showSearch={{
-                        filterOption: (input, option) =>
-                            option
-                                ? option.name
-                                      .toLowerCase()
-                                      .includes(input.toLowerCase()) ||
-                                  option.code
-                                      .toLowerCase()
-                                      .includes(input.toLowerCase())
-                                : false,
-                    }}
+                    showSearch={{ filterOption }}
                 />
             );
         } else if (dataElement.valueType === "BOOLEAN") {
@@ -204,7 +245,8 @@ export const DataElementField = React.memo<{
                 <Checkbox
                     disabled={disabled}
                     onChange={(e) => {
-                        onAutoSave(dataElement.id, e.target.checked);
+                        const value = e.target.checked;
+                        onFieldChange(dataElement.id, value);
                     }}
                 >
                     {dataElement.formName ?? dataElement.name}
@@ -215,7 +257,7 @@ export const DataElementField = React.memo<{
                 <DobPicker
                     form={form}
                     dataElement={dataElement}
-                    onAutoSave={onAutoSave}
+                    onFieldChange={onFieldChange}
                     disabled={disabled}
                 />
             );
@@ -228,12 +270,10 @@ export const DataElementField = React.memo<{
                     }}
                     showTime
                     onChange={(date) => {
-                        onAutoSave(
-                            dataElement.id,
-                            date
-                                ? date.format("YYYY-MM-DDTHH:mm:ss")
-                                : undefined,
-                        );
+                        const value = date
+                            ? date.format("YYYY-MM-DDTHH:mm:ss")
+                            : undefined;
+                        onFieldChange(dataElement.id, value);
                     }}
                     disabledDate={disabledDate}
                 />
@@ -246,10 +286,10 @@ export const DataElementField = React.memo<{
                         width: "100%",
                     }}
                     onChange={(date) => {
-                        onAutoSave(
-                            dataElement.id,
-                            date ? date.format("YYYY-MM-DD") : undefined,
-                        );
+                        const value = date
+                            ? date.format("YYYY-MM-DD")
+                            : undefined;
+                        onFieldChange(dataElement.id, value);
                     }}
                     disabledDate={disabledDate}
                 />
@@ -259,8 +299,8 @@ export const DataElementField = React.memo<{
                 <Input.TextArea
                     disabled={disabled}
                     rows={4}
-                    onBlur={(e) => {
-                        onAutoSave(dataElement.id, e.target.value);
+                    onChange={(e) => {
+                        onFieldChange(dataElement.id, e.target.value);
                     }}
                 />
             );
@@ -271,11 +311,8 @@ export const DataElementField = React.memo<{
                     style={{
                         width: "100%",
                     }}
-                    onBlur={(e) => {
-                        onAutoSave(
-                            dataElement.id,
-                            e.target.value ? Number(e.target.value) : undefined,
-                        );
+                    onChange={(value) => {
+                        onFieldChange(dataElement.id, value);
                     }}
                 />
             );
@@ -290,11 +327,8 @@ export const DataElementField = React.memo<{
                     parser={(value) =>
                         Number(value?.replace(/[^0-9-]/g, "")) || 0
                     }
-                    onBlur={(e) => {
-                        onAutoSave(
-                            dataElement.id,
-                            e.target.value ? Number(e.target.value) : undefined,
-                        );
+                    onChange={(value) => {
+                        onFieldChange(dataElement.id, value);
                     }}
                 />
             );
@@ -310,11 +344,8 @@ export const DataElementField = React.memo<{
                     parser={(value) =>
                         Number(value?.replace(/[^0-9]/g, "")) || 0
                     }
-                    onBlur={(e) => {
-                        onAutoSave(
-                            dataElement.id,
-                            e.target.value ? Number(e.target.value) : undefined,
-                        );
+                    onChange={(value) => {
+                        onFieldChange(dataElement.id, value);
                     }}
                 />
             );
@@ -328,11 +359,8 @@ export const DataElementField = React.memo<{
                     min={0}
                     max={1}
                     step={0.01}
-                    onBlur={(e) => {
-                        onAutoSave(
-                            dataElement.id,
-                            e.target.value ? Number(e.target.value) : undefined,
-                        );
+                    onChange={(value) => {
+                        onFieldChange(dataElement.id, value);
                     }}
                 />
             );
@@ -345,11 +373,8 @@ export const DataElementField = React.memo<{
                     style={{
                         width: "100%",
                     }}
-                    onBlur={(e) => {
-                        onAutoSave(
-                            dataElement.id,
-                            e.target.value ? Number(e.target.value) : undefined,
-                        );
+                    onChange={(value) => {
+                        onFieldChange(dataElement.id, value);
                     }}
                 />
             );
@@ -363,11 +388,8 @@ export const DataElementField = React.memo<{
                     style={{
                         width: "100%",
                     }}
-                    onBlur={(e) => {
-                        onAutoSave(
-                            dataElement.id,
-                            e.target.value ? Number(e.target.value) : undefined,
-                        );
+                    onChange={(value) => {
+                        onFieldChange(dataElement.id, value);
                     }}
                 />
             );

@@ -3,71 +3,84 @@ import { orderBy } from "lodash";
 import React from "react";
 import { RootRoute } from "../routes/__root";
 import { ProgramRuleResult, RenderType } from "../schemas";
-import { calculateColSpan } from "../utils/utils";
+import { buildCurrentDataElements, calculateColSpan } from "../utils/utils";
 import { DataElementField } from "./data-element-field";
-
-interface CurrentDataElementMeta {
-    compulsory?: boolean;
-    desktopRenderType?: RenderType["type"];
-}
+import dayjs from "dayjs";
 
 interface DataElementRendererProps {
     dataElementId: string;
-    currentDataElements: Map<string, CurrentDataElementMeta>;
+    currentDataElements: ReturnType<typeof buildCurrentDataElements>;
     ruleResult: ProgramRuleResult;
     sectionLength: number;
     form: FormInstance;
-    onAutoSave: (fieldId: string, value: any) => void;
+    onFieldChange: (fieldId: string, value: any) => void;
     mode?: "dataElement" | "attribute";
     xl?: number;
 }
-
-export function DataElementRenderer({
+export const DataElementRenderer = ({
     dataElementId,
     currentDataElements,
     ruleResult,
     sectionLength,
     form,
-    onAutoSave,
+    onFieldChange,
     mode = "dataElement",
     xl,
-}: DataElementRendererProps) {
+}: DataElementRendererProps) => {
     const { dataElements, trackedEntityAttributes, optionSets, optionGroups } =
         RootRoute.useLoaderData();
 
-    if (
-        ruleResult.hiddenFields.has(dataElementId) &&
-        ruleResult.shownOptionGroups[dataElementId] === undefined
-    ) {
-        return null;
+    // Check if field should be hidden
+    const shouldHide =
+        ruleResult.hiddenFields.includes(dataElementId) &&
+        ruleResult.shownOptionGroups[dataElementId] === undefined;
+
+    // If field should be hidden, check if it has a value
+    // If it has a value, show it anyway (read-only or disabled)
+    if (shouldHide) {
+        const currentValue = form.getFieldValue(dataElementId);
+        const hasValue =
+            currentValue !== undefined &&
+            currentValue !== null &&
+            currentValue !== "";
+
+        // If no value, hide the field completely
+        if (!hasValue) {
+            return null;
+        }
+        // If it has a value, we'll render it but make it disabled (handled below)
     }
 
     const currentDataElement =
         mode === "attribute"
             ? trackedEntityAttributes.get(dataElementId)
             : dataElements.get(dataElementId);
+
     if (!currentDataElement) return null;
 
-    if (ruleResult.hiddenSections.has(dataElementId)) return null;
+    if (ruleResult.hiddenSections.includes(dataElementId)) return null;
 
-    const { compulsory = false, desktopRenderType } =
-        currentDataElements.get(dataElementId) ?? {};
+    const {
+        compulsory = false,
+        desktopRenderType,
+        allowFutureDate,
+    } = currentDataElements.get(dataElementId) ?? {};
 
     const optionSetId = currentDataElement.optionSet?.id ?? "";
     const hiddenOptions = ruleResult.hiddenOptions[dataElementId];
-    const shownOptionGroups =
-        ruleResult.shownOptionGroups[dataElementId] ?? new Set<string>();
+    const shownOptionGroups = ruleResult.shownOptionGroups[dataElementId] ?? [];
 
+    // Filter options based on rule results
     let finalOptions = orderBy(
         optionSets.get(optionSetId)?.flatMap((o) => {
-            if (hiddenOptions?.has(o.id)) return [];
+            if (hiddenOptions?.includes(o.id)) return [];
             return o;
         }),
         "sortOrder",
     );
 
-    if (shownOptionGroups.size > 0) {
-        const groupId = shownOptionGroups.values().next().value;
+    if (shownOptionGroups.length > 0) {
+        const groupId = shownOptionGroups[0];
         const currentOptions = optionGroups.get(groupId) ?? [];
         finalOptions = currentOptions.map(({ code, id, name, sortOrder }) => ({
             id,
@@ -78,9 +91,16 @@ export function DataElementRenderer({
         }));
     }
 
+    // Filter messages based on dataElementId
     const errors = ruleResult.errors.filter((m) => m.key === dataElementId);
     const messages = ruleResult.messages.filter((m) => m.key === dataElementId);
     const warnings = ruleResult.warnings.filter((m) => m.key === dataElementId);
+
+    // Determine if field should be disabled
+    // Disable if: assigned by program rule OR hidden by program rule (but has value)
+    const isDisabled =
+        dataElementId in ruleResult.assignments ||
+        ruleResult.hiddenFields.includes(dataElementId);
 
     return (
         <DataElementField
@@ -92,7 +112,7 @@ export function DataElementRenderer({
             warnings={warnings}
             errors={errors}
             required={compulsory}
-            disabled={dataElementId in ruleResult.assignments}
+            disabled={isDisabled}
             key={dataElementId}
             form={form}
             xs={calculateColSpan(sectionLength, 24)}
@@ -100,7 +120,11 @@ export function DataElementRenderer({
             md={calculateColSpan(sectionLength, 24)}
             lg={calculateColSpan(sectionLength, 12)}
             xl={xl ?? calculateColSpan(sectionLength, 6)}
-            onAutoSave={onAutoSave}
+            onFieldChange={onFieldChange}
+            disabledDate={(date) => {
+                if (allowFutureDate) return date.isBefore(dayjs(), "day");
+                return date.isAfter(dayjs(), "day");
+            }}
         />
     );
-}
+};

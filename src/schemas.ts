@@ -1,12 +1,6 @@
 import { GetProp, TablePaginationConfig, TreeSelectProps } from "antd";
 import { FilterValue } from "antd/es/table/interface";
 import z from "zod";
-import {
-    flattenEnrollment,
-    flattenEvent,
-    flattenTrackedEntity,
-    flattenTrackedEntityResponse,
-} from "./utils/utils";
 
 export const UID = z
     .string()
@@ -30,6 +24,15 @@ const RenderTypeSchema = z.object({
         "ICON",
     ]),
 });
+
+export const SyncStatusSchema = z.enum([
+    "draft",
+    "pending",
+    "syncing",
+    "synced",
+    "failed",
+    "deleted",
+]);
 
 export const UserSchema = z.object({
     uid: UID,
@@ -115,6 +118,7 @@ export const ProgramTrackedEntityAttributeSchema = z.object({
     renderOptionsAsRadio: z.boolean(),
     searchable: z.boolean(),
     trackedEntityAttribute: TrackedEntityAttributeSchema,
+    allowFutureDate: z.boolean(),
     renderType: z
         .object({
             DESKTOP: RenderTypeSchema,
@@ -280,7 +284,7 @@ export const EnrollmentsSchema = z.object({
     deleted: z.boolean(),
     createdBy: UserSchema.optional(),
     updatedBy: UserSchema.optional(),
-    events: z.array(EventSchema).optional(),
+    events: z.array(EventSchema).catch([]),
     attributes: z.array(AttributeSchema),
     notes: z.array(z.unknown()).optional(),
 });
@@ -297,7 +301,6 @@ export const TrackedEntitySchema = z.object({
     createdBy: UserSchema.optional(),
     updatedBy: UserSchema.optional(),
     attributes: z.array(AttributeSchema),
-    createdAtClient: z.string(),
     enrollments: z.array(EnrollmentsSchema),
     programOwners: z
         .array(
@@ -332,6 +335,37 @@ export const EventResponseSchema = z.object({
     events: z.array(EventSchema),
 });
 
+export const FlattenedTrackedEntitySchema = TrackedEntitySchema.omit({
+    attributes: true,
+    enrollments: true,
+}).extend({
+    attributes: z.record(z.string(), z.any()),
+    syncStatus: SyncStatusSchema,
+    lastSynced: z.string(),
+    syncError: z.string().nullable().optional(),
+    version: z.number(),
+});
+
+export const FlattenedEventSchema = EventSchema.omit({
+    dataValues: true,
+}).extend({
+    dataValues: z.record(z.string(), z.any()),
+    syncStatus: SyncStatusSchema,
+    lastSynced: z.string(),
+    syncError: z.string().nullable().optional(),
+    version: z.number(),
+});
+export const FlattenedEnrollmentSchema = EnrollmentsSchema.omit({
+    attributes: true,
+    events: true,
+}).extend({
+    attributes: z.record(z.string(), z.any()),
+    syncStatus: SyncStatusSchema,
+    lastSynced: z.string(),
+    syncError: z.string().nullable().optional(),
+    version: z.number(),
+});
+
 export type Client = z.infer<typeof ClientSchema>;
 export type Program = z.infer<typeof ProgramSchema>;
 export type ProgramStage = z.infer<typeof ProgramStageSchema>;
@@ -359,25 +393,64 @@ export type EventResponse = z.infer<typeof EventResponseSchema>;
 export type ProgramSection = z.infer<typeof ProgramSectionSchema>;
 export type RenderType = z.infer<typeof RenderTypeSchema>;
 
-export type Message = {
-    key: string;
-    content: string;
-};
+export type FlattenedTrackedEntity = z.infer<
+    typeof FlattenedTrackedEntitySchema
+>;
+export type FlattenedEvent = z.infer<typeof FlattenedEventSchema>;
+export type FlattenedEnrollment = z.infer<typeof FlattenedEnrollmentSchema>;
+export type SyncStatus = z.infer<typeof SyncStatusSchema>;
+
+export const MessageSchema = z.object({
+    key: z.string(),
+    content: z.string(),
+});
+
+export type Message = z.infer<typeof MessageSchema>;
 
 export type ProgramRuleResult = {
     assignments: Record<string, any>;
-    hiddenFields: Set<string>;
-    shownFields: Set<string>;
-    hiddenSections: Set<string>;
-    shownSections: Set<string>;
+    hiddenFields: string[];
+    shownFields: string[];
+    hiddenSections: string[];
+    shownSections: string[];
     messages: Array<Message>;
     warnings: Array<Message>;
     errors: Array<Message>;
-    hiddenOptions: Record<string, Set<string>>;
-    shownOptions: Record<string, Set<string>>;
-    hiddenOptionGroups: Record<string, Set<string>>;
-    shownOptionGroups: Record<string, Set<string>>;
+    hiddenOptions: Record<string, string[]>;
+    shownOptions: Record<string, string[]>;
+    hiddenOptionGroups: Record<string, string[]>;
+    shownOptionGroups: Record<string, string[]>;
 };
+
+/**
+ * Persisted rule result in TanStack DB
+ * Serialized version of ProgramRuleResult for database storage
+ */
+export const RuleResultSchema = z.object({
+    id: z.string(), // Primary key: `${eventId}_${formType}`
+    // eventId: z.string(), // Foreign key to event
+    // formType: z.enum(["main", "stage", "registration"]), // Form context
+    // trackedEntityId: z.string().optional(), // Optional for registration forms
+    // Rule execution results (serialized from ProgramRuleResult)
+    assignments: z.record(z.string(), z.any()),
+    hiddenFields: z.array(z.string()),
+    shownFields: z.array(z.string()),
+    hiddenSections: z.array(z.string()),
+    shownSections: z.array(z.string()),
+    hiddenOptions: z.record(z.string(), z.array(z.string())),
+    shownOptions: z.record(z.string(), z.array(z.string())),
+    hiddenOptionGroups: z.record(z.string(), z.array(z.string())),
+    shownOptionGroups: z.record(z.string(), z.array(z.string())),
+    errors: z.array(MessageSchema),
+    warnings: z.array(MessageSchema),
+    messages: z.array(MessageSchema),
+
+    // Metadata
+    // updatedAt: z.string(), // ISO timestamp
+    // version: z.number(), // For conflict resolution
+});
+
+export type RuleResult = z.infer<typeof RuleResultSchema>;
 
 export type OnChange = {
     pagination?: TablePaginationConfig;
@@ -420,13 +493,6 @@ export interface TrackerDataView {
 export interface TrackedEntityType {
     id: string;
 }
-
-export type FlattenedTrackedEntity = ReturnType<typeof flattenTrackedEntity>;
-export type FlattenedTrackedEntities = ReturnType<
-    typeof flattenTrackedEntityResponse
->;
-export type FlattenedEvent = ReturnType<typeof flattenEvent>;
-export type FlattenedEnrollment = ReturnType<typeof flattenEnrollment>;
 
 export interface Village {
     village_id: string;

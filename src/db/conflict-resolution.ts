@@ -1,5 +1,7 @@
+import { trackedEntitiesCollection } from "../collections";
+import { enrollmentsCollection } from "../collections/enrollments";
+import { eventsCollection } from "../collections/events";
 import { FlattenedEvent, FlattenedTrackedEntity } from "./../schemas";
-import { db } from "./index";
 
 /**
  * Conflict Resolution Strategies for Dexie-DHIS2 Sync
@@ -90,7 +92,7 @@ export function detectConflict(
  * Resolve conflict using specified strategy
  */
 export async function resolveConflict(
-    entityType: "trackedEntity" | "event" | "relationship",
+    entityType: "trackedEntity" | "event" | "enrollment",
     entityId: string,
     localData: any,
     remoteData: any,
@@ -178,22 +180,35 @@ export async function resolveConflict(
  * Update local database with remote data
  */
 async function updateLocalWithRemote(
-    entityType: "trackedEntity" | "event" | "relationship",
+    entityType: "trackedEntity" | "event" | "enrollment",
     entityId: string,
     remoteData: any,
 ): Promise<void> {
-    const updates = {
-        ...remoteData,
-        syncStatus: "synced" as const,
-        lastSynced: new Date().toISOString(),
-    };
-
     switch (entityType) {
         case "trackedEntity":
-            await db.trackedEntities.update(entityId, updates);
+            const tx = trackedEntitiesCollection.update(entityId, (draft) => {
+                Object.assign(draft, remoteData);
+                draft.syncStatus = "synced";
+                draft.lastSynced = new Date().toISOString();
+            });
+            await tx.isPersisted.promise;
             break;
         case "event":
-            await db.events.update(entityId, updates);
+            const txe = eventsCollection.update(entityId, (draft) => {
+                Object.assign(draft, remoteData);
+                draft.syncStatus = "synced";
+                draft.lastSynced = new Date().toISOString();
+            });
+            await txe.isPersisted.promise;
+            break;
+
+        case "enrollment":
+            const txen = enrollmentsCollection.update(entityId, (draft) => {
+                Object.assign(draft, remoteData);
+                draft.syncStatus = "synced";
+                draft.lastSynced = new Date().toISOString();
+            });
+            await txen.isPersisted.promise;
             break;
     }
 
@@ -313,7 +328,7 @@ export async function smartMerge(
  * Returns result for logging/notification
  */
 export async function handleConflict(
-    entityType: "trackedEntity" | "event" | "relationship",
+    entityType: "trackedEntity" | "event" | "enrollment",
     entityId: string,
     localData: any,
     remoteData: any,

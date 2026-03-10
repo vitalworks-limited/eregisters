@@ -24,8 +24,8 @@ export function useModalState<
     );
 
     const closeModal = useCallback(() => {
-        setIsOpen(false);
         setData(null);
+        setIsOpen(false);
     }, []);
 
     const updateData = useCallback((updater: (prev: T | null) => T | null) => {

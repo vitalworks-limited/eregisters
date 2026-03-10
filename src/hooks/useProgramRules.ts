@@ -16,6 +16,7 @@ export interface UseProgramRulesOptions {
     programRuleVariables: ProgramRuleVariable[];
     programStage?: string;
     program: string;
+    id?: string;
     trackedEntityAttributes?: Record<string, any>;
     previousEvents?: Array<{ dataValues: Record<string, any> }>;
     debounceMs?: number;
@@ -39,9 +40,10 @@ export const useProgramRules = ({
     programRuleVariables,
     programStage,
     program,
+    id,
     trackedEntityAttributes = {},
     previousEvents = [],
-    debounceMs = 300,
+    debounceMs = 500,
     autoExecute = false,
     isRegistration = false,
 }: UseProgramRulesOptions): UseProgramRulesReturn => {
@@ -50,6 +52,10 @@ export const useProgramRules = ({
     );
     const [isExecuting, setIsExecuting] = useState(false);
 
+    // Use provided data instead of querying
+    const effectiveTrackedEntityAttributes = trackedEntityAttributes;
+    const effectivePreviousEvents = previousEvents;
+
     const executeRules = useCallback(
         (providedDataValues?: Record<string, any>): ProgramRuleResult => {
             setIsExecuting(true);
@@ -57,7 +63,7 @@ export const useProgramRules = ({
                 const dataValues = providedDataValues || form.getFieldsValue();
                 const attributeValues = isRegistration
                     ? dataValues
-                    : trackedEntityAttributes;
+                    : effectiveTrackedEntityAttributes;
                 const result = executeProgramRules({
                     programRules,
                     programRuleVariables,
@@ -65,7 +71,7 @@ export const useProgramRules = ({
                     attributeValues,
                     program,
                     programStage,
-                    previousEvents,
+                    previousEvents: effectivePreviousEvents,
                 });
 
                 setRuleResult(result);
@@ -82,8 +88,8 @@ export const useProgramRules = ({
             form,
             programRules,
             programRuleVariables,
-            trackedEntityAttributes,
-            previousEvents,
+            effectiveTrackedEntityAttributes,
+            effectivePreviousEvents,
             program,
             programStage,
             isRegistration,
@@ -102,10 +108,10 @@ export const useProgramRules = ({
 
         const dataValues = form.getFieldsValue();
         // For registration, attributes come from form values
-        // For events, attributes come from trackedEntityAttributes
+        // For events, attributes come from TanStack DB query
         const attributeValues = isRegistration
             ? dataValues
-            : trackedEntityAttributes;
+            : effectiveTrackedEntityAttributes;
 
         const valuesString = JSON.stringify({
             data: dataValues,
@@ -132,19 +138,24 @@ export const useProgramRules = ({
         autoExecute,
         form,
         isRegistration,
-        trackedEntityAttributes,
+        effectiveTrackedEntityAttributes,
         executeRules,
         debounceMs,
     ]);
 
     /**
      * Auto-execute rules when dependencies change
-     * This catches changes to trackedEntityAttributes and enrollment
+     * This catches changes to tracked entity data from TanStack DB
      */
     useEffect(() => {
         if (!autoExecute) return;
         triggerAutoExecute();
-    }, [autoExecute, trackedEntityAttributes, triggerAutoExecute]);
+    }, [
+        autoExecute,
+        effectiveTrackedEntityAttributes,
+        effectivePreviousEvents,
+        triggerAutoExecute,
+    ]);
 
     // Derived state
     const hasErrors = ruleResult.errors.length > 0;
@@ -183,9 +194,10 @@ export const useProgramRulesWithDexie = ({
     programRuleVariables,
     programStage,
     program,
+    id,
     trackedEntityAttributes = {},
     previousEvents = [],
-    debounceMs = 300,
+    debounceMs = 500,
     autoExecute = false,
     onAssignments,
     applyAssignmentsToForm = true,
@@ -200,6 +212,7 @@ export const useProgramRulesWithDexie = ({
         programRuleVariables,
         programStage,
         program,
+        id,
         trackedEntityAttributes,
         previousEvents,
         debounceMs,
@@ -212,7 +225,7 @@ export const useProgramRulesWithDexie = ({
             let allAssignments: Record<string, any> = {};
             const currentValues = providedDataValues || form.getFieldsValue();
             const result = basicRules.executeRules(currentValues);
-            if (clearHiddenFields && result.hiddenFields.size > 0) {
+            if (clearHiddenFields && result.hiddenFields.length > 0) {
                 const fieldsToClear: Record<string, any> = {};
                 result.hiddenFields.forEach((fieldId) => {
                     if (
@@ -269,61 +282,10 @@ export const useProgramRulesWithDexie = ({
         ],
     );
 
-    // Override triggerAutoExecute to use executeAndApplyRules instead of executeRules
-    const lastExecutedValuesRef = useRef<string>("");
-    const timerRef = useRef<NodeJS.Timeout | null>(null);
-
-    const triggerAutoExecuteWithDexie = useCallback(() => {
-        if (!autoExecute) return;
-
-        const dataValues = form.getFieldsValue();
-        // For registration, attributes come from form values
-        // For events, attributes come from trackedEntityAttributes
-        const attributeValues = isRegistration
-            ? dataValues
-            : trackedEntityAttributes;
-
-        const valuesString = JSON.stringify({
-            data: dataValues,
-            attributes: attributeValues,
-        });
-
-        // Skip if values haven't changed
-        if (lastExecutedValuesRef.current === valuesString) {
-            return;
-        }
-
-        // console.log("🔄 Auto-executing program rules (with Dexie)", {
-        //     isRegistration,
-        //     dataValuesCount: Object.keys(dataValues).length,
-        //     attributeValuesCount: Object.keys(attributeValues).length,
-        //     hasChanges: lastExecutedValuesRef.current !== valuesString,
-        // });
-
-        lastExecutedValuesRef.current = valuesString;
-
-        // Clear existing timer
-        if (timerRef.current) {
-            clearTimeout(timerRef.current);
-        }
-
-        // Start debounce timer
-        timerRef.current = setTimeout(() => {
-            executeAndApplyRules();
-        }, debounceMs);
-    }, [
-        autoExecute,
-        form,
-        isRegistration,
-        trackedEntityAttributes,
-        executeAndApplyRules,
-        debounceMs,
-    ]);
-
     return {
         ...basicRules,
         executeAndApplyRules,
-        triggerAutoExecute: triggerAutoExecuteWithDexie, // Override with Dexie-aware version
+        triggerAutoExecute: basicRules.triggerAutoExecute,
     };
 };
 
@@ -332,10 +294,10 @@ export function useFieldVisibility(
     ruleResult: ProgramRuleResult,
 ): boolean {
     return useMemo(() => {
-        if (ruleResult.hiddenFields.has(fieldId)) {
+        if (ruleResult.hiddenFields.includes(fieldId)) {
             return false;
         }
-        if (ruleResult.shownFields.has(fieldId)) {
+        if (ruleResult.shownFields.includes(fieldId)) {
             return true;
         }
         return true;
@@ -347,11 +309,11 @@ export function useSectionVisibility(
     ruleResult: ProgramRuleResult,
 ): boolean {
     return useMemo(() => {
-        if (ruleResult.hiddenSections.has(sectionId)) {
+        if (ruleResult.hiddenSections.includes(sectionId)) {
             return false;
         }
 
-        if (ruleResult.shownSections.has(sectionId)) {
+        if (ruleResult.shownSections.includes(sectionId)) {
             return true;
         }
 
@@ -372,12 +334,12 @@ export function useFilteredOptions<T extends { id: string }>(
         }
 
         return allOptions.filter((option) => {
-            if (hiddenOptions?.has(option.id)) {
+            if (hiddenOptions?.includes(option.id)) {
                 return false;
             }
 
-            if (shownOptions && shownOptions.size > 0) {
-                return shownOptions.has(option.id);
+            if (shownOptions && shownOptions.length > 0) {
+                return shownOptions.includes(option.id);
             }
 
             return true;

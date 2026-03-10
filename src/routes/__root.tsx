@@ -146,7 +146,7 @@ function LayoutWithDrafts() {
 
                 <Space>
                     <HomeOutlined style={{ fontSize: 20, color: "#1890ff" }} />
-                    <Text strong>{orgUnit.name}</Text>
+                    <Text strong>{orgUnit?.name}</Text>
                     <SyncStatus syncManager={syncManager} />
                     <PullButton syncManager={syncManager} />
                     <MetadataSyncComponent

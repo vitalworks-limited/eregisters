@@ -3,8 +3,8 @@ import dayjs from "dayjs";
 import React, { useEffect, useState } from "react";
 import { DataElement, TrackedEntityAttribute } from "../schemas";
 
-function dobFromAge(years = 0, months = 0, days = 0) {
-    return dayjs()
+function dobFromAge(now: dayjs.Dayjs, years = 0, months = 0, days = 0) {
+    return now
         .subtract(years, "year")
         .subtract(months, "month")
         .subtract(days, "day");
@@ -26,12 +26,12 @@ const { Text } = Typography;
 export default function DobPicker({
     form,
     dataElement,
-    onAutoSave,
+    onFieldChange,
     disabled = false,
 }: {
     form: FormInstance<any>;
     dataElement: DataElement | TrackedEntityAttribute;
-    onAutoSave?: (dataElementId: string, value: any) => void;
+    onFieldChange?: (dataElementId: string, value: any) => void;
     disabled?: boolean;
 }) {
     const [years, setYears] = useState<number | null>(null);
@@ -57,17 +57,22 @@ export default function DobPicker({
         newMonths: number | null,
         newDays: number | null,
     ) => {
-        setYears(newYears);
-        setMonths(newMonths);
-        setDays(newDays);
-        const calculatedDob = dobFromAge(
-            newYears ?? 0,
-            newMonths ?? 0,
-            newDays ?? 0,
-        );
-        const dobString = calculatedDob.format("YYYY-MM-DD");
-        form.setFieldValue(dataElement.id, dobString);
-        onAutoSave?.(dataElement.id, dobString);
+        if (enrolledAt) {
+            setYears(newYears);
+            setMonths(newMonths);
+            setDays(newDays);
+            const calculatedDob = dobFromAge(
+                dayjs(enrolledAt),
+                newYears ?? 0,
+                newMonths ?? 0,
+                newDays ?? 0,
+            );
+            const dobString = calculatedDob.format("YYYY-MM-DD");
+            // onFieldChange now handles both form update and DB persistence
+            onFieldChange?.(dataElement.id, dobString);
+        } else {
+            onFieldChange?.(dataElement.id, null);
+        }
     };
 
     const handleDateChange = (date: dayjs.Dayjs | null) => {
@@ -77,14 +82,14 @@ export default function DobPicker({
             setMonths(age.months);
             setDays(age.days);
             const dobString = date.format("YYYY-MM-DD");
-            form.setFieldValue(dataElement.id, dobString);
-            onAutoSave?.(dataElement.id, dobString);
+            // onFieldChange now handles both form update and DB persistence
+            onFieldChange?.(dataElement.id, dobString);
         } else {
             setYears(null);
             setMonths(null);
             setDays(null);
-            form.setFieldValue(dataElement.id, null);
-            onAutoSave?.(dataElement.id, null);
+            // onFieldChange now handles both form update and DB persistence
+            onFieldChange?.(dataElement.id, null);
         }
     };
 

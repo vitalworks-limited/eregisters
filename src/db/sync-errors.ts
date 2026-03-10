@@ -10,7 +10,7 @@ export enum SyncErrorType {
     NETWORK_ERROR = "NETWORK_ERROR",
     TIMEOUT = "TIMEOUT",
     CONNECTION_LOST = "CONNECTION_LOST",
-
+		
     // Authentication errors (requires user action)
     UNAUTHORIZED = "UNAUTHORIZED",
     FORBIDDEN = "FORBIDDEN",

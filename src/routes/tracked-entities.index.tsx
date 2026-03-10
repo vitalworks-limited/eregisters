@@ -3,22 +3,26 @@ import {
     MoreOutlined,
     UserOutlined,
 } from "@ant-design/icons";
+import { eq, ilike, useLiveSuspenseQuery } from "@tanstack/react-db";
 import { createRoute } from "@tanstack/react-router";
 import {
     Button,
     Card,
     Dropdown,
     Flex,
+    Form,
     MenuProps,
     Table,
     Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
+
 import React from "react";
+import { trackedEntitiesCollection } from "../collections";
+import { enrollmentsCollection } from "../collections/enrollments";
 import { DataModal } from "../components/data-modal";
 import NoPatientsCard from "../components/no-patient-card";
 import { TrackerRegistration } from "../components/tracker-registration";
-import { db } from "../db";
 import { useModalState } from "../hooks/useModalState";
 import { FlattenedTrackedEntity } from "../schemas";
 import {
@@ -33,33 +37,9 @@ export const TrackedEntitiesIndexRoute = createRoute({
     getParentRoute: () => TrackedEntitiesRoute,
     path: "/",
     component: TrackedEntitiesSearch,
-    loaderDeps: ({ search }) => ({ search }),
-    loader: async ({
-        deps: {
-            search: { search },
-        },
-    }) => {
-        if (search && Object.values(search).length > 0) {
-            const localSearch = await db.trackedEntities
-                .filter((te) => {
-                    return Object.entries(search).every(
-                        ([filterKey, filterValue]) => {
-                            return String(te.attributes[filterKey])
-                                .toLowerCase()
-                                .includes(filterValue.toLowerCase());
-                        },
-                    );
-                })
-                .toArray();
-            return localSearch;
-        }
-
-        return [];
-    },
 });
 
 function TrackedEntitiesSearch() {
-    const trackedEntities = TrackedEntitiesIndexRoute.useLoaderData();
     const {
         program,
         trackedEntityAttributes,
@@ -67,9 +47,40 @@ function TrackedEntitiesSearch() {
         orgUnit: { id },
     } = RootRoute.useLoaderData();
     const navigate = TrackedEntitiesIndexRoute.useNavigate();
-    const { data, enrollment, isOpen, openModal, closeModal } =
-        useModalState<FlattenedTrackedEntity>();
+    const {
+        data: trackedEntity,
+        enrollment,
+        isOpen,
+        openModal,
+        closeModal,
+    } = useModalState<FlattenedTrackedEntity>();
     const { search } = TrackedEntitiesRoute.useSearch();
+
+    const { data: currentTrackedEntities = [] } = useLiveSuspenseQuery(
+        (q) => {
+            const hasSearch = search && Object.keys(search).length > 0;
+
+            if (!hasSearch) {
+                return q
+                    .from({ trackedEntity: trackedEntitiesCollection })
+                    .where(() => eq(1, 0));
+            }
+
+            let query = q.from({ trackedEntity: trackedEntitiesCollection });
+
+            for (const [filterKey, filterValue] of Object.entries(search)) {
+                query = query.where(({ trackedEntity }) =>
+                    ilike(
+                        trackedEntity.attributes[filterKey],
+                        `%${filterValue}%`,
+                    ),
+                );
+            }
+
+            return query;
+        },
+        [search],
+    );
     const handleCreate = async () => {
         const newPatient = createEmptyTrackedEntity({
             orgUnit: id,
@@ -78,9 +89,8 @@ function TrackedEntitiesSearch() {
             orgUnit: id,
             trackedEntity: newPatient.trackedEntity,
         });
-
-        await db.trackedEntities.put(newPatient);
-        await db.enrollments.put(newEnrollment);
+        await trackedEntitiesCollection.utils.insertLocally(newPatient);
+        await enrollmentsCollection.utils.insertLocally(newEnrollment);
         openModal(newPatient, newEnrollment);
     };
 
@@ -133,7 +143,6 @@ function TrackedEntitiesSearch() {
         if (!trackedEntityAttribute.displayInList) {
             return [];
         }
-
         if (trackedEntityAttribute.id === "registeringFacility") {
             return {
                 title:
@@ -189,13 +198,14 @@ function TrackedEntitiesSearch() {
     });
 
     if (
-        trackedEntities.length === 0 &&
+        currentTrackedEntities.length === 0 &&
         Object.values(search ?? {}).some(Boolean)
     )
         return (
             <NoPatientsCard message="No clients found matching your search criteria." />
         );
-    if (trackedEntities.length === 0) return <NoPatientsCard message="" />;
+    if (currentTrackedEntities.length === 0)
+        return <NoPatientsCard message="" />;
     return (
         <Card
             variant="borderless"
@@ -206,7 +216,7 @@ function TrackedEntitiesSearch() {
                     justify="space-between"
                     style={{ width: "100%" }}
                 >
-                    <Text>{`${trackedEntities.length} results matching`}</Text>
+                    <Text>{`${currentTrackedEntities.length} results matching`}</Text>
                     <Button type="primary" size="large" onClick={handleCreate}>
                         Register New Client
                     </Button>
@@ -215,12 +225,12 @@ function TrackedEntitiesSearch() {
         >
             <Table
                 columns={columns}
-                dataSource={trackedEntities}
+                dataSource={currentTrackedEntities}
                 rowKey="trackedEntity"
                 pagination={{
                     pageSize: 5,
                     showSizeChanger: true,
-                    total: trackedEntities.length,
+                    total: currentTrackedEntities.length,
                     showTotal: (total, range) =>
                         `Showing ${range[0]} to ${range[1]} of ${total}`,
                     hideOnSinglePage: true,
@@ -241,25 +251,34 @@ function TrackedEntitiesSearch() {
 
             <DataModal<FlattenedTrackedEntity>
                 open={isOpen}
-                data={data}
+                data={trackedEntity}
                 enrollment={enrollment}
                 onClose={closeModal}
                 onSave={async ({ values, enrollment, addAnother }) => {
-                    if (values && data && enrollment) {
-                        await db.trackedEntities.put({
-                            ...data,
-                            attributes: {
-                                ...data.attributes,
-                                ...values,
+                    if (values && trackedEntity && enrollment) {
+                        const tx2 = enrollmentsCollection.update(
+                            enrollment.enrollment,
+                            (draft) => {
+                                draft.attributes = {
+                                    ...enrollment.attributes,
+                                    ...values,
+                                };
+                                draft.syncStatus = "pending";
                             },
-                            syncStatus: "pending",
-                        });
-                        await db.enrollments.put({
-                            ...enrollment,
-                            attributes: { ...enrollment.attributes, ...values },
-                            syncStatus: "pending",
-                        });
+                        );
+                        await tx2.isPersisted.promise;
 
+                        const tx1 = trackedEntitiesCollection.update(
+                            trackedEntity.trackedEntity,
+                            (draft) => {
+                                draft.attributes = {
+                                    ...trackedEntity.attributes,
+                                    ...values,
+                                };
+                                draft.syncStatus = "pending";
+                            },
+                        );
+                        await tx1.isPersisted.promise;
                         if (addAnother) {
                             const newPatient = createEmptyTrackedEntity({
                                 orgUnit: id,
@@ -268,8 +287,12 @@ function TrackedEntitiesSearch() {
                                 orgUnit: id,
                                 trackedEntity: newPatient.trackedEntity,
                             });
-                            await db.trackedEntities.put(newPatient);
-                            await db.enrollments.put(newEnrollment);
+                            await trackedEntitiesCollection.utils.insertLocally(
+                                newPatient,
+                            );
+                            await enrollmentsCollection.utils.insertLocally(
+                                newEnrollment,
+                            );
                             openModal(newPatient, newEnrollment);
                         } else {
                             navigate({
@@ -278,7 +301,7 @@ function TrackedEntitiesSearch() {
                                     orgUnits: id,
                                 },
                                 params: {
-                                    trackedEntity: data.trackedEntity,
+                                    trackedEntity: trackedEntity.trackedEntity,
                                 },
                             });
                         }
@@ -289,7 +312,12 @@ function TrackedEntitiesSearch() {
                 hasAddAnother={true}
             >
                 {(form) => (
-                    <TrackerRegistration trackedEntity={data!} form={form} />
+                    <Form form={form} layout="vertical" preserve={false}>
+                        <TrackerRegistration
+                            trackedEntity={trackedEntity!}
+                            form={form}
+                        />
+                    </Form>
                 )}
             </DataModal>
         </Card>

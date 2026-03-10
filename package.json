@@ -14,6 +14,9 @@
     "dependencies": {
         "@ant-design/icons": "^6.1.0",
         "@dhis2/app-runtime": "^3.15.1",
+        "@tanstack/db": "^0.5.30",
+        "@tanstack/query-core": "^5.90.20",
+        "@tanstack/react-db": "^0.1.74",
         "@tanstack/react-query": "^5.90.20",
         "@tanstack/react-router": "^1.157.18",
         "antd": "^6.2.2",
@@ -24,6 +27,7 @@
         "pluralize": "^8.0.0",
         "react": "^18.3.1",
         "react-dom": "^18.3.1",
+        "tanstack-dexie-db-collection": "^0.1.4",
         "zod": "^4.3.6"
     },
     "devDependencies": {

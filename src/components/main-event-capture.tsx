@@ -9,8 +9,10 @@ import {
     Select,
     Tabs,
 } from "antd";
+import dayjs from "dayjs";
 import { orderBy } from "lodash";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useRuleResultPersistence } from "../hooks/useRuleResultPersistence";
 import { RootRoute } from "../routes/__root";
 import {
     FlattenedEnrollment,
@@ -21,12 +23,12 @@ import {
     buildCurrentDataElements,
     createGetValueProps,
     createNormalize,
+    executeProgramRules,
 } from "../utils/utils";
-import RelationshipEvent from "./relationship-event";
-import { useEventForm } from "../hooks/useEventForm";
-import { ProgramStageCapture } from "./program-stage-capture";
 import { DataElementRenderer } from "./data-element-renderer";
-import dayjs from "dayjs";
+import { ProgramStageCapture } from "./program-stage-capture";
+import RelationshipEvent from "./relationship-event";
+import { eventsCollection } from "../collections";
 
 const stages: Map<string, number> = new Map([
     ["x5x1cHHjg00", 7],
@@ -43,49 +45,78 @@ export default function MainEventCapture({
     form,
     trackedEntity,
     mainEvent,
-    previousEvents,
     enrollment,
 }: {
     form: FormInstance;
     trackedEntity: FlattenedTrackedEntity;
     mainEvent: FlattenedEvent;
-    previousEvents?: FlattenedEvent[];
     enrollment: FlattenedEnrollment;
 }) {
-    const { program, optionSets, programRules, programRuleVariables } =
-        RootRoute.useLoaderData();
-
-    // const values = Form.useWatch(
-    //     ["zxJ9SDZtKUS", "nxthjrx18Y0", "RltyVq1d11i"],
-    //     form,
-    // );
     const currentServices = Form.useWatch("mrKZWf2WMIC", form);
     const ageAtVisit = Form.useWatch("zxJ9SDZtKUS", form);
     const nutritionalBMI = Form.useWatch("nxthjrx18Y0", form);
     const ageBMI = Form.useWatch("RltyVq1d11i", form);
+    const { program, optionSets, programRules, programRuleVariables } =
+        RootRoute.useLoaderData();
+
     const [activeKey, setActiveKey] = useState<string>(
         "K2nxbE9ubSs-bnV62fxQmoE",
     );
-
     const mainStage = program.programStages.find((s) => s.id === "K2nxbE9ubSs");
-    const mainStageDataElements = new Set(
-        mainStage?.programStageDataElements.map(
-            (psde) => psde.dataElement.id,
-        ) ?? [],
+    const mainStageDataElements = useMemo(
+        () =>
+            new Set(
+                mainStage?.programStageDataElements.map(
+                    (psde) => psde.dataElement.id,
+                ) ?? [],
+            ),
+        [mainStage],
     );
 
-    const { ruleResult, updateFieldWithRules, entity, executeAndApplyRules } =
-        useEventForm({
-            form,
-            event: mainEvent,
-            trackedEntity,
-            programStageId: "K2nxbE9ubSs",
+    const { ruleResult, saveRuleResult } = useRuleResultPersistence({
+        formType: "main",
+    });
+    const handleFieldChange = useCallback((fieldId: string, value: any) => {
+        form.setFieldValue(fieldId, value);
+        const currentData = form.getFieldsValue();
+        const result = executeProgramRules({
             programRules,
             programRuleVariables,
-            programId: program.id,
-            previousEvents,
-            allowedDataElements: mainStageDataElements,
+            dataValues: currentData,
+            attributeValues: trackedEntity.attributes,
+            program: program.id,
+            programStage: "K2nxbE9ubSs",
+            previousEvents: [],
         });
+
+        saveRuleResult(result);
+        const filteredAssignments = Object.fromEntries(
+            Object.entries(result.assignments).filter(([k]) =>
+                mainStageDataElements.has(k),
+            ),
+        );
+        if (Object.keys(filteredAssignments).length > 0) {
+            form.setFieldsValue(filteredAssignments);
+        }
+        if (result.hiddenFields.length > 0) {
+            const fieldsToClear: Record<string, any> = {};
+            result.hiddenFields.forEach((hiddenFieldId) => {
+                const currentValue = currentData[hiddenFieldId];
+                if (
+                    currentValue !== undefined &&
+                    currentValue !== null &&
+                    currentValue !== ""
+                ) {
+                    fieldsToClear[hiddenFieldId] = undefined;
+                    form.setFieldValue(hiddenFieldId, undefined);
+                }
+            });
+        }
+        eventsCollection.utils.insertLocally({
+            ...mainEvent,
+            dataValues: { ...mainEvent.dataValues, ...currentData },
+        });
+    }, []);
 
     const [serviceTypes, setServiceTypes] = useState<
         Array<{
@@ -97,43 +128,61 @@ export default function MainEventCapture({
     >(optionSets.get("QwsvSPpnRul") ?? []);
 
     useEffect(() => {
-        if (ruleResult.hiddenOptions["mrKZWf2WMIC"]?.size > 0) {
+        const currentData = form.getFieldsValue();
+        const result = executeProgramRules({
+            programRules,
+            programRuleVariables,
+            dataValues: currentData,
+            attributeValues: trackedEntity.attributes,
+            program: program.id,
+            programStage: "K2nxbE9ubSs",
+            previousEvents: [],
+        });
+        saveRuleResult(result);
+        const filteredAssignments = Object.fromEntries(
+            Object.entries(result.assignments).filter(([k]) =>
+                mainStageDataElements.has(k),
+            ),
+        );
+        if (Object.keys(filteredAssignments).length > 0) {
+            form.setFieldsValue(filteredAssignments);
+        }
+
+        if (result.hiddenFields.length > 0) {
+            const fieldsToClear: Record<string, any> = {};
+            result.hiddenFields.forEach((hiddenFieldId) => {
+                const currentValue = currentData[hiddenFieldId];
+                if (
+                    currentValue !== undefined &&
+                    currentValue !== null &&
+                    currentValue !== ""
+                ) {
+                    fieldsToClear[hiddenFieldId] = undefined;
+                    form.setFieldValue(hiddenFieldId, undefined);
+                }
+            });
+        }
+    }, [ageAtVisit, ageBMI, nutritionalBMI]);
+
+    useEffect(() => {
+        const currentData = form.getFieldsValue();
+        form.setFieldsValue({ ...currentData, ...mainEvent.dataValues });
+    }, [activeKey]);
+
+    useEffect(() => {
+        if (ruleResult && ruleResult.hiddenOptions["mrKZWf2WMIC"]?.length > 0) {
             setServiceTypes((prev) =>
                 prev.flatMap((o) => {
-                    if (ruleResult.hiddenOptions["mrKZWf2WMIC"].has(o.id)) {
+                    if (
+                        ruleResult.hiddenOptions["mrKZWf2WMIC"].includes(o.id)
+                    ) {
                         return [];
                     }
                     return o;
                 }),
             );
         }
-    }, [ruleResult.hiddenOptions["mrKZWf2WMIC"]]);
-
-    const handleTabChange = (active: string) => {
-        setActiveKey(() => active);
-    };
-    const executeAndApplyRulesRef = useRef(executeAndApplyRules);
-    useEffect(() => {
-        executeAndApplyRulesRef.current = executeAndApplyRules;
-    });
-
-    const lastEventRef = useRef<string | undefined>(undefined);
-
-    useEffect(() => {
-        if (!entity?.dataValues) return;
-        form.setFieldsValue(entity.dataValues);
-        lastEventRef.current = entity.event;
-        executeAndApplyRulesRef.current(entity.dataValues);
-    }, [entity?.event, form]);
-    useEffect(() => {
-        if (!mainEvent?.event || !mainEvent?.dataValues) return;
-        executeAndApplyRulesRef.current(mainEvent.dataValues);
-    }, [mainEvent]);
-
-    useEffect(() => {
-        const formValues = form.getFieldsValue();
-        executeAndApplyRulesRef.current(formValues);
-    }, [currentServices, activeKey, ageAtVisit, ageAtVisit, nutritionalBMI]);
+    }, [ruleResult?.hiddenOptions["mrKZWf2WMIC"]]);
     return (
         <Flex vertical gap={10} style={{ width: "100%" }}>
             <Card size="small" styles={{ body: { padding: 10, margin: 0 } }}>
@@ -154,11 +203,11 @@ export default function MainEventCapture({
                             <DatePicker
                                 style={{ width: "100%" }}
                                 placeholder="Select date"
-                                onChange={() => {
-                                    updateFieldWithRules(
-                                        "occurredAt",
-                                        form.getFieldValue("occurredAt"),
-                                    );
+                                onChange={(date) => {
+                                    const value = date
+                                        ? date.format("YYYY-MM-DD")
+                                        : undefined;
+                                    handleFieldChange("occurredAt", value);
                                 }}
                                 disabledDate={(date) => date.isAfter(dayjs())}
                             />
@@ -200,11 +249,8 @@ export default function MainEventCapture({
                                                   .includes(input.toLowerCase())
                                             : false,
                                 }}
-                                onChange={() => {
-                                    updateFieldWithRules(
-                                        "mrKZWf2WMIC",
-                                        form.getFieldValue("mrKZWf2WMIC"),
-                                    );
+                                onChange={(value) => {
+                                    handleFieldChange("mrKZWf2WMIC", value);
                                 }}
                             />
                         </Form.Item>
@@ -222,37 +268,33 @@ export default function MainEventCapture({
                     "asc",
                 ).flatMap((stage) => {
                     const currentDataElements = buildCurrentDataElements(stage);
-
-                    if (
-                        currentServices &&
-                        stage.id === "opwSN351xGC" &&
-                        String(currentServices)
-                            .split(",")
-                            .some((a) =>
-                                [
-                                    "TB",
-                                    "DR-TB",
-                                    "Leprosy",
-                                    "ART",
-                                    "HTS",
-                                ].includes(a),
-                            )
-                    ) {
+                    if (stage.id === "opwSN351xGC") {
+                        const shouldShow =
+                            currentServices &&
+                            String(currentServices)
+                                .split(",")
+                                .some((a) =>
+                                    [
+                                        "TB",
+                                        "DR-TB",
+                                        "Leprosy",
+                                        "ART",
+                                        "HTS",
+                                    ].includes(a),
+                                );
                         return {
                             key: stage.id,
                             label: stage.name,
+                            style: shouldShow ? {} : { display: "none" },
                             children: (
                                 <ProgramStageCapture
                                     programStage={stage}
                                     trackedEntity={trackedEntity}
                                     mainEvent={mainEvent}
-                                    previousEvents={previousEvents}
                                     enrollment={enrollment}
                                 />
                             ),
                         };
-                    } else if (stage.id === "opwSN351xGC") {
-                        return [];
                     }
 
                     if (["zKGWob5AZKP", "DA0Yt3V16AN"].includes(stage.id)) {
@@ -264,7 +306,6 @@ export default function MainEventCapture({
                                     programStage={stage}
                                     trackedEntity={trackedEntity}
                                     mainEvent={mainEvent}
-                                    previousEvents={previousEvents}
                                     enrollment={enrollment}
                                 />
                             ),
@@ -275,7 +316,10 @@ export default function MainEventCapture({
                         ["sortOrder"],
                         ["asc"],
                     ).flatMap((section) => {
-                        if (ruleResult.hiddenSections.has(section.id))
+                        if (
+                            !ruleResult ||
+                            ruleResult.hiddenSections.includes(section.id)
+                        )
                             return [];
                         return [
                             {
@@ -309,8 +353,8 @@ export default function MainEventCapture({
                                                                     .length
                                                             }
                                                             form={form}
-                                                            onAutoSave={
-                                                                updateFieldWithRules
+                                                            onFieldChange={
+                                                                handleFieldChange
                                                             }
                                                         />
                                                     );
@@ -350,7 +394,7 @@ export default function MainEventCapture({
                         overflow: "auto",
                     },
                 }}
-                onChange={handleTabChange}
+                onChange={setActiveKey}
                 activeKey={activeKey}
             />
         </Flex>

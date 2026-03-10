@@ -15,13 +15,16 @@ import {
     Statistic,
     Typography,
 } from "antd";
-import dayjs from "dayjs";
-import { useLiveQuery } from "dexie-react-hooks";
 import React from "react";
 import { DataElementField } from "../components/data-element-field";
-import { db } from "../db";
 import { ClientSchema } from "../schemas";
 import { RootRoute } from "./__root";
+import { eq, useLiveSuspenseQuery, not, and } from "@tanstack/react-db";
+import {
+    enrollmentsCollection,
+    trackedEntitiesCollection,
+} from "../collections";
+import dayjs from "dayjs";
 
 const { Content } = Layout;
 const { Title } = Typography;
@@ -33,22 +36,26 @@ export const TrackedEntitiesRoute = createRoute({
 });
 
 function TrackedEntities() {
-    const [form] = Form.useForm();
+    const form = Form.useFormInstance();
     const { program, trackedEntityAttributes, optionSets } =
         RootRoute.useLoaderData();
-
-    const total =
-        useLiveQuery(async () => {
-            return db.trackedEntities.count();
-        }, []) ?? 0;
-    const enrollments =
-        useLiveQuery(async () => {
-            return db.enrollments
-                .filter(({ enrolledAt }) => {
-                    return dayjs(enrolledAt).isSame(dayjs(), "day");
-                })
-                .count();
-        }, []) ?? 0;
+    const { data: total } = useLiveSuspenseQuery((q) =>
+        q
+            .from({ trackedEntities: trackedEntitiesCollection })
+            .where(({ trackedEntities }) =>
+                not(eq(trackedEntities.syncStatus, "draft")),
+            ),
+    );
+    const { data: enrollments } = useLiveSuspenseQuery((q) =>
+        q
+            .from({ enrollments: enrollmentsCollection })
+            .where(({ enrollments }) =>
+                and(
+                    eq(enrollments.enrolledAt, dayjs().format("YYYY-MM-DD")),
+                    not(eq(enrollments.syncStatus, "draft")),
+                ),
+            ),
+    );
     const appointments = 0;
     const navigate = TrackedEntitiesRoute.useNavigate();
     const { search } = TrackedEntitiesRoute.useSearch();
@@ -125,7 +132,7 @@ function TrackedEntities() {
                                                 lg={24}
                                                 xl={24}
                                                 form={form}
-                                                onAutoSave={() => {}}
+                                                onFieldChange={() => {}}
                                             />
                                         );
                                     },
@@ -153,7 +160,7 @@ function TrackedEntities() {
                             <Card variant="borderless">
                                 <Statistic
                                     title="Total Clients"
-                                    value={total}
+                                    value={total.length}
                                     prefix={<UserOutlined />}
                                     styles={{
                                         content: { color: "#1f4788" },
@@ -165,7 +172,7 @@ function TrackedEntities() {
                             <Card variant="borderless">
                                 <Statistic
                                     title="Registered Today"
-                                    value={enrollments}
+                                    value={enrollments.length}
                                     prefix={<CalendarOutlined />}
                                     styles={{
                                         content: { color: "#52c41a" },

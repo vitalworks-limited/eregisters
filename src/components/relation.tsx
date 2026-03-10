@@ -1,11 +1,11 @@
+import { and, eq, useLiveSuspenseQuery } from "@tanstack/react-db";
 import { Form, Row, Typography } from "antd";
-import { useLiveQuery } from "dexie-react-hooks";
-import React, { useCallback, useEffect, useRef } from "react";
-import { db } from "../db";
-import { useProgramRulesWithDexie } from "../hooks/useProgramRules";
+import React, { useCallback, useEffect } from "react";
+import { eventsCollection } from "../collections";
+import { useRuleResultPersistence } from "../hooks/useRuleResultPersistence";
 import { RootRoute } from "../routes/__root";
 import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
-import { buildCurrentDataElements } from "../utils/utils";
+import { buildCurrentDataElements, executeProgramRules } from "../utils/utils";
 import { DataElementRenderer } from "./data-element-renderer";
 
 export default function Relation({
@@ -20,107 +20,126 @@ export default function Relation({
     const { program, programRuleVariables, programRules } =
         RootRoute.useLoaderData();
 
-    const [childEventForm] = Form.useForm();
+    const [form] = Form.useForm();
+    const { ruleResult, saveRuleResult } = useRuleResultPersistence({
+        formType: "child",
+    });
 
     const [stage] = program.programStages.filter(
         ({ id }) => id === "K2nxbE9ubSs",
     );
 
-    const [currentSection] = stage.programStageSections.filter(
-        ({ name }) => name === "Child Health Services",
-    );
     const triageSection = stage.programStageSections.find(
         ({ name }) => name === "Triage",
     );
+    const currentDataElements = buildCurrentDataElements(stage);
 
-    const childEventRef = useRef<typeof childEvent>(undefined);
-
-    const childEvent = useLiveQuery(async () => {
-        return db.events
-            .where("parentEvent")
-            .equals(mainEvent.event)
-            .filter((x) => x.trackedEntity === trackedEntity.trackedEntity)
-            .first();
-    }, [mainEvent.event, trackedEntity.trackedEntity]);
-
-    useEffect(() => {
-        childEventRef.current = childEvent;
-    }, [childEvent?.event]);
-
-    const persistFields = useCallback(async (fields: Record<string, any>) => {
-        const event = childEventRef.current;
-        if (!event?.event) return;
-        const current = await db.events.get(event.event);
-        if (!current) return;
-        await db.events.update(event.event, {
-            dataValues: { ...current.dataValues, ...fields },
-        });
-    }, []);
-
-    const { ruleResult, executeAndApplyRules, triggerAutoExecute } =
-        useProgramRulesWithDexie({
-            form: childEventForm,
-            programRules,
-            programRuleVariables,
-            programStage: "K2nxbE9ubSs",
-            trackedEntityAttributes: trackedEntity.attributes,
-            onAssignments: persistFields,
-            applyAssignmentsToForm: true,
-            persistAssignments: true,
-            program: program.id,
-            autoExecute: true,
-            clearHiddenFields: false,
-        });
-
-    const updateFieldWithRules = useCallback(
-        async (fieldId: string, value: any) => {
-            triggerAutoExecute();
-            const current = await db.events.get(childEvent?.event ?? "");
-            if (!current) return;
-            await db.events.update(current.event, {
-                dataValues: {
-                    ...current.dataValues,
-                    [fieldId]: value,
-                    mrKZWf2WMIC: "Child Health Services",
-                },
-                syncStatus: "pending",
-            });
-        },
-        [triggerAutoExecute],
+    const [currentSection] = stage.programStageSections.filter(
+        ({ name }) => name === "Child Health Services",
     );
+    const { data: childEvent } = useLiveSuspenseQuery((q) =>
+        q
+            .from({ events: eventsCollection })
+            .where(({ events }) =>
+                and(
+                    eq(events.parentEvent, mainEvent.event),
+                    eq(events.trackedEntity, trackedEntity.trackedEntity),
+                ),
+            )
+            .findOne(),
+    );
+    const handleFieldChange = useCallback(
+        async (fieldId: string, value: any) => {
+            form.setFieldValue(fieldId, value);
+            const currentData = form.getFieldsValue();
+            const result = executeProgramRules({
+                programRules,
+                programRuleVariables,
+                dataValues: currentData,
+                attributeValues: trackedEntity.attributes,
+                program: program.id,
+                programStage: "K2nxbE9ubSs",
+                previousEvents: [],
+            });
 
-    const currentDataElements = buildCurrentDataElements({
-        ...stage,
-        programStageDataElements: [...stage.programStageDataElements],
-    });
-    const executeAndApplyRulesRef = useRef(executeAndApplyRules);
-    useEffect(() => {
-        executeAndApplyRulesRef.current = executeAndApplyRules;
-    });
+            saveRuleResult(result);
+            const filteredAssignments = Object.fromEntries(
+                Object.entries(result.assignments).filter(([k]) =>
+                    currentDataElements.has(k),
+                ),
+            );
+            if (Object.keys(filteredAssignments).length > 0) {
+                form.setFieldsValue(filteredAssignments);
+            }
+            if (result.hiddenFields.length > 0) {
+                const fieldsToClear: Record<string, any> = {};
+                result.hiddenFields.forEach((hiddenFieldId) => {
+                    const currentValue = currentData[hiddenFieldId];
+                    if (
+                        currentValue !== undefined &&
+                        currentValue !== null &&
+                        currentValue !== ""
+                    ) {
+                        fieldsToClear[hiddenFieldId] = undefined;
+                        form.setFieldValue(hiddenFieldId, undefined);
+                    }
+                });
+            }
+            const tx = eventsCollection.update(
+                childEvent?.event ?? "",
+                (draft) => {
+                    draft.syncStatus = "pending";
+                    draft.dataValues = {
+                        ...(childEvent?.dataValues ?? {}),
+                        ...currentData,
+                    };
+                },
+            );
+            await tx.isPersisted.promise;
+        },
+        [],
+    );
 
     useEffect(() => {
         if (!childEvent) return;
-        if (childEvent.dataValues["UuxHHVp5CnF"]) {
-            childEventForm.setFieldsValue(childEvent.dataValues);
-            executeAndApplyRulesRef.current(childEvent.dataValues);
-        } else {
-            childEventForm.setFieldsValue({
-                ...childEvent.dataValues,
-                UuxHHVp5CnF: section === "Maternity" ? "Newborn" : "Postnatal",
-            });
-            executeAndApplyRulesRef.current({
-                ...childEvent.dataValues,
-                UuxHHVp5CnF: section === "Maternity" ? "Newborn" : "Postnatal",
+        form.setFieldsValue(childEvent.dataValues);
+        const result = executeProgramRules({
+            programRules,
+            programRuleVariables,
+            dataValues: childEvent.dataValues,
+            attributeValues: trackedEntity.attributes,
+            program: program.id,
+            programStage: "K2nxbE9ubSs",
+            previousEvents: [],
+        });
+        saveRuleResult(result);
+        const filteredAssignments = Object.fromEntries(
+            Object.entries(result.assignments).filter(([k]) =>
+                currentDataElements.has(k),
+            ),
+        );
+        if (Object.keys(filteredAssignments).length > 0) {
+            form.setFieldsValue(filteredAssignments);
+        }
+
+        if (result.hiddenFields.length > 0) {
+            const fieldsToClear: Record<string, any> = {};
+            result.hiddenFields.forEach((hiddenFieldId) => {
+                const currentValue = trackedEntity.attributes[hiddenFieldId];
+                if (
+                    currentValue !== undefined &&
+                    currentValue !== null &&
+                    currentValue !== ""
+                ) {
+                    fieldsToClear[hiddenFieldId] = undefined;
+                    form.setFieldValue(hiddenFieldId, undefined);
+                }
             });
         }
-    }, [childEvent?.event]);
+    }, []);
 
     return (
-        <Form
-            form={childEventForm}
-            layout="vertical"
-            style={{ margin: 0, padding: 0 }}
-        >
+        <Form form={form} component={false} layout="vertical" preserve={false}>
             <Typography.Title level={4} style={{ marginBottom: 16 }}>
                 {section}
             </Typography.Title>
@@ -132,8 +151,8 @@ export default function Relation({
                         currentDataElements={currentDataElements}
                         ruleResult={ruleResult}
                         sectionLength={triageSection.dataElements.length}
-                        form={childEventForm}
-                        onAutoSave={updateFieldWithRules}
+                        form={form}
+                        onFieldChange={handleFieldChange}
                     />
                 ))}
             </Row>
@@ -145,8 +164,8 @@ export default function Relation({
                         currentDataElements={currentDataElements}
                         ruleResult={ruleResult}
                         sectionLength={currentSection.dataElements.length}
-                        form={childEventForm}
-                        onAutoSave={updateFieldWithRules}
+                        form={form}
+                        onFieldChange={handleFieldChange}
                     />
                 ))}
             </Row>

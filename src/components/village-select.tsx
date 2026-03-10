@@ -1,10 +1,10 @@
 import { FormInstance, Select } from "antd";
-import React, { useState } from "react";
+import React from "react";
 import { Village } from "../schemas";
 import villages from "../villages.json";
 
 interface WatchField {
-    fieldId: string;
+    fieldId: string | string[];
     label: string;
 }
 
@@ -33,55 +33,40 @@ export default function VillageSelect({
     };
     const handleVillageChange = async (selectedValue: string) => {
         onChange?.(selectedValue);
-
         if (syncParentFields && selectedValue) {
             try {
                 const selectedVillage = currentVillages?.find(
                     ({ village_id, village_name }) =>
                         `${village_id}(${village_name})` === selectedValue,
                 );
+                if (selectedVillage) {
+                    const districtUpdates = Array.isArray(
+                        watchFields[0].fieldId,
+                    )
+                        ? watchFields[0].fieldId
+                        : [watchFields[0].fieldId];
 
-                if (selectedVillage && filterFields) {
-                    filterFields.forEach((field, idx) => {
-                        if (watchFields[idx]) {
-                            const fieldValue =
-                                selectedVillage[
-                                    field as keyof typeof selectedVillage
-                                ];
-                            form.setFieldValue(
-                                watchFields[idx].fieldId,
-                                fieldValue,
-                            );
+                    const subUpdates = Array.isArray(watchFields[1].fieldId)
+                        ? watchFields[1].fieldId
+                        : [watchFields[1].fieldId];
+
+                    const parishUpdates = Array.isArray(watchFields[2].fieldId)
+                        ? watchFields[2].fieldId
+                        : [watchFields[2].fieldId];
+
+                    for (const d of districtUpdates) {
+                        form.setFieldValue(d, selectedVillage.District);
+                    }
+                    for (const s of subUpdates) {
+                        form.setFieldValue(s, selectedVillage.subcounty_name);
+                    }
+                    for (const p of parishUpdates) {
+                        form.setFieldValue(p, selectedVillage.parish_name);
+                    }
+                    if (filterFields) {
+                        for (const f of filterFields) {
+                            form.setFieldValue(f, selectedValue);
                         }
-                    });
-                } else if (selectedVillage && !filterFields) {
-                    if (watchFields.length === 3) {
-                        form.setFieldValue(
-                            watchFields[0].fieldId,
-                            selectedVillage.District,
-                        );
-                        form.setFieldValue(
-                            watchFields[1].fieldId,
-                            selectedVillage.subcounty_name,
-                        );
-                        form.setFieldValue(
-                            watchFields[2].fieldId,
-                            selectedVillage.parish_name,
-                        );
-                    } else if (watchFields.length === 2) {
-                        form.setFieldValue(
-                            watchFields[0].fieldId,
-                            selectedVillage.District,
-                        );
-                        form.setFieldValue(
-                            watchFields[1].fieldId,
-                            selectedVillage.subcounty_name,
-                        );
-                    } else if (watchFields.length === 1) {
-                        form.setFieldValue(
-                            watchFields[0].fieldId,
-                            selectedVillage.District,
-                        );
                     }
                 }
             } catch (error) {
@@ -121,7 +106,7 @@ export default function VillageSelect({
                 },
             }}
             virtual
-						allowClear
+            allowClear
             style={{ width: "100%" }}
         />
     );

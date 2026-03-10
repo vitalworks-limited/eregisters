@@ -1,19 +1,18 @@
-import React, { useCallback, useEffect, useRef } from "react";
 import {
-    ReloadOutlined,
     CheckCircleOutlined,
     ClockCircleOutlined,
     ExclamationCircleOutlined,
+    ReloadOutlined,
 } from "@ant-design/icons";
 import { Button, Modal, Space, Typography } from "antd";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
+import React, { useCallback, useEffect, useState } from "react";
+import { db } from "../db";
 import { MetadataSync } from "../db/metadata-sync";
 import { useMetadataSync } from "../hooks/useMetadataSync";
 import MetadataProgress from "./metdata-progress";
-import { db } from "../db";
 
 dayjs.extend(relativeTime);
 

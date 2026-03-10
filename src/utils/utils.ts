@@ -2,18 +2,28 @@ import { FormItemProps, TableProps } from "antd";
 import dayjs from "dayjs";
 import { isEmpty } from "lodash";
 import {
-    Attribute,
     Enrollment,
     Event,
+    FlattenedEnrollment,
+    FlattenedEvent,
+    FlattenedTrackedEntity,
+    Program,
     ProgramRule,
     ProgramRuleResult,
     ProgramRuleVariable,
     ProgramStage,
     ProgramTrackedEntityAttribute,
+    SyncStatus,
     TrackedEntity,
     TrackedEntityResponse,
 } from "../schemas";
 import { generateUid } from "./id";
+import {
+    zScoreWFA,
+    zScoreHFA,
+    zScoreWFH,
+    zScoreBMIFA,
+} from "./who-zscore";
 
 const GRID_TOTAL = 24;
 
@@ -27,7 +37,7 @@ export const flattenEnrollment = ({
     attributes,
     events,
     ...otherDetails
-}: Enrollment) => {
+}: Enrollment): FlattenedEnrollment => {
     const enrollmentAttrs: Record<string, any> = attributes.reduce(
         (acc, attr) => {
             acc[attr.attribute] = attr.value;
@@ -49,7 +59,7 @@ export const flattenEvent = ({
     dataValues,
     occurredAt,
     ...otherEventDetails
-}: Event) => {
+}: Event): FlattenedEvent => {
     const eventAttrs: Record<string, string> = [
         ...dataValues,
         { dataElement: "occurredAt", value: occurredAt },
@@ -64,7 +74,7 @@ export const flattenEvent = ({
         version: 1,
         lastSynced: new Date().toISOString(),
         syncError: "",
-        parentEvent: eventAttrs["Wx7x4sMAa62"] || "",
+        parentEvent: eventAttrs["Wx7x4sMAa62"],
         occurredAt,
     };
 };
@@ -73,13 +83,11 @@ export const flattenTrackedEntity = ({
     attributes,
     enrollments,
     ...rest
-}: TrackedEntity) => {
+}: TrackedEntity): FlattenedTrackedEntity => {
     const trackedEntityAttributes = attributes.reduce((acc, attr) => {
         acc[attr.attribute] = attr.value;
         return acc;
     }, {});
-
-    const parentEntity = trackedEntityAttributes["FhyNxUVOpjh"] || "";
 
     return {
         ...rest,
@@ -87,26 +95,25 @@ export const flattenTrackedEntity = ({
         version: 1,
         lastSynced: new Date().toISOString(),
         syncError: "",
-        parentEntity,
+        parentEntity: trackedEntityAttributes["FhyNxUVOpjh"],
         attributes: trackedEntityAttributes,
     };
 };
 
 export const getAttributes = (attributes: ProgramTrackedEntityAttribute[]) => {
-    const columns: TableProps<
-        ReturnType<typeof flattenTrackedEntityResponse>[number]
-    >["columns"] = attributes.flatMap(({ trackedEntityAttribute, ...rest }) => {
-        if (!rest.displayInList) {
-            return [];
-        }
-        return {
-            title:
-                trackedEntityAttribute.displayFormName ||
-                trackedEntityAttribute.name,
-            dataIndex: ["attributes", trackedEntityAttribute.id],
-            key: trackedEntityAttribute.id,
-        };
-    });
+    const columns: TableProps<FlattenedTrackedEntity>["columns"] =
+        attributes.flatMap(({ trackedEntityAttribute, ...rest }) => {
+            if (!rest.displayInList) {
+                return [];
+            }
+            return {
+                title:
+                    trackedEntityAttribute.displayFormName ||
+                    trackedEntityAttribute.name,
+                dataIndex: ["attributes", trackedEntityAttribute.id],
+                key: trackedEntityAttribute.id,
+            };
+        });
 
     return columns;
 };
@@ -133,7 +140,6 @@ export function executeProgramRules({
     variableValues["event_date"] = dataValues?.occurredAt;
     variableValues["enrollment_date"] = attributeValues?.enrolledAt;
     variableValues["event_count"] = 1;
-
     for (const variable of programRuleVariables) {
         let value: any = null;
         if (
@@ -334,6 +340,23 @@ export function executeProgramRules({
 
         inOrgUnitGroup: (groupId: string): boolean => {
             return false;
+        },
+
+        // WHO Z-Score Functions
+        zScoreWFA: (ageMonths: number, weightKg: number, sex: any): number | null => {
+            return zScoreWFA(ageMonths, weightKg, sex);
+        },
+
+        zScoreHFA: (ageMonths: number, heightCm: number, sex: any): number | null => {
+            return zScoreHFA(ageMonths, heightCm, sex);
+        },
+
+        zScoreWFH: (heightCm: number, weightKg: number, sex: any): number | null => {
+            return zScoreWFH(heightCm, weightKg, sex);
+        },
+
+        zScoreBMIFA: (ageMonths: number, bmi: number, sex: any): number | null => {
+            return zScoreBMIFA(ageMonths, bmi, sex);
         },
     };
 
@@ -654,11 +677,11 @@ export function executeProgramRules({
     // Step 3: Run through rules and collect actions
     const result: ProgramRuleResult = {
         assignments: {},
-        hiddenFields: new Set(),
-        shownFields: new Set(),
+        hiddenFields: [],
+        shownFields: [],
         errors: [],
-        hiddenSections: new Set(),
-        shownSections: new Set(),
+        hiddenSections: [],
+        shownSections: [],
         hiddenOptions: {},
         shownOptions: {},
         hiddenOptionGroups: {},
@@ -684,7 +707,6 @@ export function executeProgramRules({
                 continue;
             }
         } else {
-            // Event context: only apply rules for this specific stage or global rules (no programStage)
             if (rule.programStage && rule.programStage.id !== programStage) {
                 continue;
             }
@@ -737,7 +759,9 @@ export function executeProgramRules({
                 case "HIDEFIELD":
                     if (targetId) {
                         // console.log(`  🙈 HIDEFIELD: ${targetId}`);
-                        result.hiddenFields.add(targetId);
+                        if (!result.hiddenFields.includes(targetId)) {
+                            result.hiddenFields.push(targetId);
+                        }
                         result.assignments[targetId] = "";
                     }
                     break;
@@ -745,50 +769,78 @@ export function executeProgramRules({
                 case "SHOWFIELD":
                     if (targetId) {
                         // console.log(`  👁️  SHOWFIELD: ${targetId}`);
-                        result.shownFields.add(targetId);
+                        if (!result.shownFields.includes(targetId)) {
+                            result.shownFields.push(targetId);
+                        }
                     }
                     break;
 
                 case "HIDESECTION":
                     if (action.programStageSection) {
-                        result.hiddenSections.add(
-                            action.programStageSection.id,
-                        );
+                        const sectionId = action.programStageSection.id;
+                        if (!result.hiddenSections.includes(sectionId)) {
+                            result.hiddenSections.push(sectionId);
+                        }
                     }
                     break;
 
                 case "SHOWSECTION":
                     if (action.programStageSection) {
-                        result.shownSections.add(action.programStageSection.id);
+                        const sectionId = action.programStageSection.id;
+                        if (!result.shownSections.includes(sectionId)) {
+                            result.shownSections.push(sectionId);
+                        }
                     }
                     break;
 
                 case "HIDEOPTION":
                     if (targetId && action.option) {
                         if (!result.hiddenOptions[targetId]) {
-                            result.hiddenOptions[targetId] = new Set();
+                            result.hiddenOptions[targetId] = [];
                         }
-                        result.hiddenOptions[targetId].add(action.option.id);
+                        if (
+                            !result.hiddenOptions[targetId].includes(
+                                action.option.id,
+                            )
+                        ) {
+                            result.hiddenOptions[targetId].push(
+                                action.option.id,
+                            );
+                        }
                     }
                     break;
 
                 case "SHOWOPTION":
                     if (targetId && action.option) {
                         if (!result.shownOptions[targetId]) {
-                            result.shownOptions[targetId] = new Set();
+                            result.shownOptions[targetId] = [];
                         }
-                        result.shownOptions[targetId].add(action.option.id);
+                        if (
+                            !result.shownOptions[targetId].includes(
+                                action.option.id,
+                            )
+                        ) {
+                            result.shownOptions[targetId].push(
+                                action.option.id,
+                            );
+                        }
                     }
                     break;
 
                 case "HIDEOPTIONGROUP":
                     if (targetId && action.optionGroup) {
                         if (!result.hiddenOptionGroups[targetId]) {
-                            result.hiddenOptionGroups[targetId] = new Set();
+                            result.hiddenOptionGroups[targetId] = [];
                         }
-                        result.hiddenOptionGroups[targetId].add(
-                            action.optionGroup.id,
-                        );
+                        if (
+                            !result.hiddenOptionGroups[targetId].includes(
+                                action.optionGroup.id,
+                            )
+                        ) {
+                            result.hiddenOptionGroups[targetId].push(
+                                action.optionGroup.id,
+                            );
+                        }
                     }
 
                     break;
@@ -796,11 +848,17 @@ export function executeProgramRules({
                 case "SHOWOPTIONGROUP":
                     if (targetId && action.optionGroup) {
                         if (!result.shownOptionGroups[targetId]) {
-                            result.shownOptionGroups[targetId] = new Set();
+                            result.shownOptionGroups[targetId] = [];
                         }
-                        result.shownOptionGroups[targetId].add(
-                            action.optionGroup.id,
-                        );
+                        if (
+                            !result.shownOptionGroups[targetId].includes(
+                                action.optionGroup.id,
+                            )
+                        ) {
+                            result.shownOptionGroups[targetId].push(
+                                action.optionGroup.id,
+                            );
+                        }
                     }
                     break;
 
@@ -871,12 +929,12 @@ export const isNumber = (valueType: string | undefined) => {
 export const createEmptyTrackedEntity = ({
     orgUnit,
     attributes = {},
-    parentEntity = "",
+    parentEntity,
 }: {
     orgUnit: string;
     attributes?: Record<string, any>;
     parentEntity?: string;
-}): ReturnType<typeof flattenTrackedEntity> => {
+}): FlattenedTrackedEntity => {
     const trackedEntity = generateUid();
     return {
         orgUnit,
@@ -886,7 +944,6 @@ export const createEmptyTrackedEntity = ({
         updatedAt: dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
         deleted: false,
         inactive: false,
-        createdAtClient: dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
         potentialDuplicate: false,
         trackedEntity,
         lastSynced: "",
@@ -905,7 +962,7 @@ export const createEmptyEnrollment = ({
     orgUnit: string;
     trackedEntity: string;
     attributes?: Record<string, string>;
-}): ReturnType<typeof flattenEnrollment> => {
+}): FlattenedEnrollment => {
     return {
         createdAt: dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ"),
         program: "ueBhWkWll5v",
@@ -932,7 +989,7 @@ export const createEmptyEvent = ({
     trackedEntity,
     enrollment,
     programStage,
-    parentEvent = "",
+    parentEvent,
     dataValues = {},
 }: {
     orgUnit: string;
@@ -942,7 +999,7 @@ export const createEmptyEvent = ({
     programStage: string;
     parentEvent?: string;
     dataValues?: Record<string, any>;
-}): ReturnType<typeof flattenEvent> => {
+}): FlattenedEvent => {
     const eventId = generateUid();
     const now = dayjs().format("YYYY-MM-DDTHH:mm:ss.SSSZ");
     return {
@@ -1015,10 +1072,10 @@ export const createGetValueProps = (valueType: string | undefined) => {
 export const createEmptyProgramRuleResult = (): ProgramRuleResult => {
     return {
         assignments: {},
-        hiddenFields: new Set(),
-        shownFields: new Set(),
-        hiddenSections: new Set(),
-        shownSections: new Set(),
+        hiddenFields: [],
+        shownFields: [],
+        hiddenSections: [],
+        shownSections: [],
         messages: [],
         warnings: [],
         errors: [],
@@ -1055,6 +1112,20 @@ export function buildCurrentDataElements(programStage: ProgramStage) {
                 renderOptionsAsRadio: psde.renderType !== undefined,
                 compulsory: psde.compulsory,
                 desktopRenderType: psde.renderType?.DESKTOP?.type,
+            },
+        ]),
+    );
+}
+
+export function buildCurrentAttributes(program: Program) {
+    return new Map(
+        program.programTrackedEntityAttributes.map((ptea) => [
+            ptea.trackedEntityAttribute.id,
+            {
+                allowFutureDate: ptea.allowFutureDate,
+                renderOptionsAsRadio: ptea.renderType !== undefined,
+                compulsory: ptea.mandatory,
+                desktopRenderType: ptea.renderType?.DESKTOP?.type,
             },
         ]),
     );

@@ -3,9 +3,11 @@ import {
     EyeOutlined,
     PlusOutlined,
 } from "@ant-design/icons";
+import { and, eq, useLiveSuspenseQuery } from "@tanstack/react-db";
 import {
     Button,
     Flex,
+    Form,
     message,
     Popconfirm,
     Table,
@@ -13,9 +15,8 @@ import {
     Typography,
 } from "antd";
 import dayjs from "dayjs";
-import { useLiveQuery } from "dexie-react-hooks";
 import React from "react";
-import { db } from "../db";
+import { eventsCollection } from "../collections";
 import { useModalState } from "../hooks/useModalState";
 import { RootRoute } from "../routes/__root";
 import {
@@ -35,13 +36,11 @@ export const ProgramStageCapture: React.FC<{
     trackedEntity: FlattenedTrackedEntity;
     mainEvent: FlattenedEvent;
     captureMode?: "modal" | "inline";
-    previousEvents?: FlattenedEvent[];
     enrollment: FlattenedEnrollment;
 }> = ({
     programStage,
     trackedEntity,
     mainEvent,
-    previousEvents,
     captureMode = "modal",
     enrollment,
 }) => {
@@ -60,21 +59,22 @@ export const ProgramStageCapture: React.FC<{
                 occurredAt:
                     mainEvent.dataValues["occurredAt"] || mainEvent.occurredAt,
             },
+            parentEvent: mainEvent.event,
         });
-        await db.events.put(newEvent);
+        const tx = eventsCollection.insert(newEvent);
+        await tx.isPersisted.promise;
         openModal(newEvent, enrollment);
     };
 
-    const events =
-        useLiveQuery(async () => {
-            if (!mainEvent.event) return [];
-            return db.events
-                .where("parentEvent")
-                .equals(mainEvent.event)
-                .filter((event) => event.programStage === programStage.id)
-                .toArray();
-        }, [trackedEntity.trackedEntity, programStage.id, mainEvent.event]) ||
-        [];
+    const { data: events } = useLiveSuspenseQuery((q) =>
+        q.from({ event: eventsCollection }).where(({ event }) => {
+            return and(
+                eq(event.programStage, programStage.id),
+                eq(event.parentEvent, mainEvent.event),
+            );
+        }),
+    );
+
     const medicines = new Map(
         optionSets.get("Fm205YyFeRg")?.map(({ code, name }) => [code, name]),
     );
@@ -112,13 +112,21 @@ export const ProgramStageCapture: React.FC<{
                 <Flex gap="small" align="center">
                     <Popconfirm
                         title="Delete Event"
-                        description="Are you sure you want to delete this event? This action cannot be undone."
+                        description="Are you sure you want to delete this event? This will sync the deletion to DHIS2."
                         okText="Delete"
                         okType="danger"
                         onConfirm={async () => {
                             try {
-                                await db.events.delete(record.event);
-                                message.success("Event deleted successfully");
+                                const tx = eventsCollection.update(
+                                    record.event,
+                                    (draft) => {
+                                        draft.syncStatus = "deleted";
+                                    },
+                                );
+                                await tx.isPersisted.promise;
+                                message.success(
+                                    "Event marked for deletion and will sync to DHIS2",
+                                );
                             } catch (error) {
                                 console.error("Failed to delete event:", error);
                                 message.error("Failed to delete event");
@@ -206,28 +214,15 @@ export const ProgramStageCapture: React.FC<{
                 enrollment={enrollment}
                 onSave={async ({ values, addAnother }) => {
                     if (values && data) {
-                        const dataValues: Record<string, any> =
-                            Object.fromEntries(
-                                Object.entries({
-                                    ...data.dataValues,
-                                    ...values,
-                                }).filter(
-                                    ([key]) =>
-                                        programStage.programStageDataElements
-                                            .map((de) => de.dataElement.id)
-                                            .includes(key) ||
-                                        key === "occurredAt",
-                                ),
-                            );
-                        await db.events.put({
-                            ...data,
-                            dataValues,
-                            syncStatus:
-                                mainEvent.syncStatus === "synced"
-                                    ? "pending"
-                                    : "draft",
-                            parentEvent: mainEvent.event,
-                        });
+                        const tx = eventsCollection.update(
+                            data.event,
+                            (draft) => {
+                                draft.dataValues = values;
+                                draft.syncStatus = "pending";
+                                draft.parentEvent = mainEvent.event;
+                            },
+                        );
+                        await tx.isPersisted.promise;
                         if (addAnother) {
                             handleCreate();
                         }
@@ -238,13 +233,14 @@ export const ProgramStageCapture: React.FC<{
                 hasAddAnother={true}
             >
                 {(form) => (
-                    <ProgramStageForm
-                        form={form}
-                        programStage={programStage}
-                        event={data!}
-                        trackedEntity={trackedEntity}
-                        previousEvents={previousEvents}
-                    />
+                    <Form form={form} layout="vertical" preserve={false}>
+                        <ProgramStageForm
+                            form={form}
+                            programStage={programStage}
+                            event={data!}
+                            trackedEntity={trackedEntity}
+                        />
+                    </Form>
                 )}
             </DataModal>
         </>

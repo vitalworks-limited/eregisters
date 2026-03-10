@@ -2,6 +2,7 @@ import Dexie, { Table } from "dexie";
 import {
     DataElement,
     FlattenedEnrollment,
+    FlattenedEvent,
     FlattenedTrackedEntity,
     Node,
     Program,
@@ -9,10 +10,8 @@ import {
     ProgramRuleResult,
     ProgramRuleVariable,
     TrackedEntityAttribute,
-    FlattenedEvent,
 } from "../schemas";
 
-export type SyncStatus = "draft" | "pending" | "syncing" | "synced" | "failed";
 export interface SyncOperation {
     id: string;
     type:
@@ -109,9 +108,9 @@ export interface SyncState {
  * RegisterDatabase - Main Dexie database instance
  */
 export class RegisterDatabase extends Dexie {
-    trackedEntities!: Table<FlattenedTrackedEntity, string>;
-    enrollments!: Table<FlattenedEnrollment, string>;
-    events!: Table<FlattenedEvent, string>;
+    // trackedEntities!: Table<FlattenedTrackedEntity, string>;
+    // enrollments!: Table<FlattenedEnrollment, string>;
+    // events!: Table<FlattenedEvent, string>;
     syncQueue!: Table<SyncOperation, string>;
     programRules!: Table<ProgramRule, string>;
     programRuleVariables!: Table<ProgramRuleVariable, string>;
@@ -146,11 +145,11 @@ export class RegisterDatabase extends Dexie {
     constructor() {
         super("MOHRegisterDB");
         this.version(1).stores({
-            trackedEntities:
-                "trackedEntity,orgUnit,createdAt,updatedAt,syncStatus,version,lastSynced,parentEntity,[trackedEntity+parentEntity]",
-            events: "event,trackedEntity,programStage,enrollment,occurredAt,updatedAt,createdAt,syncStatus,version,lastSynced,parentEvent,[event+parentEvent]",
-            enrollments:
-                "enrollment,trackedEntity,enrolledAt,version,syncStatus,lastSynced,createdAt,updatedAt",
+            // trackedEntities:
+            //     "trackedEntity,orgUnit,createdAt,updatedAt,syncStatus,version,lastSynced,parentEntity,[trackedEntity+parentEntity]",
+            // events: "event,trackedEntity,programStage,enrollment,occurredAt,updatedAt,createdAt,syncStatus,version,lastSynced,parentEvent,[event+parentEvent]",
+            // enrollments:
+            //     "enrollment,trackedEntity,enrolledAt,version,syncStatus,lastSynced,createdAt,updatedAt",
             syncQueue: "id,status,priority,type,entityId,createdAt",
             programRules: "id,program",
             programRuleVariables: "id,program",
@@ -170,8 +169,8 @@ export class RegisterDatabase extends Dexie {
      * Clear all data (useful for logout/reset)
      */
     async clearAllData(): Promise<void> {
-        await this.trackedEntities.clear();
-        await this.events.clear();
+        // await this.trackedEntities.clear();
+        // await this.events.clear();
         await this.syncQueue.clear();
     }
 
@@ -217,46 +216,46 @@ export class RegisterDatabase extends Dexie {
     /**
      * Get entities with specific sync status
      */
-    async getEntitiesByStatus(
-        status: SyncStatus,
-    ): Promise<FlattenedTrackedEntity[]> {
-        return await this.trackedEntities
-            .where("syncStatus")
-            .equals(status)
-            .toArray();
-    }
+    // async getEntitiesByStatus(
+    //     status: SyncStatus,
+    // ): Promise<FlattenedTrackedEntity[]> {
+    //     return await this.trackedEntities
+    //         .where("syncStatus")
+    //         .equals(status)
+    //         .toArray();
+    // }
 
     /**
      * Get events with specific sync status
      */
-    async getEventsByStatus(status: SyncStatus): Promise<FlattenedEvent[]> {
-        return await this.events.where("syncStatus").equals(status).toArray();
-    }
+    // async getEventsByStatus(status: SyncStatus): Promise<FlattenedEvent[]> {
+    //     return await this.events.where("syncStatus").equals(status).toArray();
+    // }
 
     /**
      * Get count of items pending sync across all tables
      */
-    async getPendingChangesCount(): Promise<{
-        entities: number;
-        events: number;
-        total: number;
-    }> {
-        const entities = await this.trackedEntities
-            .where("syncStatus")
-            .anyOf(["draft", "pending", "failed"])
-            .count();
+    // async getPendingChangesCount(): Promise<{
+    //     entities: number;
+    //     events: number;
+    //     total: number;
+    // }> {
+    //     const entities = await this.trackedEntities
+    //         .where("syncStatus")
+    //         .anyOf(["draft", "pending", "failed"])
+    //         .count();
 
-        const events = await this.events
-            .where("syncStatus")
-            .anyOf(["draft", "pending", "failed"])
-            .count();
+    //     const events = await this.events
+    //         .where("syncStatus")
+    //         .anyOf(["draft", "pending", "failed"])
+    //         .count();
 
-        return {
-            entities,
-            events,
-            total: entities + events,
-        };
-    }
+    //     return {
+    //         entities,
+    //         events,
+    //         total: entities + events,
+    //     };
+    // }
 }
 
 // Export singleton database instance

@@ -1,7 +1,6 @@
 import { PlusOutlined } from "@ant-design/icons";
-import { Button, Card, Space, Typography } from "antd";
+import { Button, Card, Form, Space, Typography } from "antd";
 import React from "react";
-import { db } from "../db";
 import { useModalState } from "../hooks/useModalState";
 import { FlattenedTrackedEntity } from "../schemas";
 import {
@@ -12,6 +11,10 @@ import { DataModal } from "./data-modal";
 import { TrackerRegistration } from "./tracker-registration";
 import { RootRoute } from "../routes/__root";
 import { TrackedEntitiesRoute } from "../routes/tracked-entities";
+import {
+    enrollmentsCollection,
+    trackedEntitiesCollection,
+} from "../collections";
 
 const { Title, Text } = Typography;
 const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
@@ -30,8 +33,8 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
             orgUnit: id,
             trackedEntity: newPatient.trackedEntity,
         });
-        await db.trackedEntities.put(newPatient);
-        await db.enrollments.put(newEnrollment);
+        await trackedEntitiesCollection.utils.insertLocally(newPatient);
+        await enrollmentsCollection.utils.insertLocally(newEnrollment);
         openModal(newPatient, newEnrollment);
     };
 
@@ -90,19 +93,28 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
                 enrollment={enrollment}
                 onSave={async ({ values, enrollment, addAnother }) => {
                     if (values && data && enrollment) {
-                        await db.trackedEntities.put({
-                            ...data,
-                            attributes: {
-                                ...data.attributes,
-                                ...values,
+                        const tx1 = trackedEntitiesCollection.update(
+                            data.trackedEntity,
+                            (draft) => {
+                                draft.attributes = {
+                                    ...data.attributes,
+                                    ...values,
+                                };
+                                draft.syncStatus = "pending";
                             },
-                            syncStatus: "pending",
-                        });
-                        await db.enrollments.put({
-                            ...enrollment,
-                            attributes: { ...enrollment.attributes, ...values },
-                            syncStatus: "pending",
-                        });
+                        );
+                        await tx1.isPersisted.promise;
+                        const tx2 = enrollmentsCollection.update(
+                            enrollment.enrollment,
+                            (draft) => {
+                                draft.attributes = {
+                                    ...enrollment.attributes,
+                                    ...values,
+                                };
+                                draft.syncStatus = "pending";
+                            },
+                        );
+                        await tx2.isPersisted.promise;
                         if (addAnother) {
                             const newPatient = createEmptyTrackedEntity({
                                 orgUnit: id,
@@ -111,9 +123,12 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
                                 orgUnit: id,
                                 trackedEntity: newPatient.trackedEntity,
                             });
-
-                            await db.trackedEntities.put(newPatient);
-                            await db.enrollments.put(newEnrollment);
+                            await trackedEntitiesCollection.utils.insertLocally(
+                                newPatient,
+                            );
+                            await enrollmentsCollection.utils.insertLocally(
+                                newEnrollment,
+                            );
                             openModal(newPatient, newEnrollment);
                         } else {
                             navigate({
@@ -133,7 +148,9 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
                 hasAddAnother={true}
             >
                 {(form) => (
-                    <TrackerRegistration trackedEntity={data!} form={form} />
+                    <Form form={form} layout="vertical" preserve={false}>
+                        <TrackerRegistration trackedEntity={data!} form={form} />
+                    </Form>
                 )}
             </DataModal>
         </Card>

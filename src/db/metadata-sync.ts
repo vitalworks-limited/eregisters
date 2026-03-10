@@ -75,7 +75,6 @@ export class MetadataSync {
             "metadata-sync-progress",
         );
         if (persistedProgress) {
-            // Restore state, but reset syncing/checking to idle
             const status =
                 persistedProgress.status === "syncing" ||
                 persistedProgress.status === "checking"
