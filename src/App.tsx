@@ -1,42 +1,64 @@
-import { useDataEngine } from "@dhis2/app-runtime";
+import { useCurrentUserInfo, useDataEngine } from "@dhis2/app-runtime";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
-import { App, ConfigProvider } from "antd";
-import React, { FC, useEffect, useRef } from "react";
-import { createSyncManager, SyncManager } from "./db/sync";
-import { startPeriodicSync, stopPeriodicSync } from "./db/periodic-sync";
+import { App, ConfigProvider, Typography } from "antd";
+import React, { FC } from "react";
+import {
+    createEnrollmentCollection,
+    createEventCollection,
+    createTrackedEntityCollection,
+} from "./collections";
+import { SyncContext } from "./machines/sync";
 import { queryClient } from "./query-client";
 import { router } from "./router";
+import { Spinner } from "./components/spinner";
+import { loadInitialSyncState } from "./db/sync-state-loader";
 
 const Main = () => {
-    const engine = useDataEngine();
-    const syncManagerRef = useRef<SyncManager | null>(null);
+    const syncActor = SyncContext.useActorRef();
 
-    if (!syncManagerRef.current) {
-        // Keep SyncManager for metadata sync only
-        syncManagerRef.current = createSyncManager(engine);
-        syncManagerRef.current.startAutoSync();
-    }
-    const syncManager = syncManagerRef.current;
+    const isFirstTimeLoading = SyncContext.useSelector((snapshot) => {
+        const isMetadataNotReady =
+            snapshot.matches({ metadataSync: "idle" }) ||
+            snapshot.matches({ metadataSync: "fullRefresh" }) ||
+            (snapshot.matches({ metadataSync: "syncing" }) &&
+                !snapshot.context.lastMetadataPull);
 
-    // Start periodic sync on mount, cleanup on unmount
-    useEffect(() => {
-        startPeriodicSync(engine);
-        return () => {
-            stopPeriodicSync();
-        };
-    }, [engine]);
+        return isMetadataNotReady;
+    });
 
-    return (
-        <RouterProvider
-            router={router}
-            context={{
-                syncManager,
-            }}
-        />
-    );
+    if (isFirstTimeLoading)
+        return (
+            <Spinner
+                component={<Typography.Text>Loading Metadata</Typography.Text>}
+            />
+        );
+    return <RouterProvider router={router} context={{ syncActor }} />;
 };
 const MyApp: FC = () => {
+    const engine = useDataEngine();
+    const trackedEntitiesCollection = createTrackedEntityCollection();
+    const enrollmentsCollection = createEnrollmentCollection();
+    const eventsCollection = createEventCollection();
+    const userInfo = useCurrentUserInfo();
+
+    const [initialSyncState, setInitialSyncState] = React.useState<{
+        lastMetadataPull?: string;
+        lastDataPull?: string;
+    } | null>(null);
+
+    React.useEffect(() => {
+        loadInitialSyncState().then(setInitialSyncState);
+    }, []);
+
+    if (!initialSyncState) {
+        return (
+            <Spinner
+                component={<Typography.Text>Initializing...</Typography.Text>}
+            />
+        );
+    }
+
     return (
         <ConfigProvider
             theme={{
@@ -53,7 +75,26 @@ const MyApp: FC = () => {
         >
             <App>
                 <QueryClientProvider client={queryClient}>
-                    <Main />
+                    <SyncContext.Provider
+                        options={{
+                            input: {
+                                engine,
+                                enrollmentsCollection,
+                                eventsCollection,
+                                trackedEntitiesCollection,
+                                orgUnit:
+                                    userInfo?.organisationUnits
+                                        .map((a) => a.id)
+                                        .join(";") ?? "",
+                                initialLastMetadataPull:
+                                    initialSyncState.lastMetadataPull,
+                                initialLastDataPull:
+                                    initialSyncState.lastDataPull,
+                            },
+                        }}
+                    >
+                        <Main />
+                    </SyncContext.Provider>
                 </QueryClientProvider>
             </App>
         </ConfigProvider>

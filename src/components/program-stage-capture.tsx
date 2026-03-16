@@ -15,9 +15,10 @@ import {
     Typography,
 } from "antd";
 import dayjs from "dayjs";
-import React from "react";
-import { eventsCollection } from "../collections";
+import React, { useMemo } from "react";
 import { useModalState } from "../hooks/useModalState";
+import { EventContext } from "../machines";
+import { SyncContext } from "../machines/sync";
 import { RootRoute } from "../routes/__root";
 import {
     FlattenedEnrollment,
@@ -44,9 +45,24 @@ export const ProgramStageCapture: React.FC<{
     captureMode = "modal",
     enrollment,
 }) => {
+    const syncActor = SyncContext.useActorRef();
     const { data, isOpen, openModal, closeModal } =
         useModalState<FlattenedEvent>();
-    const { dataElements, optionSets } = RootRoute.useLoaderData();
+    const { dataElements, optionSets, programRuleVariables, programRules } =
+        RootRoute.useLoaderData();
+    const eventsCollection = SyncContext.useSelector(
+        (a) => a.context.eventsCollection,
+    );
+
+    const mainStageDataElements = useMemo(
+        () =>
+            new Set(
+                programStage.programStageDataElements.map(
+                    (psde) => psde.dataElement.id,
+                ) ?? [],
+            ),
+        [programStage],
+    );
 
     const handleCreate = async () => {
         const newEvent = createEmptyEvent({
@@ -222,9 +238,24 @@ export const ProgramStageCapture: React.FC<{
                                 draft.parentEvent = mainEvent.event;
                             },
                         );
+                        syncActor.send({
+                            type: "SYNC_ENTITIES",
+                            entities: [
+                                {
+                                    ...data,
+                                    dataValues: {
+                                        ...data.dataValues,
+                                        ...values,
+                                    },
+                                    syncStatus: "pending",
+                                    parentEvent: mainEvent.event,
+                                },
+                            ],
+                        });
                         await tx.isPersisted.promise;
                         if (addAnother) {
-                            handleCreate();
+                            closeModal(); 
+                            await handleCreate();
                         }
                     }
                 }}
@@ -233,14 +264,30 @@ export const ProgramStageCapture: React.FC<{
                 hasAddAnother={true}
             >
                 {(form) => (
-                    <Form form={form} layout="vertical" preserve={false}>
-                        <ProgramStageForm
-                            form={form}
-                            programStage={programStage}
-                            event={data!}
-                            trackedEntity={trackedEntity}
-                        />
-                    </Form>
+                    <EventContext.Provider
+                        key={data?.event || "closed"}
+                        options={{
+                            input: {
+                                programRules,
+                                programRuleVariables,
+                                enrollment,
+                                event: data!,
+                                program: "ueBhWkWll5v",
+                                programStage: "K2nxbE9ubSs",
+                                trackedEntity,
+                                validDataElements: mainStageDataElements,
+                                form,
+                                eventsCollection,
+                            },
+                        }}
+                    >
+                        <Form form={form} layout="vertical" preserve={false}>
+                            <ProgramStageForm
+                                form={form}
+                                programStage={programStage}
+                            />
+                        </Form>
+                    </EventContext.Provider>
                 )}
             </DataModal>
         </>

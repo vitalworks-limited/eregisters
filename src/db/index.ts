@@ -6,6 +6,7 @@ import {
     FlattenedTrackedEntity,
     Node,
     Program,
+    ProgramIndicator,
     ProgramRule,
     ProgramRuleResult,
     ProgramRuleVariable,
@@ -141,19 +142,22 @@ export class RegisterDatabase extends Dexie {
     metadataVersions!: Table<MetadataVersion, string>;
     metadataSyncProgress!: Table<MetadataSyncProgress, string>;
     syncState!: Table<SyncState, string>;
+    programIndicators!: Table<ProgramIndicator, string>;
 
     constructor() {
         super("MOHRegisterDB");
         this.version(1).stores({
-            // trackedEntities:
-            //     "trackedEntity,orgUnit,createdAt,updatedAt,syncStatus,version,lastSynced,parentEntity,[trackedEntity+parentEntity]",
-            // events: "event,trackedEntity,programStage,enrollment,occurredAt,updatedAt,createdAt,syncStatus,version,lastSynced,parentEvent,[event+parentEvent]",
-            // enrollments:
-            //     "enrollment,trackedEntity,enrolledAt,version,syncStatus,lastSynced,createdAt,updatedAt",
+            trackedEntities:
+                "trackedEntity,orgUnit,createdAt,updatedAt,syncStatus,version,lastSynced,parentEntity,[trackedEntity+parentEntity],_updatedAt, _createdAt",
+            events: "event,trackedEntity,programStage,enrollment,occurredAt,updatedAt,createdAt,syncStatus,version,lastSynced,parentEvent,[event+parentEvent],_updatedAt, _createdAt",
+						
+            enrollments:
+                "enrollment,trackedEntity,enrolledAt,version,syncStatus,lastSynced,createdAt,updatedAt,_updatedAt, _createdAt",
             syncQueue: "id,status,priority,type,entityId,createdAt",
             programRules: "id,program",
             programRuleVariables: "id,program",
             dataElements: "id,name",
+            programIndicators: "id,name",
             trackedEntityAttributes: "id,name",
             organisationUnits: "id,title,user",
             optionSets: "[id+optionSet],id,optionSet,name,code",

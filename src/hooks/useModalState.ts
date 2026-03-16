@@ -25,6 +25,7 @@ export function useModalState<
 
     const closeModal = useCallback(() => {
         setData(null);
+        setEnrollment(null);
         setIsOpen(false);
     }, []);
 

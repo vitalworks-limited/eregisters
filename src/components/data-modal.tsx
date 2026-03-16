@@ -15,7 +15,6 @@ interface DataModalProps<T extends FlattenedTrackedEntity | FlattenedEvent> {
     onClose: () => void;
     onSave: (currentInfo: {
         values: Record<string, any>;
-        enrollment: FlattenedEnrollment | null;
         addAnother?: boolean;
     }) => void | Promise<void>;
     enrollment: FlattenedEnrollment | null;
@@ -30,7 +29,6 @@ const { Text } = Typography;
 
 export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
     open,
-    data,
     onClose,
     onSave,
     title = "Edit Data",
@@ -38,28 +36,15 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
     submitButtonText = "Save",
     hasAddAnother = false,
     status = "draft",
-    enrollment,
 }: DataModalProps<T>) {
     const [form] = Form.useForm<T>();
     const [loading, setLoading] = React.useState(false);
-
-    React.useEffect(() => {
-        if (open) {
-            if (data && "event" in data) {
-                form.setFieldsValue(data.dataValues);
-            } else if (data) {
-                form.setFieldsValue(data.attributes);
-            }
-        } else {
-            form.resetFields();
-        }
-    }, [open, data, form]);
 
     const handleOk = async (addAnother: boolean = false) => {
         try {
             const values = await form.validateFields();
             setLoading(true);
-            await onSave({ values, enrollment, addAnother });
+            await onSave({ values, addAnother });
             if (!addAnother) {
                 onClose();
             }
@@ -110,7 +95,6 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
                     <Flex gap="middle">
                         <Button
                             onClick={() => {
-                                form.resetFields();
                                 onClose();
                             }}
                             style={{ borderRadius: 8 }}

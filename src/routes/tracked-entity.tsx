@@ -2,6 +2,7 @@ import { CalendarOutlined, CaretRightOutlined } from "@ant-design/icons";
 import { createRoute } from "@tanstack/react-router";
 import type { DescriptionsProps, TableProps } from "antd";
 
+import { and, eq, useLiveSuspenseQuery } from "@tanstack/react-db";
 import {
     Button,
     Card,
@@ -17,17 +18,15 @@ import {
     Typography,
 } from "antd";
 import dayjs from "dayjs";
-import { and, eq, useLiveSuspenseQuery } from "@tanstack/react-db";
 import React, { useMemo } from "react";
 import { z } from "zod";
-import { enrollmentsCollection } from "../collections/enrollments";
-import { eventsCollection } from "../collections/events";
 import { DataModal } from "../components/data-modal";
 import MainEventCapture from "../components/main-event-capture";
 import { Spinner } from "../components/spinner";
 import { SyncStatusComp } from "../components/sync-status-comp";
 import { TrackerRegistration } from "../components/tracker-registration";
 import { useModalState } from "../hooks/useModalState";
+import { EventContext, TrackedEntityContext } from "../machines";
 import {
     FlattenedEnrollment,
     FlattenedEvent,
@@ -39,7 +38,7 @@ import {
     createEmptyTrackedEntity,
 } from "../utils/utils";
 import { RootRoute } from "./__root";
-import { trackedEntitiesCollection } from "../collections";
+import { SyncContext } from "../machines/sync";
 
 export const TrackedEntityRoute = createRoute({
     getParentRoute: () => RootRoute,
@@ -54,6 +53,17 @@ export const TrackedEntityRoute = createRoute({
 const { Text } = Typography;
 
 function TrackedEntityComponent() {
+    const {
+        enrollmentsCollection,
+        trackedEntitiesCollection,
+        eventsCollection,
+    } = SyncContext.useSelector((a) => ({
+        enrollmentsCollection: a.context.enrollmentsCollection,
+        trackedEntitiesCollection: a.context.trackedEntitiesCollection,
+        eventsCollection: a.context.eventsCollection,
+    }));
+
+    const syncActor = SyncContext.useActorRef();
     const { data, isOpen, openModal, closeModal } =
         useModalState<FlattenedEvent>();
     const {
@@ -73,10 +83,23 @@ function TrackedEntityComponent() {
     const {
         trackedEntityAttributes,
         orgUnit: { id },
+        program,
+        programRuleVariables,
+        programRules,
     } = RootRoute.useLoaderData();
     const { trackedEntity: tei } = TrackedEntityRoute.useParams();
     const navigate = TrackedEntityRoute.useNavigate();
     const attributes = Array.from(trackedEntityAttributes.values());
+    const mainStage = program.programStages.find((s) => s.id === "K2nxbE9ubSs");
+    const mainStageDataElements = useMemo(
+        () =>
+            new Set(
+                mainStage?.programStageDataElements.map(
+                    (psde) => psde.dataElement.id,
+                ) ?? [],
+            ),
+        [mainStage],
+    );
     const keys: Map<string, string> = new Map(
         attributes?.map((attr) => [
             attr.id,
@@ -84,8 +107,8 @@ function TrackedEntityComponent() {
         ]),
     );
     const { data: events } = useLiveSuspenseQuery(
-        (q) =>
-            q
+        (q) => {
+            return q
                 .from({ events: eventsCollection })
                 .where(({ events }) =>
                     and(
@@ -93,28 +116,44 @@ function TrackedEntityComponent() {
                         eq(events.programStage, "K2nxbE9ubSs"),
                     ),
                 )
-                .orderBy(({ events }) => events.occurredAt, "desc"),
-        [],
+                .orderBy(({ events }) => events.occurredAt, "desc");
+        },
+        [tei],
     );
 
-    const { data: enrollment } = useLiveSuspenseQuery((q) =>
-        q
-            .from({ enrollments: enrollmentsCollection })
-            .where(({ enrollments }) => eq(enrollments.trackedEntity, tei))
-            .findOne(),
+    const { data: currentEvent } = useLiveSuspenseQuery(
+        (q) => {
+            return q
+                .from({ events: eventsCollection })
+                .where(({ events }) => eq(events.event, data?.event))
+                .findOne();
+        },
+        [data?.event],
     );
 
-    const { data: trackedEntity } = useLiveSuspenseQuery((q) =>
-        q
-            .from({ trackedEntity: trackedEntitiesCollection })
-            .where(({ trackedEntity }) => eq(trackedEntity.trackedEntity, tei))
-            .findOne(),
+    const { data: enrollment } = useLiveSuspenseQuery(
+        (q) =>
+            q
+                .from({ enrollments: enrollmentsCollection })
+                .where(({ enrollments }) => eq(enrollments.trackedEntity, tei))
+                .findOne(),
+        [tei],
+    );
+
+    const { data: trackedEntity } = useLiveSuspenseQuery(
+        (q) =>
+            q
+                .from({ trackedEntity: trackedEntitiesCollection })
+                .where(({ trackedEntity }) =>
+                    eq(trackedEntity.trackedEntity, tei),
+                )
+                .findOne(),
+        [tei],
     );
 
     if (trackedEntity === undefined || enrollment === undefined) {
         return <Text>No tracked Entity or Enrollment found</Text>;
     }
-
     const columns: TableProps<FlattenedEvent>["columns"] = useMemo(
         () => [
             {
@@ -210,8 +249,7 @@ function TrackedEntityComponent() {
                 render: (_, record) => (
                     <Flex gap="small" align="center">
                         <Button
-                            onClick={() => {
-                                console.log(record);
+                            onClick={async () => {
                                 openModal(record, enrollment);
                             }}
                         >
@@ -241,8 +279,8 @@ function TrackedEntityComponent() {
         [enrollment],
     );
     const items: DescriptionsProps["items"] = Object.entries({
-        ...trackedEntity.attributes,
         ...enrollment.attributes,
+        ...trackedEntity.attributes,
     }).map(([key, value]) => ({
         key: key,
         label: keys.get(key) || key,
@@ -344,15 +382,14 @@ function TrackedEntityComponent() {
                 }
             },
         );
-
         const initialValues = {
             ...autoPopulatedAttributes,
             ...mappedAttributes,
             ...combinedValues,
-            occurredAt: trackedEntity.attributes["occurredAt"],
-            enrolledAt: mappedAttributes["Y3DE5CZWySr"],
+            occurredAt: allValues["occurredAt"],
+            enrolledAt: allValues["occurredAt"],
         };
-
+				console.log(allValues)
         const newPatient: FlattenedTrackedEntity = createEmptyTrackedEntity({
             orgUnit: id,
             attributes: initialValues,
@@ -529,12 +566,13 @@ function TrackedEntityComponent() {
 
             <DataModal<FlattenedEvent>
                 open={isOpen}
+                status={currentEvent?.syncStatus}
                 data={data}
                 onClose={() => {
                     closeModal();
                 }}
                 enrollment={enrollment}
-                onSave={async ({ values, enrollment }) => {
+                onSave={async ({ values }) => {
                     if (values && data && enrollment) {
                         const tx = eventsCollection.update(
                             data.event,
@@ -546,30 +584,64 @@ function TrackedEntityComponent() {
                                 draft.syncStatus = "pending";
                             },
                         );
-
                         await tx.isPersisted.promise;
+
+                        syncActor.send({
+                            type: "SYNC_ENTITIES",
+                            entities: [
+                                {
+                                    ...data,
+                                    dataValues: {
+                                        ...data.dataValues,
+                                        ...values,
+                                    },
+                                    syncStatus: "pending",
+                                },
+                            ],
+                        });
                     }
                 }}
                 title="New Visit"
                 submitButtonText="Save Visit"
             >
-                {(form) =>
-                    data ? (
-                        <Form
-                            form={form}
-                            layout="vertical"
-                            preserve={false}
-                            onValuesChange={onValueChange}
-                        >
-                            <MainEventCapture
-                                form={form}
-                                enrollment={enrollment}
-                                trackedEntity={trackedEntity}
-                                mainEvent={data}
-                            />
-                        </Form>
-                    ) : null
-                }
+                {(form) => {
+                    if (data) {
+                        return (
+                            <EventContext.Provider
+                                options={{
+                                    input: {
+                                        programRules,
+                                        programRuleVariables,
+                                        enrollment,
+                                        event: data,
+                                        program: "ueBhWkWll5v",
+                                        programStage: "K2nxbE9ubSs",
+                                        trackedEntity,
+                                        validDataElements:
+                                            mainStageDataElements,
+                                        form,
+                                        eventsCollection,
+                                    },
+                                }}
+                            >
+                                <Form
+                                    form={form}
+                                    layout="vertical"
+                                    preserve={false}
+                                    onValuesChange={onValueChange}
+                                >
+                                    <MainEventCapture
+                                        form={form}
+                                        enrollment={enrollment}
+                                        trackedEntity={trackedEntity}
+                                        mainEvent={data}
+                                    />
+                                </Form>
+                            </EventContext.Provider>
+                        );
+                    }
+                    return null;
+                }}
             </DataModal>
 
             <DataModal<FlattenedTrackedEntity>
@@ -621,7 +693,35 @@ function TrackedEntityComponent() {
                         });
                         await tx3.isPersisted.promise;
 
+                        syncActor.send({
+                            type: "SYNC_ENTITIES",
+                            entities: [
+                                {
+                                    ...childData,
+                                    attributes: {
+                                        ...childData.attributes,
+                                        ...values,
+                                    },
+                                    syncStatus: "pending",
+                                },
+                                {
+                                    ...childEnrollment,
+                                    attributes: {
+                                        ...childEnrollment.attributes,
+                                        ...values,
+                                    },
+                                    syncStatus: "pending",
+                                },
+                                {
+                                    ...childEvent,
+                                    syncStatus: "pending",
+                                },
+                            ],
+                        });
+
                         if (addAnother) {
+                            closeChildModal();
+
                             const { client, enrollment } =
                                 createPatientAndLink(values);
                             await trackedEntitiesCollection.utils.insertLocally(
@@ -631,24 +731,47 @@ function TrackedEntityComponent() {
                                 enrollment,
                             );
                             openChildModal(client, enrollment);
-
-                            console.log(client, enrollment);
                         }
                     }
                 }}
                 title="New Born Child"
                 submitButtonText="Save Child"
             >
-                {(form) => (
-                    <Form form={form} layout="vertical" preserve={false}>
-                        {childData ? (
-                            <TrackerRegistration
-                                trackedEntity={childData}
-                                form={form}
-                            />
-                        ) : null}
-                    </Form>
-                )}
+                {(form) => {
+                    if (childData) {
+                        return (
+                            <TrackedEntityContext.Provider
+                                key={childData.trackedEntity}
+                                options={{
+                                    input: {
+                                        programRules,
+                                        programRuleVariables,
+                                        program: "ueBhWkWll5v",
+                                        trackedEntity: childData,
+                                        validDataElements:
+                                            mainStageDataElements,
+                                        form,
+                                        trackedEntitiesCollection,
+                                    },
+                                }}
+                            >
+                                <Form
+                                    form={form}
+                                    layout="vertical"
+                                    preserve={false}
+                                >
+                                    {childData ? (
+                                        <TrackerRegistration
+                                            trackedEntity={childData}
+                                            form={form}
+                                        />
+                                    ) : null}
+                                </Form>
+                            </TrackedEntityContext.Provider>
+                        );
+                    }
+                    return null;
+                }}
             </DataModal>
 
             <DataModal<FlattenedTrackedEntity>
@@ -669,18 +792,46 @@ function TrackedEntityComponent() {
                             },
                         );
                         await tx1.isPersisted.promise;
+
+                        syncActor.send({
+                            type: "SYNC_ENTITIES",
+                            entities: [
+                                {
+                                    ...trackedEntityData,
+                                    attributes: {
+                                        ...trackedEntityData.attributes,
+                                        ...values,
+                                    },
+                                    syncStatus: "pending",
+                                },
+                            ],
+                        });
                     }
                 }}
                 title="Edit Client"
                 submitButtonText="Save Client"
             >
                 {(form) => (
-                    <Form form={form} layout="vertical" preserve={false}>
-                        <TrackerRegistration
-                            trackedEntity={trackedEntity}
-                            form={form}
-                        />
-                    </Form>
+                    <TrackedEntityContext.Provider
+                        options={{
+                            input: {
+                                programRules,
+                                programRuleVariables,
+                                program: "ueBhWkWll5v",
+                                trackedEntity,
+                                validDataElements: mainStageDataElements,
+                                form,
+                                trackedEntitiesCollection,
+                            },
+                        }}
+                    >
+                        <Form form={form} layout="vertical" preserve={false}>
+                            <TrackerRegistration
+                                trackedEntity={trackedEntity}
+                                form={form}
+                            />
+                        </Form>
+                    </TrackedEntityContext.Provider>
                 )}
             </DataModal>
         </>

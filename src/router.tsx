@@ -22,7 +22,7 @@ export const router = createRouter({
     defaultErrorComponent: ({ error }) => <ErrorComponent error={error} />,
     history: createHashHistory(),
     context: {
-        syncManager: undefined!,
+        syncActor: undefined!,
     },
     defaultPreload: "intent",
     defaultPreloadStaleTime: 0,

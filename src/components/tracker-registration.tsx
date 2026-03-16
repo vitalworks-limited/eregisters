@@ -1,15 +1,10 @@
 import { Card, Flex, Form, FormInstance, Row } from "antd";
 import dayjs from "dayjs";
-import React, { useCallback, useEffect, useMemo } from "react";
-import { trackedEntitiesCollection } from "../collections";
-import { useRuleResultPersistence } from "../hooks/useRuleResultPersistence";
+import React, { useEffect } from "react";
+import { TrackedEntityContext } from "../machines";
 import { RootRoute } from "../routes/__root";
 import { FlattenedTrackedEntity } from "../schemas";
-import {
-    buildCurrentAttributes,
-    executeProgramRules,
-    spans,
-} from "../utils/utils";
+import { buildCurrentAttributes, spans } from "../utils/utils";
 import { DataElementField } from "./data-element-field";
 import { DataElementRenderer } from "./data-element-renderer";
 
@@ -22,104 +17,29 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
     trackedEntity,
     form,
 }) => {
-    const allValues = Form.useWatch([], form);
-    const { program, programRuleVariables, programRules } =
-        RootRoute.useLoaderData();
-
+    const { program } = RootRoute.useLoaderData();
     const allAttributes = buildCurrentAttributes(program);
-    const mainStageDataElements = useMemo(
-        () =>
-            new Set(
-                program.programTrackedEntityAttributes.map(
-                    ({ trackedEntityAttribute }) => trackedEntityAttribute.id,
-                ),
-            ),
-        [],
+    const ruleResult = TrackedEntityContext.useSelector(
+        (a) => a.context.ruleResult,
     );
-    const { ruleResult, saveRuleResult } = useRuleResultPersistence({
-        formType: "registration",
-    });
-
-    const handleFieldChange = useCallback((fieldId: string, value: any) => {
-        form.setFieldValue(fieldId, value);
-        const currentData = form.getFieldsValue();
-        const result = executeProgramRules({
-            programRules,
-            programRuleVariables,
-            attributeValues: currentData,
-            program: program.id,
-        });
-        saveRuleResult(result);
-        const filteredAssignments = Object.fromEntries(
-            Object.entries(result.assignments).filter(([k]) =>
-                mainStageDataElements.has(k),
-            ),
-        );
-        if (Object.keys(filteredAssignments).length > 0) {
-            form.setFieldsValue(filteredAssignments);
-        }
-        if (result.hiddenFields.length > 0) {
-            const fieldsToClear: Record<string, any> = {};
-            result.hiddenFields.forEach((hiddenFieldId) => {
-                const currentValue = currentData[hiddenFieldId];
-                if (
-                    currentValue !== undefined &&
-                    currentValue !== null &&
-                    currentValue !== ""
-                ) {
-                    fieldsToClear[hiddenFieldId] = undefined;
-                    form.setFieldValue(hiddenFieldId, undefined);
-                }
-            });
-        }
-        trackedEntitiesCollection.utils.insertLocally({
-            ...trackedEntity,
-            attributes: { ...trackedEntity.attributes, ...currentData },
-        });
-    }, []);
+    const state = TrackedEntityContext.useSelector((a) => a.value);
+    const trackedEntityActor = TrackedEntityContext.useActorRef();
+    const values = Form.useWatch([], form);
 
     useEffect(() => {
-        const currentData = form.getFieldsValue();
-        const result = executeProgramRules({
-            programRules,
-            programRuleVariables,
-            attributeValues: currentData,
-            program: program.id,
+        trackedEntityActor.send({
+            type: "FIELD_CHANGED",
+            formData: {
+                ...form.getFieldsValue,
+                ...values,
+            },
         });
-        saveRuleResult(result);
-        const filteredAssignments = Object.fromEntries(
-            Object.entries(result.assignments).filter(([k]) =>
-                mainStageDataElements.has(k),
-            ),
-        );
-        if (Object.keys(filteredAssignments).length > 0) {
-            form.setFieldsValue(filteredAssignments);
-        }
-        if (result.hiddenFields.length > 0) {
-            const fieldsToClear: Record<string, any> = {};
-            result.hiddenFields.forEach((hiddenFieldId) => {
-                const currentValue = currentData[hiddenFieldId];
-                if (
-                    currentValue !== undefined &&
-                    currentValue !== null &&
-                    currentValue !== ""
-                ) {
-                    fieldsToClear[hiddenFieldId] = undefined;
-                    form.setFieldValue(hiddenFieldId, undefined);
-                }
-            });
-        }
-    }, [allValues]);
-
-    useEffect(() => {
-        const currentData = form.getFieldsValue();
-        form.setFieldsValue({ ...currentData, ...trackedEntity.attributes });
-    }, []);
+    }, [values]);
 
     return (
         <Flex vertical gap={10}>
             <Card
-                title="Registration Details"
+                title={`Registration Details ${state}`}
                 style={{ borderRadius: 0 }}
                 size="small"
             >
@@ -150,7 +70,7 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
                         md={24}
                         lg={24}
                         xl={24}
-                        onFieldChange={handleFieldChange}
+                        onFieldChange={() => {}}
                         disabledDate={(date) => {
                             if (program.selectEnrollmentDatesInFuture)
                                 return true;
@@ -183,7 +103,7 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
                                         form={form}
                                         mode="attribute"
                                         xl={spans.get(id) ?? undefined}
-                                        onFieldChange={handleFieldChange}
+                                        onFieldChange={() => {}}
                                     />
                                 ))}
                             </Row>

@@ -1,12 +1,10 @@
 import { and, eq, useLiveSuspenseQuery } from "@tanstack/react-db";
-import { Form, Row, Typography } from "antd";
-import React, { useCallback, useEffect } from "react";
-import { eventsCollection } from "../collections";
-import { useRuleResultPersistence } from "../hooks/useRuleResultPersistence";
+import { Form } from "antd";
+import React, { useMemo } from "react";
+import { EventContext, SyncContext } from "../machines";
 import { RootRoute } from "../routes/__root";
 import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
-import { buildCurrentDataElements, executeProgramRules } from "../utils/utils";
-import { DataElementRenderer } from "./data-element-renderer";
+import BasicForm from "./basic-form";
 
 export default function Relation({
     section,
@@ -19,156 +17,77 @@ export default function Relation({
 }) {
     const { program, programRuleVariables, programRules } =
         RootRoute.useLoaderData();
+    const { eventsCollection, enrollmentsCollection } = SyncContext.useSelector(
+        (a) => ({
+            eventsCollection: a.context.eventsCollection,
+            enrollmentsCollection: a.context.enrollmentsCollection,
+        }),
+    );
 
     const [form] = Form.useForm();
-    const { ruleResult, saveRuleResult } = useRuleResultPersistence({
-        formType: "child",
-    });
-
     const [stage] = program.programStages.filter(
         ({ id }) => id === "K2nxbE9ubSs",
     );
 
-    const triageSection = stage.programStageSections.find(
-        ({ name }) => name === "Triage",
-    );
-    const currentDataElements = buildCurrentDataElements(stage);
-
-    const [currentSection] = stage.programStageSections.filter(
-        ({ name }) => name === "Child Health Services",
-    );
-    const { data: childEvent } = useLiveSuspenseQuery((q) =>
-        q
-            .from({ events: eventsCollection })
-            .where(({ events }) =>
-                and(
-                    eq(events.parentEvent, mainEvent.event),
-                    eq(events.trackedEntity, trackedEntity.trackedEntity),
-                ),
-            )
-            .findOne(),
-    );
-    const handleFieldChange = useCallback(
-        async (fieldId: string, value: any) => {
-            form.setFieldValue(fieldId, value);
-            const currentData = form.getFieldsValue();
-            const result = executeProgramRules({
-                programRules,
-                programRuleVariables,
-                dataValues: currentData,
-                attributeValues: trackedEntity.attributes,
-                program: program.id,
-                programStage: "K2nxbE9ubSs",
-                previousEvents: [],
-            });
-
-            saveRuleResult(result);
-            const filteredAssignments = Object.fromEntries(
-                Object.entries(result.assignments).filter(([k]) =>
-                    currentDataElements.has(k),
-                ),
-            );
-            if (Object.keys(filteredAssignments).length > 0) {
-                form.setFieldsValue(filteredAssignments);
-            }
-            if (result.hiddenFields.length > 0) {
-                const fieldsToClear: Record<string, any> = {};
-                result.hiddenFields.forEach((hiddenFieldId) => {
-                    const currentValue = currentData[hiddenFieldId];
-                    if (
-                        currentValue !== undefined &&
-                        currentValue !== null &&
-                        currentValue !== ""
-                    ) {
-                        fieldsToClear[hiddenFieldId] = undefined;
-                        form.setFieldValue(hiddenFieldId, undefined);
-                    }
-                });
-            }
-            const tx = eventsCollection.update(
-                childEvent?.event ?? "",
-                (draft) => {
-                    draft.syncStatus = "pending";
-                    draft.dataValues = {
-                        ...(childEvent?.dataValues ?? {}),
-                        ...currentData,
-                    };
-                },
-            );
-            await tx.isPersisted.promise;
-        },
-        [],
-    );
-
-    useEffect(() => {
-        if (!childEvent) return;
-        form.setFieldsValue(childEvent.dataValues);
-        const result = executeProgramRules({
-            programRules,
-            programRuleVariables,
-            dataValues: childEvent.dataValues,
-            attributeValues: trackedEntity.attributes,
-            program: program.id,
-            programStage: "K2nxbE9ubSs",
-            previousEvents: [],
-        });
-        saveRuleResult(result);
-        const filteredAssignments = Object.fromEntries(
-            Object.entries(result.assignments).filter(([k]) =>
-                currentDataElements.has(k),
+    const mainStageDataElements = useMemo(
+        () =>
+            new Set(
+                stage?.programStageDataElements.map(
+                    (psde) => psde.dataElement.id,
+                ) ?? [],
             ),
-        );
-        if (Object.keys(filteredAssignments).length > 0) {
-            form.setFieldsValue(filteredAssignments);
-        }
+        [stage],
+    );
 
-        if (result.hiddenFields.length > 0) {
-            const fieldsToClear: Record<string, any> = {};
-            result.hiddenFields.forEach((hiddenFieldId) => {
-                const currentValue = trackedEntity.attributes[hiddenFieldId];
-                if (
-                    currentValue !== undefined &&
-                    currentValue !== null &&
-                    currentValue !== ""
-                ) {
-                    fieldsToClear[hiddenFieldId] = undefined;
-                    form.setFieldValue(hiddenFieldId, undefined);
-                }
-            });
-        }
-    }, []);
+    const { data: childEvent } = useLiveSuspenseQuery(
+        (q) =>
+            q
+                .from({ events: eventsCollection })
+                .where(({ events }) =>
+                    and(
+                        eq(events.parentEvent, mainEvent.event),
+                        eq(events.trackedEntity, trackedEntity.trackedEntity),
+                    ),
+                )
+                .findOne(),
+        [trackedEntity.trackedEntity, mainEvent.event],
+    );
 
+    const { data: enrollment } = useLiveSuspenseQuery(
+        (q) =>
+            q
+                .from({ enrollment: enrollmentsCollection })
+                .where(({ enrollment }) =>
+                    eq(enrollment.trackedEntity, trackedEntity.trackedEntity),
+                )
+                .findOne(),
+        [trackedEntity.trackedEntity],
+    );
+
+    if (!childEvent || !enrollment) return null;
     return (
-        <Form form={form} component={false} layout="vertical" preserve={false}>
-            <Typography.Title level={4} style={{ marginBottom: 16 }}>
-                {section}
-            </Typography.Title>
-            <Row gutter={[16, 0]}>
-                {triageSection?.dataElements.map((dataElement) => (
-                    <DataElementRenderer
-                        key={dataElement.id}
-                        dataElementId={dataElement.id}
-                        currentDataElements={currentDataElements}
-                        ruleResult={ruleResult}
-                        sectionLength={triageSection.dataElements.length}
-                        form={form}
-                        onFieldChange={handleFieldChange}
-                    />
-                ))}
-            </Row>
-            <Row gutter={[16, 0]}>
-                {currentSection.dataElements.map((dataElement) => (
-                    <DataElementRenderer
-                        key={dataElement.id}
-                        dataElementId={dataElement.id}
-                        currentDataElements={currentDataElements}
-                        ruleResult={ruleResult}
-                        sectionLength={currentSection.dataElements.length}
-                        form={form}
-                        onFieldChange={handleFieldChange}
-                    />
-                ))}
-            </Row>
-        </Form>
+        <EventContext.Provider
+            options={{
+                input: {
+                    programRules,
+                    programRuleVariables,
+                    enrollment: enrollment,
+                    event: childEvent,
+                    program: "ueBhWkWll5v",
+                    programStage: "K2nxbE9ubSs",
+                    trackedEntity,
+                    validDataElements: mainStageDataElements,
+                    form,
+                    eventsCollection,
+                },
+            }}
+        >
+            <BasicForm
+                form={form}
+                section={section}
+                event={childEvent}
+                enrollment={enrollment}
+            />
+        </EventContext.Provider>
     );
 }

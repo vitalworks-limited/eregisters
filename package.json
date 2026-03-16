@@ -19,6 +19,7 @@
         "@tanstack/react-db": "^0.1.74",
         "@tanstack/react-query": "^5.90.20",
         "@tanstack/react-router": "^1.157.18",
+        "@xstate/react": "^4.1.3",
         "antd": "^6.2.2",
         "dayjs": "^1.11.19",
         "dexie": "^4.3.0",
@@ -28,6 +29,7 @@
         "react": "^18.3.1",
         "react-dom": "^18.3.1",
         "tanstack-dexie-db-collection": "^0.1.4",
+        "xstate": "^5.28.0",
         "zod": "^4.3.6"
     },
     "devDependencies": {

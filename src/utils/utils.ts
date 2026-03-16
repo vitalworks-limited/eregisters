@@ -18,12 +18,7 @@ import {
     TrackedEntityResponse,
 } from "../schemas";
 import { generateUid } from "./id";
-import {
-    zScoreWFA,
-    zScoreHFA,
-    zScoreWFH,
-    zScoreBMIFA,
-} from "./who-zscore";
+import { zScoreWFA, zScoreHFA, zScoreWFH, zScoreBMIFA } from "./who-zscore";
 
 const GRID_TOTAL = 24;
 
@@ -343,19 +338,35 @@ export function executeProgramRules({
         },
 
         // WHO Z-Score Functions
-        zScoreWFA: (ageMonths: number, weightKg: number, sex: any): number | null => {
+        zScoreWFA: (
+            ageMonths: number,
+            weightKg: number,
+            sex: any,
+        ): number | null => {
             return zScoreWFA(ageMonths, weightKg, sex);
         },
 
-        zScoreHFA: (ageMonths: number, heightCm: number, sex: any): number | null => {
+        zScoreHFA: (
+            ageMonths: number,
+            heightCm: number,
+            sex: any,
+        ): number | null => {
             return zScoreHFA(ageMonths, heightCm, sex);
         },
 
-        zScoreWFH: (heightCm: number, weightKg: number, sex: any): number | null => {
+        zScoreWFH: (
+            heightCm: number,
+            weightKg: number,
+            sex: any,
+        ): number | null => {
             return zScoreWFH(heightCm, weightKg, sex);
         },
 
-        zScoreBMIFA: (ageMonths: number, bmi: number, sex: any): number | null => {
+        zScoreBMIFA: (
+            ageMonths: number,
+            bmi: number,
+            sex: any,
+        ): number | null => {
             return zScoreBMIFA(ageMonths, bmi, sex);
         },
     };

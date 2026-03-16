@@ -1,7 +1,15 @@
-import { DatePicker, Flex, FormInstance, InputNumber, Typography } from "antd";
+import {
+    DatePicker,
+    Flex,
+    Form,
+    FormInstance,
+    InputNumber,
+    Typography,
+} from "antd";
 import dayjs from "dayjs";
-import React, { useEffect, useState } from "react";
+import React, { useMemo } from "react";
 import { DataElement, TrackedEntityAttribute } from "../schemas";
+import { createGetValueProps, createNormalize } from "../utils/utils";
 
 function dobFromAge(now: dayjs.Dayjs, years = 0, months = 0, days = 0) {
     return now
@@ -34,82 +42,69 @@ export default function DobPicker({
     onFieldChange?: (dataElementId: string, value: any) => void;
     disabled?: boolean;
 }) {
-    const [years, setYears] = useState<number | null>(null);
-    const [months, setMonths] = useState<number | null>(null);
-    const [days, setDays] = useState<number | null>(null);
+    // Read current DOB value from form
     const fieldValue = form.getFieldValue(dataElement.id);
     const enrolledAt = form.getFieldValue("enrolledAt");
-    const dateValue =
-        fieldValue && typeof fieldValue === "string"
-            ? dayjs(fieldValue)
-            : fieldValue;
 
-    useEffect(() => {
-        if (dateValue && dayjs.isDayjs(dateValue) && enrolledAt) {
-            const age = ageFromDob(dayjs(enrolledAt), dateValue);
-            setYears(age.years);
-            setMonths(age.months);
-            setDays(age.days);
+    const dateValue = useMemo(() => {
+        if (fieldValue && typeof fieldValue === "string") {
+            return dayjs(fieldValue);
         }
-    }, [dateValue?.format("YYYY-MM-DD"), enrolledAt]);
+        return fieldValue;
+    }, [fieldValue]);
+
+    const calculatedAge = useMemo(() => {
+        if (dateValue && dayjs.isDayjs(dateValue) && enrolledAt) {
+            return ageFromDob(dayjs(enrolledAt), dateValue);
+        }
+        return { years: null, months: null, days: null };
+    }, [dateValue, enrolledAt]);
+
     const handleAgeChange = (
         newYears: number | null,
         newMonths: number | null,
         newDays: number | null,
     ) => {
         if (enrolledAt) {
-            setYears(newYears);
-            setMonths(newMonths);
-            setDays(newDays);
             const calculatedDob = dobFromAge(
                 dayjs(enrolledAt),
                 newYears ?? 0,
                 newMonths ?? 0,
                 newDays ?? 0,
             );
-            const dobString = calculatedDob.format("YYYY-MM-DD");
-            // onFieldChange now handles both form update and DB persistence
-            onFieldChange?.(dataElement.id, dobString);
+            form.setFieldValue(dataElement.id, calculatedDob);
         } else {
-            onFieldChange?.(dataElement.id, null);
-        }
-    };
-
-    const handleDateChange = (date: dayjs.Dayjs | null) => {
-        if (date && enrolledAt) {
-            const age = ageFromDob(dayjs(enrolledAt), date);
-            setYears(age.years);
-            setMonths(age.months);
-            setDays(age.days);
-            const dobString = date.format("YYYY-MM-DD");
-            // onFieldChange now handles both form update and DB persistence
-            onFieldChange?.(dataElement.id, dobString);
-        } else {
-            setYears(null);
-            setMonths(null);
-            setDays(null);
-            // onFieldChange now handles both form update and DB persistence
-            onFieldChange?.(dataElement.id, null);
+            form.setFieldValue(dataElement.id, null);
         }
     };
 
     return (
-        <Flex vertical gap={8}>
-            <DatePicker
-                style={{ width: "100%" }}
-                value={dateValue}
-                onChange={handleDateChange}
-                disabled={disabled}
-                disabledDate={(d) => d && d.isAfter(dayjs())}
-            />
+        <Flex vertical gap={0}>
+            <Form.Item
+                name={dataElement.id}
+                getValueProps={createGetValueProps(dataElement.valueType)}
+                normalize={createNormalize(dataElement.valueType)}
+            >
+                <DatePicker
+                    style={{ width: "100%" }}
+                    disabled={disabled}
+                    disabledDate={(d) => d && d.isAfter(dayjs())}
+                />
+            </Form.Item>
             <Flex gap={8} style={{ width: "100%" }}>
                 <Flex gap={5} style={{ flex: 1 }} align="center">
                     <Text style={{ fontSize: 12 }}>Years</Text>
                     <InputNumber
                         min={0}
                         placeholder="Years"
-                        value={years ?? undefined}
-                        onChange={(v) => handleAgeChange(v, months, days)}
+                        value={calculatedAge.years ?? undefined}
+                        onChange={(v) =>
+                            handleAgeChange(
+                                v,
+                                calculatedAge.months,
+                                calculatedAge.days,
+                            )
+                        }
                         disabled={disabled}
                         size="small"
                         style={{ width: "100%", flex: 1 }}
@@ -121,8 +116,14 @@ export default function DobPicker({
                         min={0}
                         max={11}
                         placeholder="Months"
-                        value={months ?? undefined}
-                        onChange={(v) => handleAgeChange(years, v, days)}
+                        value={calculatedAge.months ?? undefined}
+                        onChange={(v) =>
+                            handleAgeChange(
+                                calculatedAge.years,
+                                v,
+                                calculatedAge.days,
+                            )
+                        }
                         disabled={disabled}
                         size="small"
                         style={{ width: "100%", flex: 1 }}
@@ -134,8 +135,14 @@ export default function DobPicker({
                         min={0}
                         max={31}
                         placeholder="Days"
-                        value={days ?? undefined}
-                        onChange={(v) => handleAgeChange(years, months, v)}
+                        value={calculatedAge.days ?? undefined}
+                        onChange={(v) =>
+                            handleAgeChange(
+                                calculatedAge.years,
+                                calculatedAge.months,
+                                v,
+                            )
+                        }
                         disabled={disabled}
                         size="small"
                         style={{ width: "100%", flex: 1 }}

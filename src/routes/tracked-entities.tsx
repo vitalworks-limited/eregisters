@@ -20,11 +20,9 @@ import { DataElementField } from "../components/data-element-field";
 import { ClientSchema } from "../schemas";
 import { RootRoute } from "./__root";
 import { eq, useLiveSuspenseQuery, not, and } from "@tanstack/react-db";
-import {
-    enrollmentsCollection,
-    trackedEntitiesCollection,
-} from "../collections";
+
 import dayjs from "dayjs";
+import { SyncContext } from "../machines";
 
 const { Content } = Layout;
 const { Title } = Typography;
@@ -36,7 +34,12 @@ export const TrackedEntitiesRoute = createRoute({
 });
 
 function TrackedEntities() {
-    const form = Form.useFormInstance();
+    const { enrollmentsCollection, trackedEntitiesCollection } =
+        SyncContext.useSelector((a) => ({
+            enrollmentsCollection: a.context.enrollmentsCollection,
+            trackedEntitiesCollection: a.context.trackedEntitiesCollection,
+        }));
+    const [form] = Form.useForm();
     const { program, trackedEntityAttributes, optionSets } =
         RootRoute.useLoaderData();
     const { data: total } = useLiveSuspenseQuery((q) =>
@@ -99,7 +102,7 @@ function TrackedEntities() {
                             initialValues={search}
                         >
                             <Row gutter={[0, 0]}>
-                                {program.programTrackedEntityAttributes.flatMap(
+                                {program?.programTrackedEntityAttributes.flatMap(
                                     ({
                                         trackedEntityAttribute: { id },
                                         searchable,

@@ -1,14 +1,12 @@
-import { Tabs } from "antd";
 import { eq, useLiveSuspenseQuery } from "@tanstack/react-db";
+import { Tabs } from "antd";
 import React, { Key, useState } from "react";
 import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
-import Relation from "./relation";
 import { createEmptyEvent } from "../utils/utils";
-import {
-    enrollmentsCollection,
-    eventsCollection,
-    trackedEntitiesCollection,
-} from "../collections";
+import Relation from "./relation";
+
+import { EventContext, SyncContext } from "../machines";
+import { RootRoute } from "../routes/__root";
 
 const getChildLabel = (to: FlattenedTrackedEntity["attributes"]): string => {
     const firstName = to["KSq9EyZ8ZFi"];
@@ -26,6 +24,16 @@ export default function RelationshipEvent({
     trackedEntity: FlattenedTrackedEntity;
     mainEvent: FlattenedEvent;
 }) {
+    const {
+        enrollmentsCollection,
+        trackedEntitiesCollection,
+        eventsCollection,
+    } = SyncContext.useSelector((a) => ({
+        enrollmentsCollection: a.context.enrollmentsCollection,
+        trackedEntitiesCollection: a.context.trackedEntitiesCollection,
+        eventsCollection: a.context.eventsCollection,
+    }));
+
     const [activeKey, setActiveKey] = useState<string>("");
 
     const { data: children } = useLiveSuspenseQuery((q) =>
@@ -41,8 +49,13 @@ export default function RelationshipEvent({
             .from({ event: eventsCollection })
             .where(({ event }) => eq(event.parentEvent, mainEvent.event)),
     );
-    const { data: enrollments } = useLiveSuspenseQuery((q) =>
-        q.from({ enrollment: enrollmentsCollection }),
+    const { data: enrollment } = useLiveSuspenseQuery((q) =>
+        q
+            .from({ enrollment: enrollmentsCollection })
+            .where(({ enrollment }) =>
+                eq(enrollment.trackedEntity, tei.trackedEntity),
+            )
+            .findOne(),
     );
 
     if (children.length === 0) {
@@ -56,18 +69,12 @@ export default function RelationshipEvent({
             ({ trackedEntity }) => trackedEntity === activeKey,
         );
 
-        const childEnrollment = currentChild
-            ? enrollments.find(
-                  (e) => e.trackedEntity === currentChild.trackedEntity,
-              )
-            : undefined;
-
-        if (current === undefined && currentChild && childEnrollment) {
+        if (current === undefined && currentChild && enrollment) {
             const newEvent = createEmptyEvent({
                 trackedEntity: currentChild.trackedEntity,
-                program: childEnrollment.program,
-                orgUnit: childEnrollment.orgUnit,
-                enrollment: childEnrollment.enrollment,
+                program: enrollment.program,
+                orgUnit: enrollment.orgUnit,
+                enrollment: enrollment.enrollment,
                 programStage: "K2nxbE9ubSs",
                 dataValues: {
                     occurredAt:

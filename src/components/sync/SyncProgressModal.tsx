@@ -1,28 +1,22 @@
 import { Modal, Progress, Space, Typography, Alert } from "antd";
 import { CheckCircleOutlined, CloseCircleOutlined } from "@ant-design/icons";
 import React from "react";
-import type { SyncProgress, SyncResult } from "../../db/batch-sync";
 
 const { Text, Title } = Typography;
 
-export interface SyncProgressModalProps {
-    visible: boolean;
-    progress: SyncProgress | null;
-    result: SyncResult | null;
-    onClose: () => void;
-}
+// export interface SyncProgressModalProps {
+//     visible: boolean;
+//     progress: SyncProgress | null;
+//     result: SyncResult | null;
+//     onClose: () => void;
+// }
 
 /**
  * Sync Progress Modal Component
  *
  * Displays real-time progress for batch sync operations with detailed metrics.
  */
-export const SyncProgressModal: React.FC<SyncProgressModalProps> = ({
-    visible,
-    progress,
-    result,
-    onClose,
-}) => {
+export const SyncProgressModal = ({ visible, progress, result, onClose }) => {
     const isComplete = result !== null;
     const isSuccess = result?.success ?? false;
 
@@ -91,10 +85,20 @@ export const SyncProgressModal: React.FC<SyncProgressModalProps> = ({
                         {result.errors.length > 0 && (
                             <div>
                                 <Text strong>Failed Items:</Text>
-                                <ul style={{ margin: "8px 0", paddingLeft: 20, maxHeight: 200, overflow: "auto" }}>
+                                <ul
+                                    style={{
+                                        margin: "8px 0",
+                                        paddingLeft: 20,
+                                        maxHeight: 200,
+                                        overflow: "auto",
+                                    }}
+                                >
                                     {result.errors.map((error, index) => (
                                         <li key={index}>
-                                            <Text type="secondary" style={{ fontSize: 12 }}>
+                                            <Text
+                                                type="secondary"
+                                                style={{ fontSize: 12 }}
+                                            >
                                                 {error.id}: {error.error}
                                             </Text>
                                         </li>

@@ -1,18 +1,8 @@
-import {
-    Card,
-    Col,
-    DatePicker,
-    Flex,
-    Form,
-    FormInstance,
-    Row,
-    Select,
-    Tabs,
-} from "antd";
+import { Card, Col, Flex, Form, FormInstance, Row, Select, Tabs } from "antd";
 import dayjs from "dayjs";
 import { orderBy } from "lodash";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useRuleResultPersistence } from "../hooks/useRuleResultPersistence";
+import React, { useEffect, useState } from "react";
+import { EventContext } from "../machines";
 import { RootRoute } from "../routes/__root";
 import {
     FlattenedEnrollment,
@@ -23,12 +13,11 @@ import {
     buildCurrentDataElements,
     createGetValueProps,
     createNormalize,
-    executeProgramRules,
 } from "../utils/utils";
+import { DataElementField } from "./data-element-field";
 import { DataElementRenderer } from "./data-element-renderer";
 import { ProgramStageCapture } from "./program-stage-capture";
 import RelationshipEvent from "./relationship-event";
-import { eventsCollection } from "../collections";
 
 const stages: Map<string, number> = new Map([
     ["x5x1cHHjg00", 7],
@@ -53,70 +42,26 @@ export default function MainEventCapture({
     enrollment: FlattenedEnrollment;
 }) {
     const currentServices = Form.useWatch("mrKZWf2WMIC", form);
-    const ageAtVisit = Form.useWatch("zxJ9SDZtKUS", form);
-    const nutritionalBMI = Form.useWatch("nxthjrx18Y0", form);
-    const ageBMI = Form.useWatch("RltyVq1d11i", form);
-    const { program, optionSets, programRules, programRuleVariables } =
-        RootRoute.useLoaderData();
-
+    const { program, optionSets } = RootRoute.useLoaderData();
     const [activeKey, setActiveKey] = useState<string>(
         "K2nxbE9ubSs-bnV62fxQmoE",
     );
-    const mainStage = program.programStages.find((s) => s.id === "K2nxbE9ubSs");
-    const mainStageDataElements = useMemo(
-        () =>
-            new Set(
-                mainStage?.programStageDataElements.map(
-                    (psde) => psde.dataElement.id,
-                ) ?? [],
-            ),
-        [mainStage],
+    const eventActor = EventContext.useActorRef();
+    const values = Form.useWatch([], form);
+
+    useEffect(() => {
+        eventActor.send({
+            type: "FIELD_CHANGED",
+            formData: {
+                ...form.getFieldsValue(),
+                ...values,
+            },
+        });
+    }, [values]);
+
+    const ruleResult = EventContext.useSelector(
+        (state) => state.context.ruleResult,
     );
-
-    const { ruleResult, saveRuleResult } = useRuleResultPersistence({
-        formType: "main",
-    });
-    const handleFieldChange = useCallback((fieldId: string, value: any) => {
-        form.setFieldValue(fieldId, value);
-        const currentData = form.getFieldsValue();
-        const result = executeProgramRules({
-            programRules,
-            programRuleVariables,
-            dataValues: currentData,
-            attributeValues: trackedEntity.attributes,
-            program: program.id,
-            programStage: "K2nxbE9ubSs",
-            previousEvents: [],
-        });
-
-        saveRuleResult(result);
-        const filteredAssignments = Object.fromEntries(
-            Object.entries(result.assignments).filter(([k]) =>
-                mainStageDataElements.has(k),
-            ),
-        );
-        if (Object.keys(filteredAssignments).length > 0) {
-            form.setFieldsValue(filteredAssignments);
-        }
-        if (result.hiddenFields.length > 0) {
-            const fieldsToClear: Record<string, any> = {};
-            result.hiddenFields.forEach((hiddenFieldId) => {
-                const currentValue = currentData[hiddenFieldId];
-                if (
-                    currentValue !== undefined &&
-                    currentValue !== null &&
-                    currentValue !== ""
-                ) {
-                    fieldsToClear[hiddenFieldId] = undefined;
-                    form.setFieldValue(hiddenFieldId, undefined);
-                }
-            });
-        }
-        eventsCollection.utils.insertLocally({
-            ...mainEvent,
-            dataValues: { ...mainEvent.dataValues, ...currentData },
-        });
-    }, []);
 
     const [serviceTypes, setServiceTypes] = useState<
         Array<{
@@ -128,91 +73,50 @@ export default function MainEventCapture({
     >(optionSets.get("QwsvSPpnRul") ?? []);
 
     useEffect(() => {
-        const currentData = form.getFieldsValue();
-        const result = executeProgramRules({
-            programRules,
-            programRuleVariables,
-            dataValues: currentData,
-            attributeValues: trackedEntity.attributes,
-            program: program.id,
-            programStage: "K2nxbE9ubSs",
-            previousEvents: [],
-        });
-        saveRuleResult(result);
-        const filteredAssignments = Object.fromEntries(
-            Object.entries(result.assignments).filter(([k]) =>
-                mainStageDataElements.has(k),
-            ),
-        );
-        if (Object.keys(filteredAssignments).length > 0) {
-            form.setFieldsValue(filteredAssignments);
-        }
-
-        if (result.hiddenFields.length > 0) {
-            const fieldsToClear: Record<string, any> = {};
-            result.hiddenFields.forEach((hiddenFieldId) => {
-                const currentValue = currentData[hiddenFieldId];
-                if (
-                    currentValue !== undefined &&
-                    currentValue !== null &&
-                    currentValue !== ""
-                ) {
-                    fieldsToClear[hiddenFieldId] = undefined;
-                    form.setFieldValue(hiddenFieldId, undefined);
-                }
-            });
-        }
-    }, [ageAtVisit, ageBMI, nutritionalBMI]);
-
-    useEffect(() => {
-        const currentData = form.getFieldsValue();
-        form.setFieldsValue({ ...currentData, ...mainEvent.dataValues });
-    }, [activeKey]);
-
-    useEffect(() => {
         if (ruleResult && ruleResult.hiddenOptions["mrKZWf2WMIC"]?.length > 0) {
             setServiceTypes((prev) =>
-                prev.flatMap((o) => {
-                    if (
-                        ruleResult.hiddenOptions["mrKZWf2WMIC"].includes(o.id)
-                    ) {
-                        return [];
-                    }
-                    return o;
-                }),
+                prev.filter(
+                    (o) =>
+                        !ruleResult.hiddenOptions["mrKZWf2WMIC"].includes(o.id),
+                ),
             );
+        } else {
+            setServiceTypes(optionSets.get("QwsvSPpnRul") ?? []);
         }
-    }, [ruleResult?.hiddenOptions["mrKZWf2WMIC"]]);
+    }, [ruleResult.hiddenOptions["mrKZWf2WMIC"], optionSets]);
     return (
         <Flex vertical gap={10} style={{ width: "100%" }}>
             <Card size="small" styles={{ body: { padding: 10, margin: 0 } }}>
                 <Row gutter={[16, 0]}>
-                    <Col span={12}>
-                        <Form.Item
-                            label="Visit Date"
-                            name="occurredAt"
-                            rules={[
-                                {
-                                    required: true,
-                                    message: "Please select visit date!",
-                                },
-                            ]}
-                            getValueProps={createGetValueProps("DATE")}
-                            normalize={createNormalize("DATE")}
-                        >
-                            <DatePicker
-                                style={{ width: "100%" }}
-                                placeholder="Select date"
-                                onChange={(date) => {
-                                    const value = date
-                                        ? date.format("YYYY-MM-DD")
-                                        : undefined;
-                                    handleFieldChange("occurredAt", value);
-                                }}
-                                disabledDate={(date) => date.isAfter(dayjs())}
-                            />
-                        </Form.Item>
-                    </Col>
+                    <DataElementField
+                        dataElement={{
+                            code: "occurredAt",
+                            id: "occurredAt",
+                            confidential: false,
+                            name: "occurredAt",
+                            valueType: "DATE",
+                            displayFormName: "Visit Date",
+                            generated: false,
+                            optionSetValue: false,
+                            unique: true,
+                            pattern: "",
+                            formName: "Visit Date",
+                        }}
+                        hidden={false}
+                        finalOptions={[]}
+                        messages={[]}
+                        warnings={[]}
+                        errors={[]}
+                        required={true}
+                        form={form}
+                        xs={12}
+                        sm={12}
+                        md={12}
+                        lg={12}
+                        xl={12}
+                        onFieldChange={(fieldId, value) => {}}
+                        disabledDate={(date) => date.isAfter(dayjs())}
+                    />
                     <Col span={12}>
                         <Form.Item
                             label="Service Type"
@@ -249,9 +153,7 @@ export default function MainEventCapture({
                                                   .includes(input.toLowerCase())
                                             : false,
                                 }}
-                                onChange={(value) => {
-                                    handleFieldChange("mrKZWf2WMIC", value);
-                                }}
+                                onChange={() => {}}
                             />
                         </Form.Item>
                     </Col>
@@ -317,7 +219,7 @@ export default function MainEventCapture({
                         ["asc"],
                     ).flatMap((section) => {
                         if (
-                            !ruleResult ||
+                            ruleResult &&
                             ruleResult.hiddenSections.includes(section.id)
                         )
                             return [];
@@ -353,9 +255,7 @@ export default function MainEventCapture({
                                                                     .length
                                                             }
                                                             form={form}
-                                                            onFieldChange={
-                                                                handleFieldChange
-                                                            }
+                                                            onFieldChange={() => {}}
                                                         />
                                                     );
                                                 },

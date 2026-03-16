@@ -2,17 +2,19 @@ import {
     Checkbox,
     Col,
     DatePicker,
+    DatePickerProps,
     Form,
     FormInstance,
     Input,
     InputNumber,
     Radio,
     Select,
-    DatePickerProps,
 } from "antd";
 import React, { useCallback } from "react";
 import {
     DataElement,
+    FlattenedEvent,
+    FlattenedTrackedEntity,
     Message,
     OptionSet,
     RenderType,
@@ -21,7 +23,6 @@ import {
 import { createGetValueProps, createNormalize, isDate } from "../utils/utils";
 import DobPicker from "./dob-picker";
 import VillageSelect from "./village-select";
-import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
 
 export const DataElementField = React.memo<{
     dataElement: DataElement | TrackedEntityAttribute;
@@ -76,7 +77,10 @@ export const DataElementField = React.memo<{
         let element: React.ReactNode = (
             <Input
                 disabled={disabled}
-                onChange={(e) => {
+                // onChange={(e) => {
+                //     onFieldChange(dataElement.id, e.target.value);
+                // }}
+                onBlur={(e) => {
                     onFieldChange(dataElement.id, e.target.value);
                 }}
                 allowClear
@@ -252,15 +256,6 @@ export const DataElementField = React.memo<{
                     {dataElement.formName ?? dataElement.name}
                 </Checkbox>
             );
-        } else if (dataElement.valueType === "AGE") {
-            element = (
-                <DobPicker
-                    form={form}
-                    dataElement={dataElement}
-                    onFieldChange={onFieldChange}
-                    disabled={disabled}
-                />
-            );
         } else if (dataElement.valueType === "DATETIME") {
             element = (
                 <DatePicker
@@ -299,7 +294,10 @@ export const DataElementField = React.memo<{
                 <Input.TextArea
                     disabled={disabled}
                     rows={4}
-                    onChange={(e) => {
+                    // onChange={(e) => {
+                    //     onFieldChange(dataElement.id, e.target.value);
+                    // }}
+                    onBlur={(e) => {
                         onFieldChange(dataElement.id, e.target.value);
                     }}
                 />
@@ -311,8 +309,11 @@ export const DataElementField = React.memo<{
                     style={{
                         width: "100%",
                     }}
-                    onChange={(value) => {
-                        onFieldChange(dataElement.id, value);
+                    // onChange={(value) => {
+                    //     onFieldChange(dataElement.id, value);
+                    // }}
+                    onBlur={(e) => {
+                        onFieldChange(dataElement.id, e.target.value);
                     }}
                 />
             );
@@ -327,8 +328,11 @@ export const DataElementField = React.memo<{
                     parser={(value) =>
                         Number(value?.replace(/[^0-9-]/g, "")) || 0
                     }
-                    onChange={(value) => {
-                        onFieldChange(dataElement.id, value);
+                    // onChange={(value) => {
+                    //     onFieldChange(dataElement.id, value);
+                    // }}
+                    onBlur={(e) => {
+                        onFieldChange(dataElement.id, e.target.value);
                     }}
                 />
             );
@@ -344,8 +348,11 @@ export const DataElementField = React.memo<{
                     parser={(value) =>
                         Number(value?.replace(/[^0-9]/g, "")) || 0
                     }
-                    onChange={(value) => {
-                        onFieldChange(dataElement.id, value);
+                    // onChange={(value) => {
+                    //     onFieldChange(dataElement.id, value);
+                    // }}
+                    onBlur={(e) => {
+                        onFieldChange(dataElement.id, e.target.value);
                     }}
                 />
             );
@@ -359,8 +366,11 @@ export const DataElementField = React.memo<{
                     min={0}
                     max={1}
                     step={0.01}
-                    onChange={(value) => {
-                        onFieldChange(dataElement.id, value);
+                    // onChange={(value) => {
+                    //     onFieldChange(dataElement.id, value);
+                    // }}
+                    onBlur={(e) => {
+                        onFieldChange(dataElement.id, e.target.value);
                     }}
                 />
             );
@@ -373,8 +383,11 @@ export const DataElementField = React.memo<{
                     style={{
                         width: "100%",
                     }}
-                    onChange={(value) => {
-                        onFieldChange(dataElement.id, value);
+                    // onChange={(value) => {
+                    //     onFieldChange(dataElement.id, value);
+                    // }}
+                    onBlur={(e) => {
+                        onFieldChange(dataElement.id, e.target.value);
                     }}
                 />
             );
@@ -388,10 +401,32 @@ export const DataElementField = React.memo<{
                     style={{
                         width: "100%",
                     }}
-                    onChange={(value) => {
-                        onFieldChange(dataElement.id, value);
+                    // onChange={(value) => {
+                    //     onFieldChange(dataElement.id, value);
+                    // }}
+                    onBlur={(e) => {
+                        onFieldChange(dataElement.id, e.target.value);
                     }}
                 />
+            );
+        }
+
+        if (dataElement.valueType === "AGE") {
+            return (
+                <Col
+                    key={dataElement.id}
+                    sm={{ span: sm }}
+                    md={{ span: md }}
+                    lg={{ span: lg }}
+                    xs={{ span: xs }}
+                    xl={{ span: xl }}
+                >
+                    <DobPicker
+                        form={form}
+                        dataElement={dataElement}
+                        onFieldChange={onFieldChange}
+                    />
+                </Col>
             );
         }
 
@@ -410,7 +445,8 @@ export const DataElementField = React.memo<{
                         dataElement.valueType === "BOOLEAN"
                             ? null
                             : customLabel ||
-                              `${dataElement.formName || dataElement.name}`
+                              dataElement.formName ||
+                              dataElement.name
                     }
                     name={dataElement.id}
                     required={required}

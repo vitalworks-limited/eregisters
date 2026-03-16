@@ -1,11 +1,11 @@
 import { FormInstance } from "antd";
+import dayjs from "dayjs";
 import { orderBy } from "lodash";
 import React from "react";
 import { RootRoute } from "../routes/__root";
-import { ProgramRuleResult, RenderType } from "../schemas";
+import { ProgramRuleResult } from "../schemas";
 import { buildCurrentDataElements, calculateColSpan } from "../utils/utils";
 import { DataElementField } from "./data-element-field";
-import dayjs from "dayjs";
 
 interface DataElementRendererProps {
     dataElementId: string;
@@ -69,8 +69,6 @@ export const DataElementRenderer = ({
     const optionSetId = currentDataElement.optionSet?.id ?? "";
     const hiddenOptions = ruleResult.hiddenOptions[dataElementId];
     const shownOptionGroups = ruleResult.shownOptionGroups[dataElementId] ?? [];
-
-    // Filter options based on rule results
     let finalOptions = orderBy(
         optionSets.get(optionSetId)?.flatMap((o) => {
             if (hiddenOptions?.includes(o.id)) return [];
@@ -90,17 +88,13 @@ export const DataElementRenderer = ({
             sortOrder,
         }));
     }
-
-    // Filter messages based on dataElementId
     const errors = ruleResult.errors.filter((m) => m.key === dataElementId);
     const messages = ruleResult.messages.filter((m) => m.key === dataElementId);
     const warnings = ruleResult.warnings.filter((m) => m.key === dataElementId);
-
-    // Determine if field should be disabled
-    // Disable if: assigned by program rule OR hidden by program rule (but has value)
     const isDisabled =
         dataElementId in ruleResult.assignments ||
-        ruleResult.hiddenFields.includes(dataElementId);
+        (ruleResult.hiddenFields.includes(dataElementId) &&
+            form.getFieldValue(dataElementId));
 
     return (
         <DataElementField

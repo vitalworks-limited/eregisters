@@ -1,7 +1,11 @@
 import { PlusOutlined } from "@ant-design/icons";
 import { Button, Card, Form, Space, Typography } from "antd";
-import React from "react";
+import React, { useMemo } from "react";
+
 import { useModalState } from "../hooks/useModalState";
+import { TrackedEntityContext } from "../machines";
+import { RootRoute } from "../routes/__root";
+import { TrackedEntitiesRoute } from "../routes/tracked-entities";
 import { FlattenedTrackedEntity } from "../schemas";
 import {
     createEmptyEnrollment,
@@ -9,22 +13,40 @@ import {
 } from "../utils/utils";
 import { DataModal } from "./data-modal";
 import { TrackerRegistration } from "./tracker-registration";
-import { RootRoute } from "../routes/__root";
-import { TrackedEntitiesRoute } from "../routes/tracked-entities";
-import {
-    enrollmentsCollection,
-    trackedEntitiesCollection,
-} from "../collections";
+import { SyncContext } from "../machines/sync";
 
 const { Title, Text } = Typography;
 const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
     const {
         orgUnit: { id },
+        programRuleVariables,
+        program,
+        programRules,
     } = RootRoute.useLoaderData();
-    const navigate = TrackedEntitiesRoute.useNavigate();
-    const { enrollment, data, isOpen, openModal, closeModal } =
-        useModalState<FlattenedTrackedEntity>();
+    const syncActor = SyncContext.useActorRef();
+    const { enrollmentsCollection, trackedEntitiesCollection } =
+        SyncContext.useSelector((a) => ({
+            enrollmentsCollection: a.context.enrollmentsCollection,
+            trackedEntitiesCollection: a.context.trackedEntitiesCollection,
+        }));
 
+    const mainStageDataElements = useMemo(
+        () =>
+            new Set(
+                program.programTrackedEntityAttributes.map(
+                    ({ trackedEntityAttribute }) => trackedEntityAttribute.id,
+                ),
+            ),
+        [],
+    );
+    const navigate = TrackedEntitiesRoute.useNavigate();
+    const {
+        enrollment,
+        data: trackedEntity,
+        isOpen,
+        openModal,
+        closeModal,
+    } = useModalState<FlattenedTrackedEntity>();
     const handleCreate = async () => {
         const newPatient: FlattenedTrackedEntity = createEmptyTrackedEntity({
             orgUnit: id,
@@ -88,16 +110,16 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
             </Space>
             <DataModal<FlattenedTrackedEntity>
                 open={isOpen}
-                data={data}
+                data={trackedEntity}
                 onClose={closeModal}
                 enrollment={enrollment}
-                onSave={async ({ values, enrollment, addAnother }) => {
-                    if (values && data && enrollment) {
+                onSave={async ({ values, addAnother }) => {
+                    if (values && trackedEntity && enrollment) {
                         const tx1 = trackedEntitiesCollection.update(
-                            data.trackedEntity,
+                            trackedEntity.trackedEntity,
                             (draft) => {
                                 draft.attributes = {
-                                    ...data.attributes,
+                                    ...trackedEntity.attributes,
                                     ...values,
                                 };
                                 draft.syncStatus = "pending";
@@ -115,7 +137,29 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
                             },
                         );
                         await tx2.isPersisted.promise;
+
+                        syncActor.send({
+                            type: "SYNC_ENTITIES",
+                            entities: [
+                                {
+                                    ...enrollment,
+                                    attributes: {
+                                        ...enrollment.attributes,
+                                        ...values,
+                                    },
+                                    syncStatus: "pending",
+                                },
+                                {
+                                    ...trackedEntity,
+                                    attributes: {
+                                        ...trackedEntity.attributes,
+                                        ...values,
+                                    },
+                                },
+                            ],
+                        });
                         if (addAnother) {
+                            closeModal();
                             const newPatient = createEmptyTrackedEntity({
                                 orgUnit: id,
                             });
@@ -137,7 +181,7 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
                                     orgUnits: id,
                                 },
                                 params: {
-                                    trackedEntity: data.trackedEntity,
+                                    trackedEntity: trackedEntity.trackedEntity,
                                 },
                             });
                         }
@@ -147,11 +191,35 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
                 submitButtonText="Register client"
                 hasAddAnother={true}
             >
-                {(form) => (
-                    <Form form={form} layout="vertical" preserve={false}>
-                        <TrackerRegistration trackedEntity={data!} form={form} />
-                    </Form>
-                )}
+                {(form) => {
+                    return (
+                        <TrackedEntityContext.Provider
+                            key={trackedEntity?.trackedEntity || "closed"}
+                            options={{
+                                input: {
+                                    programRules,
+                                    programRuleVariables,
+                                    program: "ueBhWkWll5v",
+                                    trackedEntity: trackedEntity!,
+                                    validDataElements: mainStageDataElements,
+                                    form,
+                                    trackedEntitiesCollection,
+                                },
+                            }}
+                        >
+                            <Form
+                                form={form}
+                                layout="vertical"
+                                preserve={false}
+                            >
+                                <TrackerRegistration
+                                    trackedEntity={trackedEntity!}
+                                    form={form}
+                                />
+                            </Form>
+                        </TrackedEntityContext.Provider>
+                    );
+                }}
             </DataModal>
         </Card>
     );

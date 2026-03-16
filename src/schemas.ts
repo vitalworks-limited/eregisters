@@ -32,6 +32,7 @@ export const SyncStatusSchema = z.enum([
     "synced",
     "failed",
     "deleted",
+    "editing",
 ]);
 
 export const UserSchema = z.object({
@@ -64,6 +65,14 @@ export const DataElementSchema = z.object({
     optionSetValue: z.boolean(),
     valueType: z.string(),
     formName: z.string(),
+    id: UID,
+});
+export const ProgramIndicatorSchema = z.object({
+    filter: z.string(),
+    expression: z.string(),
+    name: z.string(),
+    aggregationType: z.string(),
+    program: z.object({ id: z.string() }),
     id: UID,
 });
 
@@ -228,22 +237,22 @@ export const OrgUnitSchema = z.object({
 
 export const AttributeSchema = z.object({
     attribute: z.string(),
-    displayName: z.string(),
-    createdAt: z.string(),
-    updatedAt: z.string(),
-    valueType: z.string(),
+    displayName: z.string().optional(),
+    createdAt: z.string().optional(),
+    updatedAt: z.string().optional(),
+    valueType: z.string().optional(),
     value: z.string(),
 });
 
 export const DataValueSchema = z.object({
-    createdAt: z.string(),
-    updatedAt: z.string(),
-    storedBy: z.string(),
-    providedElsewhere: z.boolean(),
+    createdAt: z.string().optional(),
+    updatedAt: z.string().optional(),
+    storedBy: z.string().optional(),
+    providedElsewhere: z.boolean().optional(),
     dataElement: UID,
     value: z.string(),
-    createdBy: UserSchema,
-    updatedBy: UserSchema,
+    createdBy: UserSchema.optional(),
+    updatedBy: UserSchema.optional(),
 });
 
 export const EventSchema = z.object({
@@ -284,7 +293,7 @@ export const EnrollmentsSchema = z.object({
     deleted: z.boolean(),
     createdBy: UserSchema.optional(),
     updatedBy: UserSchema.optional(),
-    events: z.array(EventSchema).catch([]),
+    events: z.array(EventSchema).optional(),
     attributes: z.array(AttributeSchema),
     notes: z.array(z.unknown()).optional(),
 });
@@ -301,7 +310,7 @@ export const TrackedEntitySchema = z.object({
     createdBy: UserSchema.optional(),
     updatedBy: UserSchema.optional(),
     attributes: z.array(AttributeSchema),
-    enrollments: z.array(EnrollmentsSchema),
+    enrollments: z.array(EnrollmentsSchema).optional(),
     programOwners: z
         .array(
             z.object({
@@ -371,6 +380,7 @@ export type Program = z.infer<typeof ProgramSchema>;
 export type ProgramStage = z.infer<typeof ProgramStageSchema>;
 export type ProgramStageSection = z.infer<typeof ProgramStageSectionSchema>;
 export type DataElement = z.infer<typeof DataElementSchema>;
+export type ProgramIndicator = z.infer<typeof ProgramIndicatorSchema>;
 export type ProgramTrackedEntityAttribute = z.infer<
     typeof ProgramTrackedEntityAttributeSchema
 >;
