@@ -389,7 +389,7 @@ function TrackedEntityComponent() {
             occurredAt: allValues["occurredAt"],
             enrolledAt: allValues["occurredAt"],
         };
-				console.log(allValues)
+        console.log(allValues);
         const newPatient: FlattenedTrackedEntity = createEmptyTrackedEntity({
             orgUnit: id,
             attributes: initialValues,
@@ -598,6 +598,18 @@ function TrackedEntityComponent() {
                                     syncStatus: "pending",
                                 },
                             ],
+                        });
+                        syncActor.send({
+                            type: "EVALUATE_INDICATORS",
+                            trackedEntity,
+                            event: {
+                                ...data,
+                                dataValues: {
+                                    ...data.dataValues,
+                                    ...values,
+                                },
+                                syncStatus: "pending",
+                            },
                         });
                     }
                 }}
@@ -827,7 +839,13 @@ function TrackedEntityComponent() {
                     >
                         <Form form={form} layout="vertical" preserve={false}>
                             <TrackerRegistration
-                                trackedEntity={trackedEntity}
+                                trackedEntity={{
+                                    ...trackedEntity,
+                                    attributes: {
+                                        ...trackedEntity.attributes,
+                                        enrolledAt: enrollment.enrolledAt,
+                                    },
+                                }}
                                 form={form}
                             />
                         </Form>

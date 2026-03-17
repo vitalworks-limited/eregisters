@@ -7,7 +7,7 @@ import {
     Typography,
 } from "antd";
 import dayjs from "dayjs";
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import { DataElement, TrackedEntityAttribute } from "../schemas";
 import { createGetValueProps, createNormalize } from "../utils/utils";
 
@@ -34,17 +34,16 @@ const { Text } = Typography;
 export default function DobPicker({
     form,
     dataElement,
-    onFieldChange,
     disabled = false,
+    label,
 }: {
     form: FormInstance<any>;
     dataElement: DataElement | TrackedEntityAttribute;
-    onFieldChange?: (dataElementId: string, value: any) => void;
     disabled?: boolean;
+    label: string;
 }) {
-    // Read current DOB value from form
-    const fieldValue = form.getFieldValue(dataElement.id);
-    const enrolledAt = form.getFieldValue("enrolledAt");
+    const fieldValue = Form.useWatch(dataElement.id, form);
+    const enrolledAt = Form.useWatch("enrolledAt", form);
 
     const dateValue = useMemo(() => {
         if (fieldValue && typeof fieldValue === "string") {
@@ -72,18 +71,30 @@ export default function DobPicker({
                 newMonths ?? 0,
                 newDays ?? 0,
             );
-            form.setFieldValue(dataElement.id, calculatedDob);
+            const value = calculatedDob
+                ? calculatedDob.format("YYYY-MM-DD")
+                : undefined;
+            form.setFieldValue(dataElement.id, value);
         } else {
             form.setFieldValue(dataElement.id, null);
         }
     };
 
     return (
-        <Flex vertical gap={0}>
+        <Flex vertical gap={4}>
             <Form.Item
                 name={dataElement.id}
                 getValueProps={createGetValueProps(dataElement.valueType)}
                 normalize={createNormalize(dataElement.valueType)}
+                label={label}
+                required={true}
+                rules={[
+                    {
+                        required: true,
+                        message: `${dataElement.formName || dataElement.name} is required`,
+                    },
+                ]}
+                style={{ padding: 0, margin: 0 }}
             >
                 <DatePicker
                     style={{ width: "100%" }}

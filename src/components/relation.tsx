@@ -82,12 +82,7 @@ export default function Relation({
                 },
             }}
         >
-            <BasicForm
-                form={form}
-                section={section}
-                event={childEvent}
-                enrollment={enrollment}
-            />
+            <BasicForm form={form} section={section} event={childEvent} />
         </EventContext.Provider>
     );
 }

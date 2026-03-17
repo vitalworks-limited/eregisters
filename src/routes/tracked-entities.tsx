@@ -23,6 +23,7 @@ import { eq, useLiveSuspenseQuery, not, and } from "@tanstack/react-db";
 
 import dayjs from "dayjs";
 import { SyncContext } from "../machines";
+import { useCurrentUserInfo } from "@dhis2/app-runtime";
 
 const { Content } = Layout;
 const { Title } = Typography;
@@ -39,15 +40,26 @@ function TrackedEntities() {
             enrollmentsCollection: a.context.enrollmentsCollection,
             trackedEntitiesCollection: a.context.trackedEntitiesCollection,
         }));
+
+    const currentUser = useCurrentUserInfo();
+
+    const orgUnit = (
+        currentUser?.organisationUnits.map((a) => a.id) ?? []
+    ).join(";");
     const [form] = Form.useForm();
     const { program, trackedEntityAttributes, optionSets } =
         RootRoute.useLoaderData();
-    const { data: total } = useLiveSuspenseQuery((q) =>
-        q
-            .from({ trackedEntities: trackedEntitiesCollection })
-            .where(({ trackedEntities }) =>
-                not(eq(trackedEntities.syncStatus, "draft")),
-            ),
+    const { data: total } = useLiveSuspenseQuery(
+        (q) =>
+            q
+                .from({ trackedEntities: trackedEntitiesCollection })
+                .where(({ trackedEntities }) =>
+                    and(
+                        not(eq(trackedEntities.syncStatus, "draft")),
+                        eq(trackedEntities.orgUnit, orgUnit),
+                    ),
+                ),
+        [orgUnit],
     );
     const { data: enrollments } = useLiveSuspenseQuery((q) =>
         q
@@ -56,6 +68,7 @@ function TrackedEntities() {
                 and(
                     eq(enrollments.enrolledAt, dayjs().format("YYYY-MM-DD")),
                     not(eq(enrollments.syncStatus, "draft")),
+                    eq(enrollments.orgUnit, orgUnit),
                 ),
             ),
     );
@@ -135,7 +148,6 @@ function TrackedEntities() {
                                                 lg={24}
                                                 xl={24}
                                                 form={form}
-                                                onFieldChange={() => {}}
                                             />
                                         );
                                     },

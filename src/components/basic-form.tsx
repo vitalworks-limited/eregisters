@@ -10,11 +10,9 @@ export default function BasicForm({
     section,
     form,
     event,
-    enrollment,
 }: {
     section: string;
     form: FormInstance;
-    enrollment: FlattenedEnrollment;
     event: FlattenedEvent;
 }) {
     const eventActor = EventContext.useActorRef();
@@ -67,7 +65,6 @@ export default function BasicForm({
                             ruleResult={ruleResult}
                             sectionLength={triageSection.dataElements.length}
                             form={form}
-                            onFieldChange={() => {}}
                         />
                     ))}
                 </Row>
@@ -80,7 +77,6 @@ export default function BasicForm({
                             ruleResult={ruleResult}
                             sectionLength={currentSection.dataElements.length}
                             form={form}
-                            onFieldChange={() => {}}
                         />
                     ))}
                 </Row>

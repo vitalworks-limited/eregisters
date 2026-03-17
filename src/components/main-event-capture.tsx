@@ -59,6 +59,8 @@ export default function MainEventCapture({
         });
     }, [values]);
 
+    // const onFieldChange = (dataElement: string, value: any) => {};
+
     const ruleResult = EventContext.useSelector(
         (state) => state.context.ruleResult,
     );
@@ -114,7 +116,6 @@ export default function MainEventCapture({
                         md={12}
                         lg={12}
                         xl={12}
-                        onFieldChange={(fieldId, value) => {}}
                         disabledDate={(date) => date.isAfter(dayjs())}
                     />
                     <Col span={12}>
@@ -153,7 +154,7 @@ export default function MainEventCapture({
                                                   .includes(input.toLowerCase())
                                             : false,
                                 }}
-                                onChange={() => {}}
+                                onChange={(value) => {}}
                             />
                         </Form.Item>
                     </Col>
@@ -255,7 +256,6 @@ export default function MainEventCapture({
                                                                     .length
                                                             }
                                                             form={form}
-                                                            onFieldChange={() => {}}
                                                         />
                                                     );
                                                 },

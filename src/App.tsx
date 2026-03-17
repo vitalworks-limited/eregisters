@@ -8,32 +8,43 @@ import {
     createEventCollection,
     createTrackedEntityCollection,
 } from "./collections";
+import { Spinner } from "./components/spinner";
 import { SyncContext } from "./machines/sync";
 import { queryClient } from "./query-client";
 import { router } from "./router";
-import { Spinner } from "./components/spinner";
-import { loadInitialSyncState } from "./db/sync-state-loader";
 
 const Main = () => {
     const syncActor = SyncContext.useActorRef();
-
     const isFirstTimeLoading = SyncContext.useSelector((snapshot) => {
         const isMetadataNotReady =
             snapshot.matches({ metadataSync: "idle" }) ||
             snapshot.matches({ metadataSync: "fullRefresh" }) ||
             (snapshot.matches({ metadataSync: "syncing" }) &&
                 !snapshot.context.lastMetadataPull);
-
         return isMetadataNotReady;
     });
 
-    if (isFirstTimeLoading)
+    const { metadataSync } = SyncContext.useSelector((a) => a.value);
+
+    const userInfo = useCurrentUserInfo();
+
+    if (isFirstTimeLoading) {
         return (
             <Spinner
-                component={<Typography.Text>Loading Metadata</Typography.Text>}
+                component={
+                    <Typography.Text>
+                        Loading Metadata {metadataSync}
+                    </Typography.Text>
+                }
             />
         );
-    return <RouterProvider router={router} context={{ syncActor }} />;
+    }
+    return (
+        <RouterProvider
+            router={router}
+            context={{ syncActor, user: userInfo?.id }}
+        />
+    );
 };
 const MyApp: FC = () => {
     const engine = useDataEngine();
@@ -42,23 +53,9 @@ const MyApp: FC = () => {
     const eventsCollection = createEventCollection();
     const userInfo = useCurrentUserInfo();
 
-    const [initialSyncState, setInitialSyncState] = React.useState<{
-        lastMetadataPull?: string;
-        lastDataPull?: string;
-    } | null>(null);
-
-    React.useEffect(() => {
-        loadInitialSyncState().then(setInitialSyncState);
-    }, []);
-
-    if (!initialSyncState) {
-        return (
-            <Spinner
-                component={<Typography.Text>Initializing...</Typography.Text>}
-            />
-        );
+    if (userInfo === undefined) {
+        return <Typography.Text>No user found</Typography.Text>;
     }
-
     return (
         <ConfigProvider
             theme={{
@@ -82,16 +79,15 @@ const MyApp: FC = () => {
                                 enrollmentsCollection,
                                 eventsCollection,
                                 trackedEntitiesCollection,
-                                orgUnit:
-                                    userInfo?.organisationUnits
-                                        .map((a) => a.id)
-                                        .join(";") ?? "",
-                                initialLastMetadataPull:
-                                    initialSyncState.lastMetadataPull,
-                                initialLastDataPull:
-                                    initialSyncState.lastDataPull,
+                                orgUnit: userInfo.organisationUnits
+                                    .map(({ id }) => id)
+                                    .join(";"),
+                                user: userInfo.id,
                             },
                         }}
+                        key={`${userInfo.id}${userInfo.organisationUnits
+                            .map(({ id }) => id)
+                            .join(";")}`}
                     >
                         <Main />
                     </SyncContext.Provider>

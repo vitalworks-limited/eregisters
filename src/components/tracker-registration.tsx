@@ -14,7 +14,6 @@ export interface TrackerRegistrationProps {
 }
 
 export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
-    trackedEntity,
     form,
 }) => {
     const { program } = RootRoute.useLoaderData();
@@ -24,18 +23,19 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
     );
     const state = TrackedEntityContext.useSelector((a) => a.value);
     const trackedEntityActor = TrackedEntityContext.useActorRef();
+
     const values = Form.useWatch([], form);
 
     useEffect(() => {
+        console.log(values);
         trackedEntityActor.send({
             type: "FIELD_CHANGED",
             formData: {
-                ...form.getFieldsValue,
+                ...form.getFieldsValue(),
                 ...values,
             },
         });
     }, [values]);
-
     return (
         <Flex vertical gap={10}>
             <Card
@@ -70,7 +70,6 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
                         md={24}
                         lg={24}
                         xl={24}
-                        onFieldChange={() => {}}
                         disabledDate={(date) => {
                             if (program.selectEnrollmentDatesInFuture)
                                 return true;
@@ -103,7 +102,6 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
                                         form={form}
                                         mode="attribute"
                                         xl={spans.get(id) ?? undefined}
-                                        onFieldChange={() => {}}
                                     />
                                 ))}
                             </Row>

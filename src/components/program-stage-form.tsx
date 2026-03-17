@@ -42,7 +42,6 @@ export default function ProgramStageForm({
                                 ruleResult={ruleResult}
                                 sectionLength={section.dataElements.length}
                                 form={form}
-                                onFieldChange={() => {}}
                             />
                         ))}
                     </Row>

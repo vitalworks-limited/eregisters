@@ -1,10 +1,11 @@
 import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
 import React from "react";
-
+import relativeTime from "dayjs/plugin/relativeTime";
+import dayjs from "dayjs";
 import {
-	CloudDownloadOutlined,
-	HomeOutlined,
-	ReloadOutlined,
+    CloudDownloadOutlined,
+    HomeOutlined,
+    ReloadOutlined,
 } from "@ant-design/icons";
 import { Badge, Button, Flex, Layout, Space, Tooltip, Typography } from "antd";
 import { groupBy } from "lodash";
@@ -14,10 +15,12 @@ import { Spinner } from "../components/spinner";
 import { db } from "../db";
 import { SyncContext } from "../machines/sync";
 
+dayjs.extend(relativeTime);
+
 const { Header } = Layout;
 const { Title, Text } = Typography;
 
-const queryInfo = async () => {
+const queryInfo = async (user: string) => {
     const dataElements = await db.dataElements.toArray();
     const trackedEntityAttributes = await db.trackedEntityAttributes.toArray();
     const programRules = await db.programRules.toArray();
@@ -25,8 +28,7 @@ const queryInfo = async () => {
     const optionGroups = await db.optionGroups.toArray();
     const optionSets = await db.optionSets.toArray();
     const [program] = await db.programs.toArray();
-    const [orgUnit] = await db.organisationUnits.toArray();
-
+    const [orgUnit] = await db.organisationUnits.where({ user }).toArray();
     return {
         dataElements: new Map(dataElements.map((de) => [de.id, de])),
         trackedEntityAttributes: new Map(
@@ -58,6 +60,7 @@ const queryInfo = async () => {
 
 export const RootRoute = createRootRouteWithContext<{
     syncActor: ReturnType<typeof SyncContext.useActorRef>;
+    user: string;
 }>()({
     component: LayoutWithDrafts,
     pendingComponent: () => (
@@ -65,18 +68,14 @@ export const RootRoute = createRootRouteWithContext<{
             component={<Typography.Text>Loading Metadata</Typography.Text>}
         />
     ),
-    loader: async ({ context: { syncActor } }) => {
+    loader: async ({ context: { user } }) => {
         try {
-            const data = await queryInfo();
-            if (!data.program || !data.orgUnit) {
-                syncActor.send({ type: "FULL_METADATA_SYNC" });
-            }
+            const data = await queryInfo(user);
             return data;
         } catch (error) {
-            syncActor.send({ type: "FULL_METADATA_SYNC" });
             await db.delete();
             await db.open();
-            return await queryInfo();
+            return await queryInfo(user);
         }
     },
 });
@@ -89,6 +88,10 @@ function LayoutWithDrafts() {
     );
     const syncingData = SyncContext.useSelector((a) =>
         a.matches({ dataPull: "syncing" }),
+    );
+    const lastDataPull = SyncContext.useSelector((a) => a.context.lastDataPull);
+    const lastMetadataPull = SyncContext.useSelector(
+        (a) => a.context.lastMetadataPull,
     );
     const {
         trackedEntitiesCollection,
@@ -116,13 +119,6 @@ function LayoutWithDrafts() {
             .from({ events: eventsCollection })
             .where(({ events }) => eq(events.syncStatus, "pending")),
     );
-    if (syncingMetadata && orgUnit === undefined) {
-        return (
-            <Spinner
-                component={<Typography.Text>Loading Metadata</Typography.Text>}
-            />
-        );
-    }
 
     return (
         <Layout
@@ -167,7 +163,6 @@ function LayoutWithDrafts() {
                     />
                     <HomeOutlined style={{ fontSize: 20, color: "#1890ff" }} />
                     <Text strong>{orgUnit.name}</Text>
-                    {/* <SyncStatus syncManager={syncManager} /> */}
                     <Tooltip title="Pull latest data from server">
                         <Button
                             icon={<CloudDownloadOutlined />}
@@ -179,12 +174,12 @@ function LayoutWithDrafts() {
                             }}
                             size="small"
                         >
-                            {syncingData ? "Pulling..." : "Pull Data"}
+                            {syncingData
+                                ? "Pulling..."
+                                : `Pull Data|Updated ${lastDataPull ? dayjs(lastDataPull).fromNow() : ""}`}
                         </Button>
                     </Tooltip>
-                    {/* <MetadataSyncComponent
-                        metadataSync={syncManager.getMetadataSync()}
-                    /> */}
+
                     <Tooltip title="Sync metadata">
                         <Button
                             type="primary"
@@ -195,7 +190,9 @@ function LayoutWithDrafts() {
                             loading={syncingMetadata}
                             size="small"
                         >
-                            {syncingMetadata ? "Syncing..." : "Sync Metadata"}
+                            {syncingMetadata
+                                ? "Syncing..."
+                                : `Sync Metadata|Updated ${lastMetadataPull ? dayjs(lastMetadataPull).fromNow() : ""}`}
                         </Button>
                     </Tooltip>
                 </Space>

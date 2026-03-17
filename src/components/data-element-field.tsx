@@ -40,7 +40,7 @@ export const DataElementField = React.memo<{
     xl?: number;
     form: FormInstance<FlattenedTrackedEntity | FlattenedEvent>;
     customLabel?: string;
-    onFieldChange: (dataElementId: string, value: any) => void;
+    // onFieldChange: (dataElementId: string, value: any) => void;
     desktopRenderType?: RenderType["type"];
     disabled?: boolean;
     disabledDate?: DatePickerProps["disabledDate"];
@@ -60,12 +60,11 @@ export const DataElementField = React.memo<{
         form,
         customLabel,
         desktopRenderType,
-        onFieldChange,
+        // onFieldChange,
         disabledDate,
         disabled = false,
     }) => {
         if (hidden) return null;
-        // Stable filter function for Select dropdowns
         const filterOption = useCallback((input: string, option: any) => {
             if (!option) return false;
             return (
@@ -74,18 +73,7 @@ export const DataElementField = React.memo<{
             );
         }, []);
 
-        let element: React.ReactNode = (
-            <Input
-                disabled={disabled}
-                // onChange={(e) => {
-                //     onFieldChange(dataElement.id, e.target.value);
-                // }}
-                onBlur={(e) => {
-                    onFieldChange(dataElement.id, e.target.value);
-                }}
-                allowClear
-            />
-        );
+        let element: React.ReactNode = <Input disabled={disabled} allowClear />;
 
         if (dataElement.id === "oTI0DLitzFY") {
             element = (
@@ -173,9 +161,6 @@ export const DataElementField = React.memo<{
                     }}
                     allowClear
                     mode="multiple"
-                    onChange={(value) => {
-                        onFieldChange(dataElement.id, value);
-                    }}
                     showSearch={{ filterOption }}
                 />
             );
@@ -187,34 +172,21 @@ export const DataElementField = React.memo<{
                 desktopRenderType,
             )
         ) {
-            // Use callback-based approach instead of Form.useWatch
-            // This prevents unnecessary re-renders and improves radio button responsiveness
-            const handleRadioChange = useCallback(
-                (e: any) => {
-                    const value = e.target.value;
-                    onFieldChange(dataElement.id, value);
-                },
-                [dataElement.id, onFieldChange],
-            );
-
             const handleRadioClick = useCallback(
                 (code: string) => (e: any) => {
-                    // Allow clicking selected radio to deselect it
                     const currentValue = form.getFieldValue(dataElement.id);
                     if (currentValue === code) {
                         e.preventDefault();
                         e.stopPropagation();
-                        onFieldChange(dataElement.id, undefined);
                     }
                 },
-                [dataElement.id, form, onFieldChange],
+                [dataElement.id, form],
             );
 
             element = (
                 <Radio.Group
                     disabled={disabled}
                     vertical={desktopRenderType === "VERTICAL_RADIOBUTTONS"}
-                    onChange={handleRadioChange}
                 >
                     {finalOptions?.map((o) => (
                         <Radio
@@ -238,21 +210,12 @@ export const DataElementField = React.memo<{
                         value: "code",
                     }}
                     allowClear
-                    onChange={(value) => {
-                        onFieldChange(dataElement.id, value);
-                    }}
                     showSearch={{ filterOption }}
                 />
             );
         } else if (dataElement.valueType === "BOOLEAN") {
             element = (
-                <Checkbox
-                    disabled={disabled}
-                    onChange={(e) => {
-                        const value = e.target.checked;
-                        onFieldChange(dataElement.id, value);
-                    }}
-                >
+                <Checkbox disabled={disabled}>
                     {dataElement.formName ?? dataElement.name}
                 </Checkbox>
             );
@@ -264,12 +227,6 @@ export const DataElementField = React.memo<{
                         width: "100%",
                     }}
                     showTime
-                    onChange={(date) => {
-                        const value = date
-                            ? date.format("YYYY-MM-DDTHH:mm:ss")
-                            : undefined;
-                        onFieldChange(dataElement.id, value);
-                    }}
                     disabledDate={disabledDate}
                 />
             );
@@ -280,40 +237,17 @@ export const DataElementField = React.memo<{
                     style={{
                         width: "100%",
                     }}
-                    onChange={(date) => {
-                        const value = date
-                            ? date.format("YYYY-MM-DD")
-                            : undefined;
-                        onFieldChange(dataElement.id, value);
-                    }}
                     disabledDate={disabledDate}
                 />
             );
         } else if (dataElement.valueType === "LONG_TEXT") {
-            element = (
-                <Input.TextArea
-                    disabled={disabled}
-                    rows={4}
-                    // onChange={(e) => {
-                    //     onFieldChange(dataElement.id, e.target.value);
-                    // }}
-                    onBlur={(e) => {
-                        onFieldChange(dataElement.id, e.target.value);
-                    }}
-                />
-            );
+            element = <Input.TextArea disabled={disabled} rows={4} />;
         } else if (dataElement.valueType === "NUMBER") {
             element = (
                 <InputNumber
                     disabled={disabled}
                     style={{
                         width: "100%",
-                    }}
-                    // onChange={(value) => {
-                    //     onFieldChange(dataElement.id, value);
-                    // }}
-                    onBlur={(e) => {
-                        onFieldChange(dataElement.id, e.target.value);
                     }}
                 />
             );
@@ -328,12 +262,6 @@ export const DataElementField = React.memo<{
                     parser={(value) =>
                         Number(value?.replace(/[^0-9-]/g, "")) || 0
                     }
-                    // onChange={(value) => {
-                    //     onFieldChange(dataElement.id, value);
-                    // }}
-                    onBlur={(e) => {
-                        onFieldChange(dataElement.id, e.target.value);
-                    }}
                 />
             );
         } else if (dataElement.valueType === "INTEGER_POSITIVE") {
@@ -348,12 +276,6 @@ export const DataElementField = React.memo<{
                     parser={(value) =>
                         Number(value?.replace(/[^0-9]/g, "")) || 0
                     }
-                    // onChange={(value) => {
-                    //     onFieldChange(dataElement.id, value);
-                    // }}
-                    onBlur={(e) => {
-                        onFieldChange(dataElement.id, e.target.value);
-                    }}
                 />
             );
         } else if (dataElement.valueType === "UNIT_INTERVAL") {
@@ -366,12 +288,6 @@ export const DataElementField = React.memo<{
                     min={0}
                     max={1}
                     step={0.01}
-                    // onChange={(value) => {
-                    //     onFieldChange(dataElement.id, value);
-                    // }}
-                    onBlur={(e) => {
-                        onFieldChange(dataElement.id, e.target.value);
-                    }}
                 />
             );
         } else if (dataElement.valueType === "INTEGER_ZERO_OR_POSITIVE") {
@@ -382,12 +298,6 @@ export const DataElementField = React.memo<{
                     precision={0}
                     style={{
                         width: "100%",
-                    }}
-                    // onChange={(value) => {
-                    //     onFieldChange(dataElement.id, value);
-                    // }}
-                    onBlur={(e) => {
-                        onFieldChange(dataElement.id, e.target.value);
                     }}
                 />
             );
@@ -400,12 +310,6 @@ export const DataElementField = React.memo<{
                     max={100}
                     style={{
                         width: "100%",
-                    }}
-                    // onChange={(value) => {
-                    //     onFieldChange(dataElement.id, value);
-                    // }}
-                    onBlur={(e) => {
-                        onFieldChange(dataElement.id, e.target.value);
                     }}
                 />
             );
@@ -424,7 +328,11 @@ export const DataElementField = React.memo<{
                     <DobPicker
                         form={form}
                         dataElement={dataElement}
-                        onFieldChange={onFieldChange}
+                        label={
+                            customLabel ||
+                            dataElement.formName ||
+                            dataElement.name
+                        }
                     />
                 </Col>
             );

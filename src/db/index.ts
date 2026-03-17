@@ -105,6 +105,15 @@ export interface SyncState {
     pullVersions?: Record<string, string>;
 }
 
+// Program indicator evaluation results
+export interface IndicatorEvaluation {
+    id: string; // Primary key: eventId
+    eventId: string; // Foreign key to event
+    results: Record<string, 1>; // indicatorId → 1 (only passing indicators)
+    updatedAt: string; // ISO 8601 timestamp
+    version: number; // For conflict resolution
+}
+
 /**
  * RegisterDatabase - Main Dexie database instance
  */
@@ -143,6 +152,7 @@ export class RegisterDatabase extends Dexie {
     metadataSyncProgress!: Table<MetadataSyncProgress, string>;
     syncState!: Table<SyncState, string>;
     programIndicators!: Table<ProgramIndicator, string>;
+    indicatorEvaluations!: Table<IndicatorEvaluation, string>;
 
     constructor() {
         super("MOHRegisterDB");
@@ -150,7 +160,7 @@ export class RegisterDatabase extends Dexie {
             trackedEntities:
                 "trackedEntity,orgUnit,createdAt,updatedAt,syncStatus,version,lastSynced,parentEntity,[trackedEntity+parentEntity],_updatedAt, _createdAt",
             events: "event,trackedEntity,programStage,enrollment,occurredAt,updatedAt,createdAt,syncStatus,version,lastSynced,parentEvent,[event+parentEvent],_updatedAt, _createdAt",
-						
+
             enrollments:
                 "enrollment,trackedEntity,enrolledAt,version,syncStatus,lastSynced,createdAt,updatedAt,_updatedAt, _createdAt",
             syncQueue: "id,status,priority,type,entityId,createdAt",
@@ -159,13 +169,14 @@ export class RegisterDatabase extends Dexie {
             dataElements: "id,name",
             programIndicators: "id,name",
             trackedEntityAttributes: "id,name",
-            organisationUnits: "id,title,user",
+            organisationUnits: "[id+user],id,user",
             optionSets: "[id+optionSet],id,optionSet,name,code",
             optionGroups: "[id+optionGroup],id,optionGroup,name,code",
             programs: "id,name,programType",
             metadataVersions: "id,lastSync",
             metadataSyncProgress: "id,status,updatedAt",
             syncState: "id,status,updatedAt",
+            indicatorEvaluations: "id,eventId,updatedAt,version",
         });
     }
 

@@ -76,6 +76,14 @@ export const ProgramIndicatorSchema = z.object({
     id: UID,
 });
 
+export const IndicatorEvaluationSchema = z.object({
+    id: z.string(),
+    eventId: z.string(),
+    results: z.record(z.string(), z.literal(1)),
+    updatedAt: z.string(),
+    version: z.number(),
+});
+
 export const ProgramStageSectionSchema = z.object({
     name: z.string(),
     dataElements: z.array(DataElementSchema),
@@ -381,6 +389,7 @@ export type ProgramStage = z.infer<typeof ProgramStageSchema>;
 export type ProgramStageSection = z.infer<typeof ProgramStageSectionSchema>;
 export type DataElement = z.infer<typeof DataElementSchema>;
 export type ProgramIndicator = z.infer<typeof ProgramIndicatorSchema>;
+export type IndicatorEvaluation = z.infer<typeof IndicatorEvaluationSchema>;
 export type ProgramTrackedEntityAttribute = z.infer<
     typeof ProgramTrackedEntityAttributeSchema
 >;
