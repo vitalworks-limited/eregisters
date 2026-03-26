@@ -17,10 +17,10 @@ const Main = () => {
     const syncActor = SyncContext.useActorRef();
     const isFirstTimeLoading = SyncContext.useSelector((snapshot) => {
         const isMetadataNotReady =
-            snapshot.matches({ metadataSync: "idle" }) ||
-            snapshot.matches({ metadataSync: "fullRefresh" }) ||
-            (snapshot.matches({ metadataSync: "syncing" }) &&
-                !snapshot.context.lastMetadataPull);
+            (snapshot.matches({ metadataSync: "idle" }) ||
+                snapshot.matches({ metadataSync: "fullRefresh" }) ||
+                snapshot.matches({ metadataSync: "syncing" })) &&
+            !snapshot.context.lastMetadataPull;
         return isMetadataNotReady;
     });
 

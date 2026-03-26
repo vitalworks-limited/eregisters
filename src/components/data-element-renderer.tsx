@@ -13,6 +13,7 @@ interface DataElementRendererProps {
     ruleResult: ProgramRuleResult;
     sectionLength: number;
     form: FormInstance;
+    onFieldChange: (fieldId: string, value: any) => void;
     mode?: "dataElement" | "attribute";
     xl?: number;
 }
@@ -22,6 +23,7 @@ export const DataElementRenderer = ({
     ruleResult,
     sectionLength,
     form,
+    onFieldChange,
     mode = "dataElement",
     xl,
 }: DataElementRendererProps) => {
@@ -112,6 +114,7 @@ export const DataElementRenderer = ({
             md={calculateColSpan(sectionLength, 24)}
             lg={calculateColSpan(sectionLength, 12)}
             xl={xl ?? calculateColSpan(sectionLength, 6)}
+            onFieldChange={onFieldChange}
             disabledDate={(date) => {
                 if (allowFutureDate) return date.isBefore(dayjs(), "day");
                 return date.isAfter(dayjs(), "day");

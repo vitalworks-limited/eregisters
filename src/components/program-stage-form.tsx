@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 
-import { Card, FormInstance, Row, Form } from "antd";
+import { Card, Form, FormInstance, Row } from "antd";
 import { EventContext } from "../machines";
 import { ProgramStage } from "../schemas";
 import { buildCurrentDataElements } from "../utils/utils";
@@ -14,19 +14,29 @@ export default function ProgramStageForm({
     programStage: ProgramStage;
 }) {
     const eventActor = EventContext.useActorRef();
+    const ruleResult = EventContext.useSelector((a) => a.context.ruleResult);
+    const currentDataElements = buildCurrentDataElements(programStage);
 
-    const values = Form.useWatch([], form);
+    const specimenType = Form.useWatch("kTslIUl8qja", form);
+    const onFieldChange = (dataElement: string, value: any) => {
+        eventActor.send({
+            type: "FIELD_CHANGED",
+            formData: {
+                ...form.getFieldsValue(),
+                [dataElement]: value,
+            },
+        });
+    };
+
     useEffect(() => {
         eventActor.send({
             type: "FIELD_CHANGED",
             formData: {
-                ...form.getFieldsValue,
-                ...values,
+                ...form.getFieldsValue(),
+                kTslIUl8qja: specimenType,
             },
         });
-    }, [values]);
-    const ruleResult = EventContext.useSelector((a) => a.context.ruleResult);
-    const currentDataElements = buildCurrentDataElements(programStage);
+    }, [specimenType]);
 
     return (
         <Card>
@@ -42,6 +52,7 @@ export default function ProgramStageForm({
                                 ruleResult={ruleResult}
                                 sectionLength={section.dataElements.length}
                                 form={form}
+                                onFieldChange={onFieldChange}
                             />
                         ))}
                     </Row>

@@ -1,13 +1,13 @@
 import {
-    DatePicker,
-    Flex,
-    Form,
-    FormInstance,
-    InputNumber,
-    Typography,
+	DatePicker,
+	Flex,
+	Form,
+	FormInstance,
+	InputNumber,
+	Typography,
 } from "antd";
 import dayjs from "dayjs";
-import React, { useEffect, useMemo } from "react";
+import React, { useMemo } from "react";
 import { DataElement, TrackedEntityAttribute } from "../schemas";
 import { createGetValueProps, createNormalize } from "../utils/utils";
 
@@ -34,11 +34,13 @@ const { Text } = Typography;
 export default function DobPicker({
     form,
     dataElement,
+    onFieldChange,
     disabled = false,
     label,
 }: {
     form: FormInstance<any>;
     dataElement: DataElement | TrackedEntityAttribute;
+    onFieldChange: (dataElementId: string, value: any) => void;
     disabled?: boolean;
     label: string;
 }) {
@@ -75,8 +77,10 @@ export default function DobPicker({
                 ? calculatedDob.format("YYYY-MM-DD")
                 : undefined;
             form.setFieldValue(dataElement.id, value);
+            onFieldChange(dataElement.id, value);
         } else {
             form.setFieldValue(dataElement.id, null);
+            onFieldChange(dataElement.id, null);
         }
     };
 
@@ -100,6 +104,12 @@ export default function DobPicker({
                     style={{ width: "100%" }}
                     disabled={disabled}
                     disabledDate={(d) => d && d.isAfter(dayjs())}
+                    onChange={(date) => {
+                        const value = date
+                            ? date.format("YYYY-MM-DDTHH:mm:ss")
+                            : undefined;
+                        onFieldChange(dataElement.id, value);
+                    }}
                 />
             </Form.Item>
             <Flex gap={8} style={{ width: "100%" }}>

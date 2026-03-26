@@ -1,4 +1,8 @@
-import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
+import {
+    createRootRouteWithContext,
+    Link,
+    Outlet,
+} from "@tanstack/react-router";
 import React from "react";
 import relativeTime from "dayjs/plugin/relativeTime";
 import dayjs from "dayjs";
@@ -70,7 +74,14 @@ export const RootRoute = createRootRouteWithContext<{
     ),
     loader: async ({ context: { user } }) => {
         try {
-            const data = await queryInfo(user);
+            let data = await queryInfo(user);
+
+            // Safety check: if orgUnit missing, wait and retry once
+            if (!data.orgUnit) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+                data = await queryInfo(user);
+            }
+
             return data;
         } catch (error) {
             await db.delete();
@@ -83,9 +94,14 @@ export const RootRoute = createRootRouteWithContext<{
 function LayoutWithDrafts() {
     const { orgUnit } = RootRoute.useLoaderData();
     const syncActor = SyncContext.useActorRef();
-    const syncingMetadata = SyncContext.useSelector((a) =>
-        a.matches({ metadataSync: "syncing" }),
-    );
+    const syncingMetadata = SyncContext.useSelector((snapshot) => {
+        // Only show button loading if syncing AND have synced before (manual refresh)
+        const isManualRefresh =
+            (snapshot.matches({ metadataSync: "syncing" }) ||
+             snapshot.matches({ metadataSync: "fullRefresh" })) &&
+            snapshot.context.lastMetadataPull !== undefined;
+        return isManualRefresh;
+    });
     const syncingData = SyncContext.useSelector((a) =>
         a.matches({ dataPull: "syncing" }),
     );
@@ -151,7 +167,7 @@ function LayoutWithDrafts() {
                     </Title>
                 </Flex>
 
-                <Space>
+                <Flex align="center" justify="center" gap={10}>
                     <Badge
                         count={
                             pendingEnrollments.length +
@@ -161,8 +177,14 @@ function LayoutWithDrafts() {
                         style={{ backgroundColor: "#faad14" }}
                         title="Pending entities to sync"
                     />
-                    <HomeOutlined style={{ fontSize: 20, color: "#1890ff" }} />
-                    <Text strong>{orgUnit.name}</Text>
+                    <Link to="/">
+                        <Flex align="center" justify="center" gap={5}>
+                            <HomeOutlined
+                                style={{ fontSize: 20, color: "#1890ff" }}
+                            />
+                            <Text strong>{orgUnit?.name ?? "Loading..."}</Text>
+                        </Flex>
+                    </Link>
                     <Tooltip title="Pull latest data from server">
                         <Button
                             icon={<CloudDownloadOutlined />}
@@ -195,7 +217,8 @@ function LayoutWithDrafts() {
                                 : `Sync Metadata|Updated ${lastMetadataPull ? dayjs(lastMetadataPull).fromNow() : ""}`}
                         </Button>
                     </Tooltip>
-                </Space>
+                    <Link to="/reports">Reports</Link>
+                </Flex>
             </Header>
             <Outlet />
         </Layout>

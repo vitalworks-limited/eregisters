@@ -11,8 +11,5 @@ export const ruleResultsCollection = createCollection(
         awaitPersistence: false,
         swallowPersistenceErrors: true,
         getKey: (result) => result.id,
-        onInsert: () => {},
-        onUpdate: () => {},
-        onDelete: () => {},
     }),
 );

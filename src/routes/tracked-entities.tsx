@@ -94,6 +94,8 @@ function TrackedEntities() {
         });
     };
 
+    const onFieldChange = () => {};
+
     return (
         <Content
             style={{
@@ -148,6 +150,7 @@ function TrackedEntities() {
                                                 lg={24}
                                                 xl={24}
                                                 form={form}
+                                                onFieldChange={onFieldChange}
                                             />
                                         );
                                     },

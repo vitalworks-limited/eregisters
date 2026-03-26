@@ -254,7 +254,7 @@ export const ProgramStageCapture: React.FC<{
                         });
                         await tx.isPersisted.promise;
                         if (addAnother) {
-                            closeModal(); 
+                            closeModal();
                             await handleCreate();
                         }
                     }
@@ -263,32 +263,41 @@ export const ProgramStageCapture: React.FC<{
                 submitButtonText={`Save ${programStage.name}`}
                 hasAddAnother={true}
             >
-                {(form) => (
-                    <EventContext.Provider
-                        key={data?.event || "closed"}
-                        options={{
-                            input: {
-                                programRules,
-                                programRuleVariables,
-                                enrollment,
-                                event: data!,
-                                program: "ueBhWkWll5v",
-                                programStage: "K2nxbE9ubSs",
-                                trackedEntity,
-                                validDataElements: mainStageDataElements,
-                                form,
-                                eventsCollection,
-                            },
-                        }}
-                    >
-                        <Form form={form} layout="vertical" preserve={false}>
-                            <ProgramStageForm
-                                form={form}
-                                programStage={programStage}
-                            />
-                        </Form>
-                    </EventContext.Provider>
-                )}
+                {(form) => {
+                    if (data) {
+                        return (
+                            <EventContext.Provider
+                                key={data.event}
+                                options={{
+                                    input: {
+                                        programRules,
+                                        programRuleVariables,
+                                        enrollment,
+                                        event: data!,
+                                        program: "ueBhWkWll5v",
+                                        programStage: programStage.id,
+                                        trackedEntity,
+                                        validDataElements:
+                                            mainStageDataElements,
+                                        form,
+                                        eventsCollection,
+                                    },
+                                }}
+                            >
+                                <Form
+                                    form={form}
+                                    layout="vertical"
+                                    preserve={false}
+                                >
+                                    <ProgramStageForm
+                                        form={form}
+                                        programStage={programStage}
+                                    />
+                                </Form>
+                            </EventContext.Provider>
+                        );
+                    }
+                }}
             </DataModal>
         </>
     );

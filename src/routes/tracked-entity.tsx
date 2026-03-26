@@ -27,18 +27,10 @@ import { SyncStatusComp } from "../components/sync-status-comp";
 import { TrackerRegistration } from "../components/tracker-registration";
 import { useModalState } from "../hooks/useModalState";
 import { EventContext, TrackedEntityContext } from "../machines";
-import {
-    FlattenedEnrollment,
-    FlattenedEvent,
-    FlattenedTrackedEntity,
-} from "../schemas";
-import {
-    createEmptyEnrollment,
-    createEmptyEvent,
-    createEmptyTrackedEntity,
-} from "../utils/utils";
-import { RootRoute } from "./__root";
 import { SyncContext } from "../machines/sync";
+import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
+import { createEmptyEvent } from "../utils/utils";
+import { RootRoute } from "./__root";
 
 export const TrackedEntityRoute = createRoute({
     getParentRoute: () => RootRoute,
@@ -66,13 +58,6 @@ function TrackedEntityComponent() {
     const syncActor = SyncContext.useActorRef();
     const { data, isOpen, openModal, closeModal } =
         useModalState<FlattenedEvent>();
-    const {
-        data: childData,
-        isOpen: childIsOpen,
-        enrollment: childEnrollment,
-        openModal: openChildModal,
-        closeModal: closeChildModal,
-    } = useModalState<FlattenedTrackedEntity>();
 
     const {
         data: trackedEntityData,
@@ -156,11 +141,6 @@ function TrackedEntityComponent() {
     }
     const columns: TableProps<FlattenedEvent>["columns"] = useMemo(
         () => [
-            {
-                title: "ID",
-                dataIndex: "event",
-                key: "event",
-            },
             {
                 title: "Visit Date",
                 dataIndex: ["dataValues", "occurredAt"],
@@ -261,13 +241,20 @@ function TrackedEntityComponent() {
                             okText="Delete"
                             okType="danger"
                             onConfirm={async () => {
-                                const tx = eventsCollection.update(
-                                    record.event,
-                                    (draft) => {
-                                        draft.syncStatus = "deleted";
-                                    },
-                                );
-                                await tx.isPersisted.promise;
+                                if (record.syncStatus === "draft") {
+                                    const tx = eventsCollection.delete(
+                                        record.event,
+                                    );
+                                    await tx.isPersisted.promise;
+                                } else {
+                                    const tx = eventsCollection.update(
+                                        record.event,
+                                        (draft) => {
+                                            draft.syncStatus = "deleted";
+                                        },
+                                    );
+                                    await tx.isPersisted.promise;
+                                }
                             }}
                         >
                             <Button danger>Delete</Button>
@@ -298,120 +285,6 @@ function TrackedEntityComponent() {
         const tx = eventsCollection.insert(newEvent);
         await tx.isPersisted.promise;
         openModal(newEvent, enrollment);
-    };
-
-    const createPatientAndLink = (allValues: Record<string, any>) => {
-        const dataElementToAttributeMap: Record<string, string> = {
-            KJ2V2JlOxFi: "Y3DE5CZWySr",
-        };
-        const parentAttributesToCopy: string[] = [
-            "XjgpfkoxffK",
-            "W87HAtUHJjB",
-            "PKuyTiVCR89",
-            "oTI0DLitzFY",
-        ];
-
-        const combinedAttributes: Record<
-            string,
-            {
-                sourceAttributes: string[];
-                separator?: string;
-            }
-        > = {
-            P6Kp91wfCWy: {
-                sourceAttributes: ["KSq9EyZ8ZFi", "TWPNbc9O2nK"],
-                separator: " ",
-            },
-            ACgDjRCyX8r: {
-                sourceAttributes: ["hPGgzWsb14m"],
-                separator: " ",
-            },
-            b2cMfkY6M3h: {
-                sourceAttributes: ["b2x4gA14JsP"],
-                separator: " ",
-            },
-            lpAaZa1cKCB: { separator: " ", sourceAttributes: ["XjgpfkoxffK"] },
-            lqbqW3iYmKl: { separator: " ", sourceAttributes: ["PKuyTiVCR89"] },
-            BiergDUeQra: { separator: " ", sourceAttributes: ["W87HAtUHJjB"] },
-            pixScollYA6: { separator: " ", sourceAttributes: ["oTI0DLitzFY"] },
-
-            sOBCVNIm1kX: { separator: " ", sourceAttributes: ["XjgpfkoxffK"] },
-            qbxJxuZCyKu: { separator: " ", sourceAttributes: ["PKuyTiVCR89"] },
-            SjvgaRn8m7Y: { separator: " ", sourceAttributes: ["W87HAtUHJjB"] },
-            YoteNDkoIwM: { separator: " ", sourceAttributes: ["oTI0DLitzFY"] },
-        };
-
-        const autoPopulatedAttributes: Record<string, any> = {};
-        parentAttributesToCopy.forEach((attributeId) => {
-            if (
-                trackedEntity.attributes &&
-                trackedEntity.attributes[attributeId]
-            ) {
-                autoPopulatedAttributes[attributeId] =
-                    trackedEntity.attributes[attributeId];
-            }
-        });
-        const mappedAttributes: Record<string, any> = {};
-        Object.entries(dataElementToAttributeMap).forEach(
-            ([dataElementId, attributeId]) => {
-                if (allValues[dataElementId]) {
-                    let value = allValues[dataElementId];
-                    if (
-                        value &&
-                        typeof value === "object" &&
-                        "format" in value
-                    ) {
-                        value = value.format("YYYY-MM-DD");
-                    }
-
-                    mappedAttributes[attributeId] = value;
-                }
-            },
-        );
-
-        const combinedValues: Record<string, any> = {};
-        Object.entries(combinedAttributes).forEach(
-            ([targetAttrId, { sourceAttributes, separator }]) => {
-                const values = sourceAttributes
-                    .map((attrId) => trackedEntity.attributes?.[attrId] || "")
-                    .filter((v) => v);
-                if (values.length > 0) {
-                    combinedValues[targetAttrId] = values.join(
-                        separator || " ",
-                    );
-                }
-            },
-        );
-        const initialValues = {
-            ...autoPopulatedAttributes,
-            ...mappedAttributes,
-            ...combinedValues,
-            occurredAt: allValues["occurredAt"],
-            enrolledAt: allValues["occurredAt"],
-        };
-        console.log(allValues);
-        const newPatient: FlattenedTrackedEntity = createEmptyTrackedEntity({
-            orgUnit: id,
-            attributes: initialValues,
-            parentEntity: trackedEntity.trackedEntity,
-        });
-        const newEnrollment: FlattenedEnrollment = createEmptyEnrollment({
-            orgUnit: id,
-            trackedEntity: newPatient.trackedEntity,
-        });
-        return { client: newPatient, enrollment: newEnrollment };
-    };
-
-    const onValueChange = async (
-        change: any,
-        allValues: Record<string, any>,
-    ) => {
-        if (change && change["REWqohCg4Km"] === "Yes") {
-            const { client, enrollment } = createPatientAndLink(allValues);
-            await trackedEntitiesCollection.utils.insertLocally(client);
-            await enrollmentsCollection.utils.insertLocally(enrollment);
-            openChildModal(client, enrollment);
-        }
     };
 
     return (
@@ -640,7 +513,6 @@ function TrackedEntityComponent() {
                                     form={form}
                                     layout="vertical"
                                     preserve={false}
-                                    onValuesChange={onValueChange}
                                 >
                                     <MainEventCapture
                                         form={form}
@@ -650,136 +522,6 @@ function TrackedEntityComponent() {
                                     />
                                 </Form>
                             </EventContext.Provider>
-                        );
-                    }
-                    return null;
-                }}
-            </DataModal>
-
-            <DataModal<FlattenedTrackedEntity>
-                open={childIsOpen}
-                data={childData}
-                onClose={closeChildModal}
-                hasAddAnother={true}
-                enrollment={childEnrollment}
-                onSave={async ({ values, addAnother }) => {
-                    if (childData && values && childEnrollment) {
-                        const childEvent: FlattenedEvent = createEmptyEvent({
-                            trackedEntity: childEnrollment.trackedEntity,
-                            program: childEnrollment.program,
-                            orgUnit: childEnrollment.orgUnit,
-                            enrollment: childEnrollment.enrollment,
-                            programStage: "K2nxbE9ubSs",
-                            dataValues: {
-                                occurredAt:
-                                    values["enrolledAt"] ||
-                                    values["occurredAt"],
-                                UuxHHVp5CnF: "Newborn",
-                                mrKZWf2WMIC: "Child Health Services",
-                            },
-                            parentEvent: data?.event ?? "",
-                        });
-
-                        const tx1 = trackedEntitiesCollection.update(
-                            childData.trackedEntity,
-                            (draft) => {
-                                draft.parentEntity =
-                                    trackedEntity.trackedEntity;
-                                draft.syncStatus = "pending";
-                            },
-                        );
-
-                        await tx1.isPersisted.promise;
-
-                        const tx2 = enrollmentsCollection.update(
-                            childEnrollment.enrollment,
-                            (draft) => {
-                                draft.attributes = childData.attributes;
-                                draft.syncStatus = "pending";
-                            },
-                        );
-                        await tx2.isPersisted.promise;
-                        const tx3 = eventsCollection.insert({
-                            ...childEvent,
-                            syncStatus: "pending",
-                        });
-                        await tx3.isPersisted.promise;
-
-                        syncActor.send({
-                            type: "SYNC_ENTITIES",
-                            entities: [
-                                {
-                                    ...childData,
-                                    attributes: {
-                                        ...childData.attributes,
-                                        ...values,
-                                    },
-                                    syncStatus: "pending",
-                                },
-                                {
-                                    ...childEnrollment,
-                                    attributes: {
-                                        ...childEnrollment.attributes,
-                                        ...values,
-                                    },
-                                    syncStatus: "pending",
-                                },
-                                {
-                                    ...childEvent,
-                                    syncStatus: "pending",
-                                },
-                            ],
-                        });
-
-                        if (addAnother) {
-                            closeChildModal();
-
-                            const { client, enrollment } =
-                                createPatientAndLink(values);
-                            await trackedEntitiesCollection.utils.insertLocally(
-                                client,
-                            );
-                            await enrollmentsCollection.utils.insertLocally(
-                                enrollment,
-                            );
-                            openChildModal(client, enrollment);
-                        }
-                    }
-                }}
-                title="New Born Child"
-                submitButtonText="Save Child"
-            >
-                {(form) => {
-                    if (childData) {
-                        return (
-                            <TrackedEntityContext.Provider
-                                key={childData.trackedEntity}
-                                options={{
-                                    input: {
-                                        programRules,
-                                        programRuleVariables,
-                                        program: "ueBhWkWll5v",
-                                        trackedEntity: childData,
-                                        validDataElements:
-                                            mainStageDataElements,
-                                        form,
-                                        trackedEntitiesCollection,
-                                    },
-                                }}
-                            >
-                                <Form
-                                    form={form}
-                                    layout="vertical"
-                                    preserve={false}
-                                >
-                                    {childData ? (
-                                        <TrackerRegistration
-                                            trackedEntity={childData}
-                                            form={form}
-                                        />
-                                    ) : null}
-                                </Form>
-                            </TrackedEntityContext.Provider>
                         );
                     }
                     return null;

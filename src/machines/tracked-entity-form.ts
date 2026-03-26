@@ -55,8 +55,8 @@ export const trackedEntityFormMachine = setup({
         updateFormData: assign({
             formData: ({ context: { trackedEntity, formData } }) => {
                 return {
-                    ...formData,
                     ...trackedEntity.attributes,
+                    ...formData,
                 };
             },
         }),

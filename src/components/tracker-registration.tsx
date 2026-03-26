@@ -24,18 +24,30 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
     const state = TrackedEntityContext.useSelector((a) => a.value);
     const trackedEntityActor = TrackedEntityContext.useActorRef();
 
-    const values = Form.useWatch([], form);
+    const ageAtRegistration = Form.useWatch("xcYGVzmcWvi", form);
+    const dob = Form.useWatch("Y3DE5CZWySr", form);
 
-    useEffect(() => {
-        console.log(values);
+    const onFieldChange = (dataElement: string, value: any) => {
         trackedEntityActor.send({
             type: "FIELD_CHANGED",
             formData: {
                 ...form.getFieldsValue(),
-                ...values,
+                [dataElement]: value,
             },
         });
-    }, [values]);
+    };
+
+    useEffect(() => {
+        if (ageAtRegistration === undefined && dob === undefined) return;
+        trackedEntityActor.send({
+            type: "FIELD_CHANGED",
+            formData: {
+                ...form.getFieldsValue(),
+                xcYGVzmcWvi: ageAtRegistration,
+            },
+        });
+    }, [ageAtRegistration, dob]);
+
     return (
         <Flex vertical gap={10}>
             <Card
@@ -75,6 +87,7 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
                                 return true;
                             return date.isAfter(dayjs());
                         }}
+                        onFieldChange={onFieldChange}
                     />
                 </Row>
             </Card>
@@ -102,6 +115,7 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
                                         form={form}
                                         mode="attribute"
                                         xl={spans.get(id) ?? undefined}
+                                        onFieldChange={onFieldChange}
                                     />
                                 ))}
                             </Row>

@@ -33,23 +33,28 @@ export default function BasicForm({
         ({ name }) => name === "Child Health Services",
     );
 
-    const values = Form.useWatch([], form);
-
-    useEffect(() => {
+    const onFieldChange = (dataElement: string, value: any) => {
         eventActor.send({
             type: "FIELD_CHANGED",
             formData: {
                 ...form.getFieldsValue,
-                ...values,
+                [dataElement]: value,
             },
         });
         syncActor.send({
             type: "SYNC_ENTITIES",
             entities: [
-                { ...event, dataValues: { ...event.dataValues, ...values } },
+                {
+                    ...event,
+                    dataValues: {
+                        ...event.dataValues,
+                        ...form.getFieldsValue,
+                        [dataElement]: value,
+                    },
+                },
             ],
         });
-    }, [values]);
+    };
     return (
         <>
             <Form form={form} component={false} layout="vertical">
@@ -65,6 +70,7 @@ export default function BasicForm({
                             ruleResult={ruleResult}
                             sectionLength={triageSection.dataElements.length}
                             form={form}
+                            onFieldChange={onFieldChange}
                         />
                     ))}
                 </Row>
@@ -77,6 +83,7 @@ export default function BasicForm({
                             ruleResult={ruleResult}
                             sectionLength={currentSection.dataElements.length}
                             form={form}
+                            onFieldChange={onFieldChange}
                         />
                     ))}
                 </Row>

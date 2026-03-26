@@ -60,8 +60,8 @@ export const eventFormMachine = setup({
         updateFormData: assign({
             formData: ({ context: { event, formData } }) => {
                 return {
-                    ...formData,
                     ...event.dataValues,
+                    ...formData,
                 };
             },
         }),

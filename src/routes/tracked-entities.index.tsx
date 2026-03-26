@@ -366,7 +366,7 @@ function TrackedEntitiesSearch() {
                             },
                         }}
                     >
-                        <Form form={form} layout="vertical" preserve={false}>
+                        <Form form={form} layout="vertical">
                             <TrackerRegistration
                                 trackedEntity={trackedEntity!}
                                 form={form}

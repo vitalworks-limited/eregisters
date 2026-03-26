@@ -157,12 +157,12 @@ export class RegisterDatabase extends Dexie {
     constructor() {
         super("MOHRegisterDB");
         this.version(1).stores({
-            trackedEntities:
-                "trackedEntity,orgUnit,createdAt,updatedAt,syncStatus,version,lastSynced,parentEntity,[trackedEntity+parentEntity],_updatedAt, _createdAt",
-            events: "event,trackedEntity,programStage,enrollment,occurredAt,updatedAt,createdAt,syncStatus,version,lastSynced,parentEvent,[event+parentEvent],_updatedAt, _createdAt",
+            // trackedEntities:
+            //     "trackedEntity,orgUnit,createdAt,updatedAt,syncStatus,version,lastSynced,parentEntity,[trackedEntity+parentEntity],_updatedAt, _createdAt",
+            // events: "event,trackedEntity,programStage,enrollment,occurredAt,updatedAt,createdAt,syncStatus,version,lastSynced,parentEvent,[event+parentEvent],_updatedAt, _createdAt",
 
-            enrollments:
-                "enrollment,trackedEntity,enrolledAt,version,syncStatus,lastSynced,createdAt,updatedAt,_updatedAt, _createdAt",
+            // enrollments:
+            //     "enrollment,trackedEntity,enrolledAt,version,syncStatus,lastSynced,createdAt,updatedAt,_updatedAt, _createdAt",
             syncQueue: "id,status,priority,type,entityId,createdAt",
             programRules: "id,program",
             programRuleVariables: "id,program",

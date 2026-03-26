@@ -1,8 +1,8 @@
 import { Card, Col, Flex, Form, FormInstance, Row, Select, Tabs } from "antd";
 import dayjs from "dayjs";
 import { orderBy } from "lodash";
-import React, { useEffect, useState } from "react";
-import { EventContext } from "../machines";
+import React, { useEffect, useMemo, useState } from "react";
+import { EventContext, SyncContext, TrackedEntityContext } from "../machines";
 import { RootRoute } from "../routes/__root";
 import {
     FlattenedEnrollment,
@@ -11,6 +11,9 @@ import {
 } from "../schemas";
 import {
     buildCurrentDataElements,
+    createEmptyEnrollment,
+    createEmptyEvent,
+    createEmptyTrackedEntity,
     createGetValueProps,
     createNormalize,
 } from "../utils/utils";
@@ -18,6 +21,9 @@ import { DataElementField } from "./data-element-field";
 import { DataElementRenderer } from "./data-element-renderer";
 import { ProgramStageCapture } from "./program-stage-capture";
 import RelationshipEvent from "./relationship-event";
+import { useModalState } from "../hooks/useModalState";
+import { DataModal } from "./data-modal";
+import { TrackerRegistration } from "./tracker-registration";
 
 const stages: Map<string, number> = new Map([
     ["x5x1cHHjg00", 7],
@@ -30,6 +36,100 @@ const stages: Map<string, number> = new Map([
     ["wmPg6qplttg", 8],
 ]);
 
+const createPatientAndLink = (
+    trackedEntity: FlattenedTrackedEntity,
+    allValues: Record<string, any>,
+) => {
+    const dataElementToAttributeMap: Record<string, string> = {
+        KJ2V2JlOxFi: "Y3DE5CZWySr",
+    };
+    const parentAttributesToCopy: string[] = [
+        "XjgpfkoxffK",
+        "W87HAtUHJjB",
+        "PKuyTiVCR89",
+        "oTI0DLitzFY",
+    ];
+
+    const combinedAttributes: Record<
+        string,
+        {
+            sourceAttributes: string[];
+            separator?: string;
+        }
+    > = {
+        P6Kp91wfCWy: {
+            sourceAttributes: ["KSq9EyZ8ZFi", "TWPNbc9O2nK"],
+            separator: " ",
+        },
+        ACgDjRCyX8r: {
+            sourceAttributes: ["hPGgzWsb14m"],
+            separator: " ",
+        },
+        b2cMfkY6M3h: {
+            sourceAttributes: ["b2x4gA14JsP"],
+            separator: " ",
+        },
+        lpAaZa1cKCB: { separator: " ", sourceAttributes: ["XjgpfkoxffK"] },
+        lqbqW3iYmKl: { separator: " ", sourceAttributes: ["PKuyTiVCR89"] },
+        BiergDUeQra: { separator: " ", sourceAttributes: ["W87HAtUHJjB"] },
+        pixScollYA6: { separator: " ", sourceAttributes: ["oTI0DLitzFY"] },
+
+        sOBCVNIm1kX: { separator: " ", sourceAttributes: ["XjgpfkoxffK"] },
+        qbxJxuZCyKu: { separator: " ", sourceAttributes: ["PKuyTiVCR89"] },
+        SjvgaRn8m7Y: { separator: " ", sourceAttributes: ["W87HAtUHJjB"] },
+        YoteNDkoIwM: { separator: " ", sourceAttributes: ["oTI0DLitzFY"] },
+    };
+
+    const autoPopulatedAttributes: Record<string, any> = {};
+    parentAttributesToCopy.forEach((attributeId) => {
+        if (trackedEntity.attributes && trackedEntity.attributes[attributeId]) {
+            autoPopulatedAttributes[attributeId] =
+                trackedEntity.attributes[attributeId];
+        }
+    });
+    const mappedAttributes: Record<string, any> = {};
+    Object.entries(dataElementToAttributeMap).forEach(
+        ([dataElementId, attributeId]) => {
+            if (allValues[dataElementId]) {
+                let value = allValues[dataElementId];
+                if (value && typeof value === "object" && "format" in value) {
+                    value = value.format("YYYY-MM-DD");
+                }
+
+                mappedAttributes[attributeId] = value;
+            }
+        },
+    );
+
+    const combinedValues: Record<string, any> = {};
+    Object.entries(combinedAttributes).forEach(
+        ([targetAttrId, { sourceAttributes, separator }]) => {
+            const values = sourceAttributes
+                .map((attrId) => trackedEntity.attributes?.[attrId] || "")
+                .filter((v) => v);
+            if (values.length > 0) {
+                combinedValues[targetAttrId] = values.join(separator || " ");
+            }
+        },
+    );
+    const initialValues = {
+        ...autoPopulatedAttributes,
+        ...mappedAttributes,
+        ...combinedValues,
+        enrolledAt: allValues["occurredAt"],
+    };
+    const newPatient: FlattenedTrackedEntity = createEmptyTrackedEntity({
+        orgUnit: trackedEntity.orgUnit,
+        attributes: initialValues,
+        parentEntity: trackedEntity.trackedEntity,
+    });
+    const newEnrollment: FlattenedEnrollment = createEmptyEnrollment({
+        orgUnit: trackedEntity.orgUnit,
+        trackedEntity: newPatient.trackedEntity,
+    });
+    return { client: newPatient, enrollment: newEnrollment };
+};
+
 export default function MainEventCapture({
     form,
     trackedEntity,
@@ -41,29 +141,90 @@ export default function MainEventCapture({
     mainEvent: FlattenedEvent;
     enrollment: FlattenedEnrollment;
 }) {
-    const currentServices = Form.useWatch("mrKZWf2WMIC", form);
-    const { program, optionSets } = RootRoute.useLoaderData();
+    const {
+        enrollmentsCollection,
+        trackedEntitiesCollection,
+        eventsCollection,
+    } = SyncContext.useSelector((a) => ({
+        enrollmentsCollection: a.context.enrollmentsCollection,
+        trackedEntitiesCollection: a.context.trackedEntitiesCollection,
+        eventsCollection: a.context.eventsCollection,
+    }));
+    const syncActor = SyncContext.useActorRef();
+    const {
+        data: childData,
+        isOpen: childIsOpen,
+        enrollment: childEnrollment,
+        openModal: openChildModal,
+        closeModal: closeChildModal,
+    } = useModalState<FlattenedTrackedEntity>();
+    const { program, optionSets, programRuleVariables, programRules } =
+        RootRoute.useLoaderData();
     const [activeKey, setActiveKey] = useState<string>(
         "K2nxbE9ubSs-bnV62fxQmoE",
     );
     const eventActor = EventContext.useActorRef();
-    const values = Form.useWatch([], form);
+    const weightForAge = Form.useWatch("zzZ7nE2sbY4", form);
+    const bmi = Form.useWatch("nxthjrx18Y0", form);
+    const bmiForAge = Form.useWatch("RltyVq1d11i", form);
+    const services = Form.useWatch("mrKZWf2WMIC", form);
+    const ageAtVisit = Form.useWatch("zxJ9SDZtKUS", form);
 
-    useEffect(() => {
-        eventActor.send({
-            type: "FIELD_CHANGED",
-            formData: {
-                ...form.getFieldsValue(),
-                ...values,
-            },
-        });
-    }, [values]);
-
-    // const onFieldChange = (dataElement: string, value: any) => {};
+    const mainStageDataElements = useMemo(
+        () =>
+            new Set(
+                program.programTrackedEntityAttributes.map(
+                    ({ trackedEntityAttribute }) => trackedEntityAttribute.id,
+                ),
+            ),
+        [],
+    );
 
     const ruleResult = EventContext.useSelector(
         (state) => state.context.ruleResult,
     );
+    const onFieldChange = async (dataElement: string, value: any) => {
+        eventActor.send({
+            type: "FIELD_CHANGED",
+            formData: {
+                ...form.getFieldsValue(),
+                [dataElement]: value,
+            },
+        });
+
+        if (dataElement) {
+            if (dataElement === "REWqohCg4Km" && value === "Yes") {
+                const { client, enrollment } = createPatientAndLink(
+                    trackedEntity,
+                    form.getFieldsValue(),
+                );
+                await trackedEntitiesCollection.utils.insertLocally(client);
+                await enrollmentsCollection.utils.insertLocally(enrollment);
+                openChildModal(client, enrollment);
+            }
+        }
+    };
+    useEffect(() => {
+        if (
+            weightForAge === undefined &&
+            bmi === undefined &&
+            bmiForAge === undefined &&
+            services === undefined &&
+            ageAtVisit === undefined
+        )
+            return;
+        eventActor.send({
+            type: "FIELD_CHANGED",
+            formData: {
+                ...form.getFieldsValue(),
+                mrKZWf2WMIC: services,
+                zzZ7nE2sbY4: weightForAge,
+                nxthjrx18Y0: bmi,
+                zxJ9SDZtKUS: ageAtVisit,
+                RltyVq1d11i: bmiForAge,
+            },
+        });
+    }, [weightForAge, bmi, bmiForAge, services, ageAtVisit]);
 
     const [serviceTypes, setServiceTypes] = useState<
         Array<{
@@ -86,6 +247,7 @@ export default function MainEventCapture({
             setServiceTypes(optionSets.get("QwsvSPpnRul") ?? []);
         }
     }, [ruleResult.hiddenOptions["mrKZWf2WMIC"], optionSets]);
+
     return (
         <Flex vertical gap={10} style={{ width: "100%" }}>
             <Card size="small" styles={{ body: { padding: 10, margin: 0 } }}>
@@ -117,6 +279,7 @@ export default function MainEventCapture({
                         lg={12}
                         xl={12}
                         disabledDate={(date) => date.isAfter(dayjs())}
+                        onFieldChange={onFieldChange}
                     />
                     <Col span={12}>
                         <Form.Item
@@ -154,7 +317,9 @@ export default function MainEventCapture({
                                                   .includes(input.toLowerCase())
                                             : false,
                                 }}
-                                onChange={(value) => {}}
+                                onChange={(value) => {
+                                    onFieldChange("mrKZWf2WMIC", value);
+                                }}
                             />
                         </Form.Item>
                     </Col>
@@ -171,24 +336,24 @@ export default function MainEventCapture({
                     "asc",
                 ).flatMap((stage) => {
                     const currentDataElements = buildCurrentDataElements(stage);
-                    if (stage.id === "opwSN351xGC") {
-                        const shouldShow =
-                            currentServices &&
-                            String(currentServices)
-                                .split(",")
-                                .some((a) =>
-                                    [
-                                        "TB",
-                                        "DR-TB",
-                                        "Leprosy",
-                                        "ART",
-                                        "HTS",
-                                    ].includes(a),
-                                );
+                    if (
+                        stage.id === "opwSN351xGC" &&
+                        services &&
+                        String(services)
+                            .split(",")
+                            .some((a) =>
+                                [
+                                    "TB",
+                                    "DR-TB",
+                                    "Leprosy",
+                                    "ART",
+                                    "HTS",
+                                ].includes(a),
+                            )
+                    ) {
                         return {
                             key: stage.id,
                             label: stage.name,
-                            style: shouldShow ? {} : { display: "none" },
                             children: (
                                 <ProgramStageCapture
                                     programStage={stage}
@@ -198,8 +363,9 @@ export default function MainEventCapture({
                                 />
                             ),
                         };
+                    } else if (stage.id === "opwSN351xGC") {
+                        return [];
                     }
-
                     if (["zKGWob5AZKP", "DA0Yt3V16AN"].includes(stage.id)) {
                         return {
                             key: stage.id,
@@ -256,6 +422,9 @@ export default function MainEventCapture({
                                                                     .length
                                                             }
                                                             form={form}
+                                                            onFieldChange={
+                                                                onFieldChange
+                                                            }
                                                         />
                                                     );
                                                 },
@@ -297,6 +466,138 @@ export default function MainEventCapture({
                 onChange={setActiveKey}
                 activeKey={activeKey}
             />
+
+            <DataModal<FlattenedTrackedEntity>
+                open={childIsOpen}
+                data={childData}
+                onClose={closeChildModal}
+                hasAddAnother={true}
+                enrollment={childEnrollment}
+                onSave={async ({ values, addAnother }) => {
+                    if (childData && values && childEnrollment) {
+                        const childEvent: FlattenedEvent = createEmptyEvent({
+                            trackedEntity: childEnrollment.trackedEntity,
+                            program: childEnrollment.program,
+                            orgUnit: childEnrollment.orgUnit,
+                            enrollment: childEnrollment.enrollment,
+                            programStage: "K2nxbE9ubSs",
+                            dataValues: {
+                                occurredAt:
+                                    values["enrolledAt"] ||
+                                    values["occurredAt"],
+                                UuxHHVp5CnF: "Newborn",
+                                mrKZWf2WMIC: "Child Health Services",
+                            },
+                            parentEvent: mainEvent.event,
+                        });
+
+                        const tx1 = trackedEntitiesCollection.update(
+                            childData.trackedEntity,
+                            (draft) => {
+                                draft.parentEntity =
+                                    trackedEntity.trackedEntity;
+                                draft.syncStatus = "pending";
+                            },
+                        );
+
+                        await tx1.isPersisted.promise;
+
+                        const tx2 = enrollmentsCollection.update(
+                            childEnrollment.enrollment,
+                            (draft) => {
+                                draft.attributes = childData.attributes;
+                                draft.syncStatus = "pending";
+                            },
+                        );
+                        await tx2.isPersisted.promise;
+                        const tx3 = eventsCollection.insert({
+                            ...childEvent,
+                            syncStatus: "pending",
+                        });
+                        await tx3.isPersisted.promise;
+
+                        syncActor.send({
+                            type: "SYNC_ENTITIES",
+                            entities: [
+                                {
+                                    ...childData,
+                                    attributes: {
+                                        ...childData.attributes,
+                                        ...values,
+                                    },
+                                    syncStatus: "pending",
+                                },
+                                {
+                                    ...childEnrollment,
+                                    attributes: {
+                                        ...childEnrollment.attributes,
+                                        ...values,
+                                    },
+                                    syncStatus: "pending",
+                                },
+                                {
+                                    ...childEvent,
+                                    syncStatus: "pending",
+                                },
+                            ],
+                        });
+
+                        if (addAnother) {
+                            closeChildModal();
+
+                            const { client, enrollment } = createPatientAndLink(
+                                trackedEntity,
+                                values,
+                            );
+                            await trackedEntitiesCollection.utils.insertLocally(
+                                client,
+                            );
+                            await enrollmentsCollection.utils.insertLocally(
+                                enrollment,
+                            );
+                            openChildModal(client, enrollment);
+                        }
+                    }
+                }}
+                title="New Born Child"
+                submitButtonText="Save Child"
+            >
+                {(form) => {
+                    if (childData) {
+                        return (
+                            <TrackedEntityContext.Provider
+                                key={childData.trackedEntity}
+                                options={{
+                                    input: {
+                                        programRules,
+                                        programRuleVariables,
+                                        program: "ueBhWkWll5v",
+                                        trackedEntity: childData,
+                                        validDataElements:
+                                            mainStageDataElements,
+                                        form,
+                                        trackedEntitiesCollection,
+                                    },
+                                }}
+                            >
+                                <Form
+                                    form={form}
+                                    layout="vertical"
+                                    preserve={false}
+                                >
+                                    {childData ? (
+                                        <TrackerRegistration
+                                            trackedEntity={childData}
+                                            form={form}
+                                        />
+                                    ) : null}
+                                </Form>
+                            </TrackedEntityContext.Provider>
+                        );
+                    }
+                    return null;
+                }}
+            </DataModal>
         </Flex>
     );
 }

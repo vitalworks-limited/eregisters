@@ -10,11 +10,13 @@ import { IndexRoute } from "./routes/index";
 import { TrackedEntitiesRoute } from "./routes/tracked-entities";
 import { TrackedEntitiesIndexRoute } from "./routes/tracked-entities.index";
 import { TrackedEntityRoute } from "./routes/tracked-entity";
+import { ReportsRoute } from "./routes/reports";
 
 const routeTree = RootRoute.addChildren([
     IndexRoute,
     TrackedEntitiesRoute.addChildren([TrackedEntitiesIndexRoute]),
     TrackedEntityRoute,
+		ReportsRoute
 ]);
 export const router = createRouter({
     routeTree,
