@@ -10,6 +10,7 @@ import {
     Col,
     Flex,
     Form,
+    Grid,
     Layout,
     Row,
     Statistic,
@@ -96,6 +97,34 @@ function TrackedEntities() {
 
     const onFieldChange = () => {};
 
+    const screens = Grid.useBreakpoint();
+    const isMobile = !screens.lg;
+
+    const statsSection = (
+        <Flex gap={8} style={{ marginBottom: 8 }}>
+            <Card variant="borderless" style={{ flex: 1 }}>
+                <Statistic
+                    title="Total Clients"
+                    value={total.length}
+                    prefix={<UserOutlined />}
+                    styles={{
+                        content: { color: "#1f4788" },
+                    }}
+                />
+            </Card>
+            <Card variant="borderless" style={{ flex: 1 }}>
+                <Statistic
+                    title="Registered Today"
+                    value={enrollments.length}
+                    prefix={<CalendarOutlined />}
+                    styles={{
+                        content: { color: "#52c41a" },
+                    }}
+                />
+            </Card>
+        </Flex>
+    );
+
     return (
         <Content
             style={{
@@ -103,6 +132,7 @@ function TrackedEntities() {
             }}
         >
             <Row gutter={[8, 8]}>
+                {isMobile && <Col span={24}>{statsSection}</Col>}
                 <Col xs={24} lg={8}>
                     <Card
                         title={<Title level={4}>Search clients</Title>}
@@ -173,44 +203,7 @@ function TrackedEntities() {
                     </Card>
                 </Col>
                 <Col xs={24} lg={16}>
-                    <Row gutter={[8, 8]} style={{ marginBottom: 8 }}>
-                        <Col xs={24} sm={8}>
-                            <Card variant="borderless">
-                                <Statistic
-                                    title="Total Clients"
-                                    value={total.length}
-                                    prefix={<UserOutlined />}
-                                    styles={{
-                                        content: { color: "#1f4788" },
-                                    }}
-                                />
-                            </Card>
-                        </Col>
-                        <Col xs={24} sm={8}>
-                            <Card variant="borderless">
-                                <Statistic
-                                    title="Registered Today"
-                                    value={enrollments.length}
-                                    prefix={<CalendarOutlined />}
-                                    styles={{
-                                        content: { color: "#52c41a" },
-                                    }}
-                                />
-                            </Card>
-                        </Col>
-                        <Col xs={24} sm={8}>
-                            <Card variant="borderless">
-                                <Statistic
-                                    title="Upcoming Appointments"
-                                    value={appointments}
-                                    prefix={<ScheduleOutlined />}
-                                    styles={{
-                                        content: { color: "#faad14" },
-                                    }}
-                                />
-                            </Card>
-                        </Col>
-                    </Row>
+                    {!isMobile && statsSection}
                     <Outlet />
                 </Col>
             </Row>

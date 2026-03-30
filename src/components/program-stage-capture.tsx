@@ -1,4 +1,5 @@
 import {
+    DeleteOutlined,
     ExperimentOutlined,
     EyeOutlined,
     PlusOutlined,
@@ -8,6 +9,7 @@ import {
     Button,
     Flex,
     Form,
+    Grid,
     message,
     Popconfirm,
     Table,
@@ -45,6 +47,8 @@ export const ProgramStageCapture: React.FC<{
     captureMode = "modal",
     enrollment,
 }) => {
+    const screens = Grid.useBreakpoint();
+    const isMobile = !screens.lg;
     const syncActor = SyncContext.useActorRef();
     const { data, isOpen, openModal, closeModal } =
         useModalState<FlattenedEvent>();
@@ -110,6 +114,7 @@ export const ProgramStageCapture: React.FC<{
                     key: de.id,
                     dataIndex: ["dataValues", de.id],
                     render: (value: string) => medicines.get(value) || value,
+                    responsive: ["md" as const],
                 };
             });
         }),
@@ -118,11 +123,12 @@ export const ProgramStageCapture: React.FC<{
             dataIndex: "syncStatus",
             key: "syncStatus",
             width: 120,
+            responsive: ["lg" as const],
         },
         {
             title: "Action",
             key: "action",
-            width: 100,
+            width: isMobile ? 80 : 100,
             fixed: "right",
             render: (_, record) => (
                 <Flex gap="small" align="center">
@@ -149,10 +155,17 @@ export const ProgramStageCapture: React.FC<{
                             }
                         }}
                     >
-                        <Button danger>Delete</Button>
+                        <Button
+                            danger
+                            icon={<DeleteOutlined />}
+                            size={isMobile ? "small" : "middle"}
+                        >
+                            {!isMobile && "Delete"}
+                        </Button>
                     </Popconfirm>
                     <Button
                         icon={<EyeOutlined />}
+                        size={isMobile ? "small" : "middle"}
                         onClick={() =>
                             openModal(
                                 {
@@ -166,7 +179,7 @@ export const ProgramStageCapture: React.FC<{
                             )
                         }
                     >
-                        View
+                        {!isMobile && "View"}
                     </Button>
                 </Flex>
             ),

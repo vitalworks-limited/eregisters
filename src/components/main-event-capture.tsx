@@ -1,4 +1,4 @@
-import { Card, Col, Flex, Form, FormInstance, Row, Select, Tabs } from "antd";
+import { Card, Col, Collapse, Flex, Form, FormInstance, Grid, Row, Select, Tabs } from "antd";
 import dayjs from "dayjs";
 import { orderBy } from "lodash";
 import React, { useEffect, useMemo, useState } from "react";
@@ -163,6 +163,8 @@ export default function MainEventCapture({
     const [activeKey, setActiveKey] = useState<string>(
         "K2nxbE9ubSs-bnV62fxQmoE",
     );
+    const screens = Grid.useBreakpoint();
+    const isMobile = !screens.lg;
     const eventActor = EventContext.useActorRef();
     const weightForAge = Form.useWatch("zzZ7nE2sbY4", form);
     const bmi = Form.useWatch("nxthjrx18Y0", form);
@@ -273,7 +275,7 @@ export default function MainEventCapture({
                         errors={[]}
                         required={true}
                         form={form}
-                        xs={12}
+                        xs={24}
                         sm={12}
                         md={12}
                         lg={12}
@@ -281,7 +283,7 @@ export default function MainEventCapture({
                         disabledDate={(date) => date.isAfter(dayjs())}
                         onFieldChange={onFieldChange}
                     />
-                    <Col span={12}>
+                    <Col xs={24} lg={12}>
                         <Form.Item
                             label="Service Type"
                             name="mrKZWf2WMIC"
@@ -325,9 +327,8 @@ export default function MainEventCapture({
                     </Col>
                 </Row>
             </Card>
-            <Tabs
-                tabPlacement="start"
-                items={orderBy(
+            {(() => {
+                const tabItems = orderBy(
                     program.programStages.map((a) => ({
                         ...a,
                         sortOrder: stages.get(a.id),
@@ -444,28 +445,46 @@ export default function MainEventCapture({
                             },
                         ];
                     });
-                })}
-                tabBarStyle={{
-                    background: "#fff",
-                    borderRadius: 0,
-                }}
-                styles={{
-                    content: {
-                        maxHeight: "63vh",
-                        overflow: "auto",
-                        padding: 0,
-                        margin: 0,
-                        borderRadius: 0,
-                        marginLeft: 8,
-                    },
-                    header: {
-                        maxHeight: "63vh",
-                        overflow: "auto",
-                    },
-                }}
-                onChange={setActiveKey}
-                activeKey={activeKey}
-            />
+                });
+
+                return isMobile ? (
+                    <Collapse
+                        accordion
+                        activeKey={activeKey}
+                        onChange={(key) =>
+                            setActiveKey(
+                                Array.isArray(key) ? key[0] : key,
+                            )
+                        }
+                        items={tabItems}
+                    />
+                ) : (
+                    <Tabs
+                        tabPlacement="start"
+                        items={tabItems}
+                        tabBarStyle={{
+                            background: "#fff",
+                            borderRadius: 0,
+                        }}
+                        styles={{
+                            content: {
+                                maxHeight: "63vh",
+                                overflow: "auto",
+                                padding: 0,
+                                margin: 0,
+                                borderRadius: 0,
+                                marginLeft: 8,
+                            },
+                            header: {
+                                maxHeight: "63vh",
+                                overflow: "auto",
+                            },
+                        }}
+                        onChange={setActiveKey}
+                        activeKey={activeKey}
+                    />
+                );
+            })()}
 
             <DataModal<FlattenedTrackedEntity>
                 open={childIsOpen}

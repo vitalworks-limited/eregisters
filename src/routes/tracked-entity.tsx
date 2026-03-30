@@ -1,4 +1,12 @@
-import { CalendarOutlined, CaretRightOutlined } from "@ant-design/icons";
+import {
+    ArrowLeftOutlined,
+    CalendarOutlined,
+    CaretRightOutlined,
+    DeleteOutlined,
+    EditOutlined,
+    PlusOutlined,
+    UserOutlined,
+} from "@ant-design/icons";
 import { createRoute } from "@tanstack/react-router";
 import type { DescriptionsProps, TableProps } from "antd";
 
@@ -10,6 +18,7 @@ import {
     Descriptions,
     Flex,
     Form,
+    Grid,
     Popconfirm,
     Space,
     Splitter,
@@ -42,7 +51,7 @@ export const TrackedEntityRoute = createRoute({
     pendingComponent: Spinner,
 });
 
-const { Text } = Typography;
+const { Text, Title } = Typography;
 
 function TrackedEntityComponent() {
     const {
@@ -136,9 +145,18 @@ function TrackedEntityComponent() {
         [tei],
     );
 
+    const screens = Grid.useBreakpoint();
+    const isMobile = !screens.lg;
+
     if (trackedEntity === undefined || enrollment === undefined) {
         return <Text>No tracked Entity or Enrollment found</Text>;
     }
+
+    const firstName = String(trackedEntity.attributes?.["KSq9EyZ8ZFi"] ?? "");
+    const surname = String(trackedEntity.attributes?.["TWPNbc9O2nK"] ?? "");
+    const dob = trackedEntity.attributes?.["Y3DE5CZWySr"];
+    const age = dob ? dayjs().diff(dayjs(String(dob)), "year") : null;
+
     const columns: TableProps<FlattenedEvent>["columns"] = useMemo(
         () => [
             {
@@ -229,11 +247,12 @@ function TrackedEntityComponent() {
                 render: (_, record) => (
                     <Flex gap="small" align="center">
                         <Button
+                            icon={<EditOutlined />}
                             onClick={async () => {
                                 openModal(record, enrollment);
                             }}
                         >
-                            Edit Event
+                            Edit
                         </Button>
                         <Popconfirm
                             title="Delete Event"
@@ -257,7 +276,7 @@ function TrackedEntityComponent() {
                                 }
                             }}
                         >
-                            <Button danger>Delete</Button>
+                            <Button danger icon={<DeleteOutlined />}>Delete</Button>
                         </Popconfirm>
                     </Flex>
                 ),
@@ -287,155 +306,169 @@ function TrackedEntityComponent() {
         openModal(newEvent, enrollment);
     };
 
+    const leftPanel = (
+        <Card
+            title={
+                <Space>
+                    <CalendarOutlined />
+                    <span>Client Visits</span>
+                    {!navigator.onLine && <Tag color="orange">Offline</Tag>}
+                </Space>
+            }
+            extra={
+                <Button type="primary" icon={<PlusOutlined />} onClick={() => handleCreate()}>
+                    Add new visit
+                </Button>
+            }
+        >
+            <Table
+                columns={columns}
+                dataSource={events}
+                pagination={false}
+                rowKey="event"
+                scroll={{ x: "max-content" }}
+            />
+        </Card>
+    );
+
+    const rightPanel = (
+        <Flex vertical gap="16px">
+            <Collapse
+                expandIcon={({ isActive }) => (
+                    <CaretRightOutlined rotate={isActive ? 90 : 0} />
+                )}
+                items={[
+                    {
+                        key: "1",
+                        label: "Person Profile",
+                        children: (
+                            <Descriptions bordered column={1} items={items} />
+                        ),
+                        extra: (
+                            <Button
+                                icon={<EditOutlined />}
+                                size="small"
+                                onClick={() =>
+                                    openTrackedEntityModal(
+                                        {
+                                            ...trackedEntity,
+                                            attributes: {
+                                                ...trackedEntity.attributes,
+                                                enrolledAt:
+                                                    enrollment.enrolledAt,
+                                                ...enrollment.attributes,
+                                            },
+                                        },
+                                        enrollment,
+                                    )
+                                }
+                            >
+                                Edit
+                            </Button>
+                        ),
+                    },
+                ]}
+                styles={{ body: { padding: 0, margin: 0 } }}
+            />
+            <Collapse
+                expandIcon={({ isActive }) => (
+                    <CaretRightOutlined rotate={isActive ? 90 : 0} />
+                )}
+                items={[
+                    {
+                        key: "2",
+                        label: "Enrollment",
+                        children: (
+                            <Descriptions
+                                column={1}
+                                items={[
+                                    {
+                                        label: "Enrollment Date",
+                                        children: (
+                                            <Text>
+                                                {enrollment?.enrolledAt}
+                                            </Text>
+                                        ),
+                                    },
+                                    {
+                                        label: "Status",
+                                        children: (
+                                            <Text>{enrollment?.status}</Text>
+                                        ),
+                                    },
+                                ]}
+                            />
+                        ),
+                        extra: <Button icon={<EditOutlined />} size="small">Edit</Button>,
+                    },
+                ]}
+            />
+        </Flex>
+    );
+
     return (
         <>
-            <Splitter style={{ height: "calc(100vh - 48px)" }}>
-                <Splitter.Panel style={{ padding: 10 }}>
-                    <Flex vertical gap="16px">
-                        <Flex>
-                            <Button
-                                onClick={() => {
-                                    navigate({ to: "/tracked-entities" });
-                                }}
-                            >
-                                Back
-                            </Button>
-                        </Flex>
-                        <Card
-                            title={
-                                <Space>
-                                    <CalendarOutlined />
-                                    <span>Client Visits</span>
-                                    {!navigator.onLine && (
-                                        <Tag color="orange">Offline</Tag>
-                                    )}
-                                </Space>
-                            }
-                            extra={
-                                <Button onClick={() => handleCreate()}>
-                                    Add new visit
-                                </Button>
-                            }
-                        >
-                            <Table
-                                columns={columns}
-                                dataSource={events}
-                                pagination={false}
-                                rowKey="event"
-                                scroll={{ x: "max-content" }}
-                            />
-                        </Card>
-                    </Flex>
-                </Splitter.Panel>
-
-                <Splitter.Panel
-                    defaultSize="25%"
-                    collapsible={{
-                        start: true,
-                        end: true,
-                        showCollapsibleIcon: true,
+            <Flex
+                vertical={isMobile}
+                align={isMobile ? "flex-start" : "center"}
+                gap={isMobile ? 4 : 8}
+                style={{
+                    padding: 10,
+                    borderBottom: "1px solid #f0f0f0",
+                    background: "#fff",
+                }}
+            >
+                <Button
+                    icon={<ArrowLeftOutlined />}
+                    type="text"
+                    onClick={() => {
+                        navigate({ to: "/tracked-entities" });
                     }}
-                    style={{ padding: 10 }}
                 >
-                    <Flex vertical gap="16px">
-                        <Collapse
-                            expandIcon={({ isActive }) => (
-                                <CaretRightOutlined
-                                    rotate={isActive ? 90 : 0}
-                                />
-                            )}
-                            items={[
-                                {
-                                    key: "2",
-                                    label: "Notes about this enrollment",
-                                    children: <p></p>,
-                                    extra: <Button>Edit</Button>,
-                                },
-                            ]}
-                        />
-                        <Collapse
-                            expandIcon={({ isActive }) => (
-                                <CaretRightOutlined
-                                    rotate={isActive ? 90 : 0}
-                                />
-                            )}
-                            items={[
-                                {
-                                    key: "1",
-                                    label: "Person Profile",
-                                    children: (
-                                        <Descriptions
-                                            bordered
-                                            column={1}
-                                            items={items}
-                                        />
-                                    ),
-                                    extra: (
-                                        <Button
-                                            onClick={() =>
-                                                openTrackedEntityModal(
-                                                    {
-                                                        ...trackedEntity,
-                                                        attributes: {
-                                                            ...trackedEntity.attributes,
-                                                            enrolledAt:
-                                                                enrollment.enrolledAt,
-                                                            ...enrollment.attributes,
-                                                        },
-                                                    },
-                                                    enrollment,
-                                                )
-                                            }
-                                        >
-                                            Edit
-                                        </Button>
-                                    ),
-                                },
-                            ]}
-                            styles={{ body: { padding: 0, margin: 0 } }}
-                        />
-                        <Collapse
-                            expandIcon={({ isActive }) => (
-                                <CaretRightOutlined
-                                    rotate={isActive ? 90 : 0}
-                                />
-                            )}
-                            items={[
-                                {
-                                    key: "2",
-                                    label: "Enrollment",
-                                    children: (
-                                        <Descriptions
-                                            column={1}
-                                            items={[
-                                                {
-                                                    label: "Enrollment Date",
-                                                    children: (
-                                                        <Text>
-                                                            {
-                                                                enrollment?.enrolledAt
-                                                            }
-                                                        </Text>
-                                                    ),
-                                                },
-                                                {
-                                                    label: "Status",
-                                                    children: (
-                                                        <Text>
-                                                            {enrollment?.status}
-                                                        </Text>
-                                                    ),
-                                                },
-                                            ]}
-                                        />
-                                    ),
-                                    extra: <Button>Edit</Button>,
-                                },
-                            ]}
-                        />
-                    </Flex>
-                </Splitter.Panel>
-            </Splitter>
+                    Back
+                </Button>
+                <Flex align="center" gap={8} wrap>
+                    <UserOutlined style={{ fontSize: isMobile ? 16 : 18, color: "#1f4788" }} />
+                    <Title level={isMobile ? 5 : 4} style={{ margin: 0 }}>
+                        {firstName} {surname}
+                    </Title>
+                    {age !== null && <Tag color="blue">{age} yrs</Tag>}
+                    <SyncStatusComp syncStatus={trackedEntity.syncStatus} />
+                </Flex>
+            </Flex>
+
+            {isMobile ? (
+                <Flex
+                    vertical
+                    gap={16}
+                    style={{
+                        padding: 10,
+                        overflow: "auto",
+                    }}
+                >
+                    {rightPanel}
+                    {leftPanel}
+                </Flex>
+            ) : (
+                <Splitter style={{ height: "calc(100vh - 100px)" }}>
+                    <Splitter.Panel style={{ padding: 10 }}>
+                        <Flex vertical gap="16px">
+                            {leftPanel}
+                        </Flex>
+                    </Splitter.Panel>
+                    <Splitter.Panel
+                        defaultSize="25%"
+                        collapsible={{
+                            start: true,
+                            end: true,
+                            showCollapsibleIcon: true,
+                        }}
+                        style={{ padding: 10 }}
+                    >
+                        {rightPanel}
+                    </Splitter.Panel>
+                </Splitter>
+            )}
 
             <DataModal<FlattenedEvent>
                 open={isOpen}

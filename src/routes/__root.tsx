@@ -3,15 +3,16 @@ import {
     Link,
     Outlet,
 } from "@tanstack/react-router";
-import React from "react";
+import React, { useState } from "react";
 import relativeTime from "dayjs/plugin/relativeTime";
 import dayjs from "dayjs";
 import {
     CloudDownloadOutlined,
     HomeOutlined,
+    MenuOutlined,
     ReloadOutlined,
 } from "@ant-design/icons";
-import { Badge, Button, Flex, Layout, Space, Tooltip, Typography } from "antd";
+import { Badge, Button, Drawer, Flex, Grid, Layout, Space, Tooltip, Typography } from "antd";
 import { groupBy } from "lodash";
 
 import { eq, useLiveSuspenseQuery } from "@tanstack/react-db";
@@ -78,7 +79,7 @@ export const RootRoute = createRootRouteWithContext<{
 
             // Safety check: if orgUnit missing, wait and retry once
             if (!data.orgUnit) {
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise((resolve) => setTimeout(resolve, 500));
                 data = await queryInfo(user);
             }
 
@@ -98,7 +99,7 @@ function LayoutWithDrafts() {
         // Only show button loading if syncing AND have synced before (manual refresh)
         const isManualRefresh =
             (snapshot.matches({ metadataSync: "syncing" }) ||
-             snapshot.matches({ metadataSync: "fullRefresh" })) &&
+                snapshot.matches({ metadataSync: "fullRefresh" })) &&
             snapshot.context.lastMetadataPull !== undefined;
         return isManualRefresh;
     });
@@ -136,6 +137,81 @@ function LayoutWithDrafts() {
             .where(({ events }) => eq(events.syncStatus, "pending")),
     );
 
+    const screens = Grid.useBreakpoint();
+    const isMobile = !screens.md;
+    const [drawerOpen, setDrawerOpen] = useState(false);
+
+    const navItems = (vertical: boolean) => (
+        <Flex
+            align={vertical ? "flex-start" : "center"}
+            justify="center"
+            gap={vertical ? 16 : 10}
+            vertical={vertical}
+        >
+            <Badge
+                count={
+                    pendingEnrollments.length +
+                    pendingEvents.length +
+                    pendingTrackedEntities.length
+                }
+                style={{ backgroundColor: "#faad14" }}
+                title="Pending entities to sync"
+            />
+            <Link to="/" onClick={() => setDrawerOpen(false)}>
+                <Flex align="center" justify="center" gap={5}>
+                    <HomeOutlined
+                        style={{ fontSize: 20, color: "#1890ff" }}
+                    />
+                    <Text strong>{orgUnit?.name ?? "Loading..."}</Text>
+                </Flex>
+            </Link>
+            <Tooltip title="Pull latest data from server">
+                <Button
+                    icon={<CloudDownloadOutlined />}
+                    loading={syncingData}
+                    onClick={() => {
+                        syncActor.send({
+                            type: "START_DATA_SYNC",
+                        });
+                    }}
+                    style={{ height: "auto", padding: "4px 12px" }}
+                >
+                    <Flex vertical align="flex-start" gap={0}>
+                        <span>{syncingData ? "Pulling..." : "Pull Data"}</span>
+                        {!syncingData && lastDataPull && (
+                            <Text type="secondary" style={{ fontSize: 10, lineHeight: 1 }}>
+                                {dayjs(lastDataPull).fromNow()}
+                            </Text>
+                        )}
+                    </Flex>
+                </Button>
+            </Tooltip>
+            <Tooltip title="Sync metadata">
+                <Button
+                    type="primary"
+                    icon={<ReloadOutlined />}
+                    onClick={() => {
+                        syncActor.send({ type: "FULL_METADATA_SYNC" });
+                    }}
+                    loading={syncingMetadata}
+                    style={{ height: "auto", padding: "4px 12px" }}
+                >
+                    <Flex vertical align="flex-start" gap={0}>
+                        <span>{syncingMetadata ? "Syncing..." : "Sync Metadata"}</span>
+                        {!syncingMetadata && lastMetadataPull && (
+                            <Text type="secondary" style={{ fontSize: 10, lineHeight: 1 }}>
+                                {dayjs(lastMetadataPull).fromNow()}
+                            </Text>
+                        )}
+                    </Flex>
+                </Button>
+            </Tooltip>
+            <Link to="/reports" onClick={() => setDrawerOpen(false)}>
+                Reports
+            </Link>
+        </Flex>
+    );
+
     return (
         <Layout
             style={{
@@ -155,71 +231,40 @@ function LayoutWithDrafts() {
                     boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
                 }}
             >
-                <Flex align="center" gap="large">
+                <Flex align="center" gap={isMobile ? "middle" : "large"}>
                     <img
                         src="https://upload.wikimedia.org/wikipedia/commons/7/7c/Coat_of_arms_of_Uganda.svg"
                         alt="Uganda Coat of Arms"
-                        style={{ height: 54 }}
+                        style={{ height: isMobile ? 36 : 54 }}
                     />
-                    <Title level={3} style={{ margin: 0, color: "#1f4788" }}>
+                    <Title
+                        level={isMobile ? 5 : 3}
+                        style={{ margin: 0, color: "#1f4788" }}
+                    >
                         Medical{" "}
                         <Text style={{ fontWeight: 300 }}>eRegistry</Text>
                     </Title>
                 </Flex>
 
-                <Flex align="center" justify="center" gap={10}>
-                    <Badge
-                        count={
-                            pendingEnrollments.length +
-                            pendingEvents.length +
-                            pendingTrackedEntities.length
-                        }
-                        style={{ backgroundColor: "#faad14" }}
-                        title="Pending entities to sync"
+                {isMobile ? (
+                    <Button
+                        type="text"
+                        icon={<MenuOutlined style={{ fontSize: 20 }} />}
+                        onClick={() => setDrawerOpen(true)}
                     />
-                    <Link to="/">
-                        <Flex align="center" justify="center" gap={5}>
-                            <HomeOutlined
-                                style={{ fontSize: 20, color: "#1890ff" }}
-                            />
-                            <Text strong>{orgUnit?.name ?? "Loading..."}</Text>
-                        </Flex>
-                    </Link>
-                    <Tooltip title="Pull latest data from server">
-                        <Button
-                            icon={<CloudDownloadOutlined />}
-                            loading={syncingData}
-                            onClick={() => {
-                                syncActor.send({
-                                    type: "START_DATA_SYNC",
-                                });
-                            }}
-                            size="small"
-                        >
-                            {syncingData
-                                ? "Pulling..."
-                                : `Pull Data|Updated ${lastDataPull ? dayjs(lastDataPull).fromNow() : ""}`}
-                        </Button>
-                    </Tooltip>
-
-                    <Tooltip title="Sync metadata">
-                        <Button
-                            type="primary"
-                            icon={<ReloadOutlined />}
-                            onClick={() => {
-                                syncActor.send({ type: "FULL_METADATA_SYNC" });
-                            }}
-                            loading={syncingMetadata}
-                            size="small"
-                        >
-                            {syncingMetadata
-                                ? "Syncing..."
-                                : `Sync Metadata|Updated ${lastMetadataPull ? dayjs(lastMetadataPull).fromNow() : ""}`}
-                        </Button>
-                    </Tooltip>
-                    <Link to="/reports">Reports</Link>
-                </Flex>
+                ) : (
+                    navItems(false)
+                )}
             </Header>
+            <Drawer
+                title="Navigation"
+                placement="right"
+                onClose={() => setDrawerOpen(false)}
+                open={drawerOpen}
+                width={280}
+            >
+                {navItems(true)}
+            </Drawer>
             <Outlet />
         </Layout>
     );
