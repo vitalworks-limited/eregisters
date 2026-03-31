@@ -6,7 +6,7 @@ export const createEventCollection = () =>
     createCollection(
         dexieCollectionOptions({
             id: "events",
-            dbName: "MOHRegisterDB",
+            dbName: "MOHRegister_Events",
             tableName: "events",
             schema: FlattenedEventSchema,
             awaitPersistence: false,

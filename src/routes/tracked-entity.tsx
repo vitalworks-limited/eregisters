@@ -332,78 +332,42 @@ function TrackedEntityComponent() {
     );
 
     const rightPanel = (
-        <Flex vertical gap="16px">
-            <Collapse
-                expandIcon={({ isActive }) => (
-                    <CaretRightOutlined rotate={isActive ? 90 : 0} />
-                )}
-                items={[
-                    {
-                        key: "1",
-                        label: "Person Profile",
-                        children: (
-                            <Descriptions bordered column={1} items={items} />
-                        ),
-                        extra: (
-                            <Button
-                                icon={<EditOutlined />}
-                                size="small"
-                                onClick={() =>
-                                    openTrackedEntityModal(
-                                        {
-                                            ...trackedEntity,
-                                            attributes: {
-                                                ...trackedEntity.attributes,
-                                                enrolledAt:
-                                                    enrollment.enrolledAt,
-                                                ...enrollment.attributes,
-                                            },
+        <Collapse
+            expandIcon={({ isActive }) => (
+                <CaretRightOutlined rotate={isActive ? 90 : 0} />
+            )}
+            items={[
+                {
+                    key: "1",
+                    label: "Person Profile",
+                    children: (
+                        <Descriptions bordered column={1} items={items} />
+                    ),
+                    extra: (
+                        <Button
+                            icon={<EditOutlined />}
+                            size="small"
+                            onClick={() =>
+                                openTrackedEntityModal(
+                                    {
+                                        ...trackedEntity,
+                                        attributes: {
+                                            ...trackedEntity.attributes,
+                                            enrolledAt: enrollment.enrolledAt,
+                                            ...enrollment.attributes,
                                         },
-                                        enrollment,
-                                    )
-                                }
-                            >
-                                Edit
-                            </Button>
-                        ),
-                    },
-                ]}
-                styles={{ body: { padding: 0, margin: 0 } }}
-            />
-            <Collapse
-                expandIcon={({ isActive }) => (
-                    <CaretRightOutlined rotate={isActive ? 90 : 0} />
-                )}
-                items={[
-                    {
-                        key: "2",
-                        label: "Enrollment",
-                        children: (
-                            <Descriptions
-                                column={1}
-                                items={[
-                                    {
-                                        label: "Enrollment Date",
-                                        children: (
-                                            <Text>
-                                                {enrollment?.enrolledAt}
-                                            </Text>
-                                        ),
                                     },
-                                    {
-                                        label: "Status",
-                                        children: (
-                                            <Text>{enrollment?.status}</Text>
-                                        ),
-                                    },
-                                ]}
-                            />
-                        ),
-                        extra: <Button icon={<EditOutlined />} size="small">Edit</Button>,
-                    },
-                ]}
-            />
-        </Flex>
+                                    enrollment,
+                                )
+                            }
+                        >
+                            Edit
+                        </Button>
+                    ),
+                },
+            ]}
+            styles={{ body: { padding: 0, margin: 0 } }}
+        />
     );
 
     return (

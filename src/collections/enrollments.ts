@@ -6,7 +6,7 @@ export const createEnrollmentCollection = () =>
     createCollection(
         dexieCollectionOptions({
             id: "enrollments",
-            dbName: "MOHRegisterDB",
+            dbName: "MOHRegister_Enrollments",
             tableName: "enrollments",
             schema: FlattenedEnrollmentSchema,
             awaitPersistence: false,

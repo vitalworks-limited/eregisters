@@ -7,7 +7,7 @@ export const createTrackedEntityCollection = () =>
         dexieCollectionOptions({
             schema: FlattenedTrackedEntitySchema,
             id: "trackedEntities",
-            dbName: "MOHRegisterDB",
+            dbName: "MOHRegister_TrackedEntities",
             tableName: "trackedEntities",
             getKey: (trackedEntity) => trackedEntity.trackedEntity,
             awaitPersistence: false,

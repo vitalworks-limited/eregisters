@@ -1,52 +1,3 @@
-/**
- * Program Indicator Evaluation Utilities
- *
- * This module provides functions to evaluate DHIS2 program indicator filters against events.
- *
- * @example
- * ```typescript
- * import { db } from '../db';
- * import { evaluateProgramIndicatorsForEvent } from '../utils/indicator-utils';
- *
- * // Get program indicators from database
- * const indicators = await db.programIndicators
- *     .where('program.id')
- *     .equals(programId)
- *     .toArray();
- *
- * // Get events from collection (only synced/pending)
- * const events = await eventsCollection
- *     .where({ program: programId })
- *     .toArray();
- *
- * // Get tracked entity for the event
- * const trackedEntity = await trackedEntitiesCollection
- *     .get(event.trackedEntity);
- *
- * // Evaluate indicators for a single event with tracked entity
- * const results = evaluateProgramIndicatorsForEvent(
- *     event,
- *     indicators,
- *     trackedEntity // FlattenedTrackedEntity or plain attributes object
- * );
- *
- * // Results: { indicatorId1: 1, indicatorId3: 1, ... }
- * // Only indicators where filter evaluates to true are included (value = 1)
- *
- * // Batch process multiple events with tracked entities
- * const trackedEntitiesMap = new Map();
- * for (const event of events) {
- *     const te = await trackedEntitiesCollection.get(event.trackedEntity);
- *     trackedEntitiesMap.set(event.event, te);
- * }
- * const allResults = evaluateProgramIndicatorsForEvents(
- *     events,
- *     indicators,
- *     trackedEntitiesMap // Map<string, FlattenedTrackedEntity>
- * );
- * ```
- */
-
 import dayjs from "dayjs";
 import {
     FlattenedEvent,
@@ -71,6 +22,13 @@ export function buildIndicatorVariables(
     variableValues["current_date"] = dayjs().format("YYYY-MM-DD");
     variableValues["event_date"] = event.occurredAt;
     variableValues["event_count"] = 1;
+    // analytics_period_start defaults to the first day of the current month
+    variableValues["analytics_period_start"] = dayjs()
+        .startOf("month")
+        .format("YYYY-MM-DD");
+    variableValues["analytics_period_end"] = dayjs()
+        .endOf("month")
+        .format("YYYY-MM-DD");
 
     // Add all data element values from the event
     if (event.dataValues) {
@@ -97,18 +55,77 @@ export function buildIndicatorVariables(
 }
 
 /**
- * Helper function to find the closing parenthesis
+ * Helper function to find the closing parenthesis, skipping over string literals
  */
 function findClosingParen(str: string, startPos: number): number {
     let depth = 1;
+    let inString = false;
+    let stringChar = "";
     for (let i = startPos; i < str.length; i++) {
-        if (str[i] === "(") depth++;
-        else if (str[i] === ")") {
+        const ch = str[i];
+        if (inString) {
+            if (ch === "\\" && i + 1 < str.length) {
+                i++; // skip escaped char
+                continue;
+            }
+            if (ch === stringChar) {
+                inString = false;
+            }
+            continue;
+        }
+        if (ch === "'" || ch === '"') {
+            inString = true;
+            stringChar = ch;
+            continue;
+        }
+        if (ch === "(") depth++;
+        else if (ch === ")") {
             depth--;
             if (depth === 0) return i;
         }
     }
     return -1;
+}
+
+/**
+ * Split a string by commas, but only at the top level (respecting nested parentheses and strings)
+ */
+function splitTopLevel(str: string): string[] {
+    const parts: string[] = [];
+    let depth = 0;
+    let current = "";
+    let inString = false;
+    let stringChar = "";
+    for (let i = 0; i < str.length; i++) {
+        const ch = str[i];
+        if (inString) {
+            current += ch;
+            if (ch === "\\" && i + 1 < str.length) {
+                current += str[++i];
+                continue;
+            }
+            if (ch === stringChar) {
+                inString = false;
+            }
+            continue;
+        }
+        if (ch === "'" || ch === '"') {
+            inString = true;
+            stringChar = ch;
+            current += ch;
+            continue;
+        }
+        if (ch === "(") depth++;
+        else if (ch === ")") depth--;
+        if (ch === "," && depth === 0) {
+            parts.push(current);
+            current = "";
+        } else {
+            current += ch;
+        }
+    }
+    parts.push(current);
+    return parts;
 }
 
 /**
@@ -124,6 +141,70 @@ function evaluateFilter(
     }
 
     let processedFilter = filter;
+
+    // Strip aggregate wrappers: sum(...), avg(...), count(...) → just the inner expression
+    // For single-event evaluation these are identity operations
+    const aggregateFns = ["sum", "avg"];
+    let changed = true;
+    while (changed) {
+        changed = false;
+        for (const fn of aggregateFns) {
+            const regex = new RegExp(`\\b${fn}\\s*\\(`);
+            const match = processedFilter.match(regex);
+            if (match && match.index !== undefined) {
+                const openParen = match.index + match[0].length - 1;
+                const closeParen = findClosingParen(
+                    processedFilter,
+                    openParen + 1,
+                );
+                if (closeParen !== -1) {
+                    const inner = processedFilter.substring(
+                        openParen + 1,
+                        closeParen,
+                    );
+                    processedFilter =
+                        processedFilter.substring(0, match.index) +
+                        `(${inner})` +
+                        processedFilter.substring(closeParen + 1);
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    // Convert DHIS2 if(cond, trueVal, falseVal) → (cond ? trueVal : falseVal)
+    // "if" is a reserved word in JS so we must transform it
+    let ifChanged = true;
+    while (ifChanged) {
+        ifChanged = false;
+        const ifMatch = processedFilter.match(/\bif\s*\(/);
+        if (ifMatch && ifMatch.index !== undefined) {
+            const openParen = ifMatch.index + ifMatch[0].length - 1;
+            const closeParen = findClosingParen(
+                processedFilter,
+                openParen + 1,
+            );
+            if (closeParen !== -1) {
+                const argsStr = processedFilter.substring(
+                    openParen + 1,
+                    closeParen,
+                );
+                // Split on top-level commas only (respect nested parens)
+                const ifArgs = splitTopLevel(argsStr);
+                if (ifArgs.length === 3) {
+                    const [cond, trueVal, falseVal] = ifArgs.map((a) =>
+                        a.trim(),
+                    );
+                    const replacement = `((${cond}) ? (${trueVal}) : (${falseVal}))`;
+                    processedFilter =
+                        processedFilter.substring(0, ifMatch.index) +
+                        replacement +
+                        processedFilter.substring(closeParen + 1);
+                    ifChanged = true;
+                }
+            }
+        }
+    }
 
     // Normalize unprefixed d2 functions by adding d2: prefix
     // This handles filters like contains(...) and converts them to d2:contains(...)
@@ -308,8 +389,8 @@ function evaluateFilter(
                     "countIfZeroPos",
                 ].includes(funcName);
 
-                // Handle variable references #{varName} or A{attributeName} or V{systemVar}
-                const varMatch = arg.match(/^[#AV]\{([^}]+)\}$/);
+                // Handle variable references #{varName}, A{attributeName}, V{systemVar}, or bare {varName}
+                const varMatch = arg.match(/^[#AV]?\{([^}]+)\}$/);
                 if (varMatch) {
                     let varName = varMatch[1];
 
@@ -358,9 +439,9 @@ function evaluateFilter(
         }
     }
 
-    // Replace variable references with actual values
+    // Replace variable references with actual values (including bare {varName} with missing prefix)
     processedFilter = processedFilter.replace(
-        /[#AV]\{([^}]+)\}/g,
+        /[#AV]?\{([^}]+)\}/g,
         (match, varName) => {
             // Handle compound references like programStageId.dataElementId
             // Extract just the dataElementId part for lookup
@@ -380,26 +461,72 @@ function evaluateFilter(
 
     // Normalize comparison operators (= to ===, != to !==)
     // Split by quotes to avoid replacing inside string literals
-    console.log("Before normalization:", processedFilter);
     let parts = processedFilter.split("'");
-    console.log("Split parts:", parts);
     for (let i = 0; i < parts.length; i += 2) {
         const before = parts[i];
         parts[i] = parts[i]
             .replace(/!=/g, "!==")
             .replace(/([^!<>=])={2}(?!=)/g, "$1===")
             .replace(/([^!<>=])=(?!=)/g, "$1===");
-        console.log(`Part ${i}: "${before}" -> "${parts[i]}"`);
     }
     const normalizedFilter = parts.join("'");
-    console.log("After normalization:", normalizedFilter);
+
+    // Fix unterminated string literals (e.g. 'Negative without closing quote)
+    let balancedFilter = normalizedFilter;
+    let inStr = false;
+    let strCh = "";
+    for (let i = 0; i < balancedFilter.length; i++) {
+        const c = balancedFilter[i];
+        if (inStr) {
+            if (c === "\\" && i + 1 < balancedFilter.length) {
+                i++;
+                continue;
+            }
+            if (c === strCh) inStr = false;
+        } else if (c === "'" || c === '"') {
+            inStr = true;
+            strCh = c;
+        }
+    }
+    if (inStr) {
+        balancedFilter += strCh;
+    }
+
+    // Balance unmatched parentheses (handles malformed indicator definitions)
+    // Must be string-aware to avoid counting parens inside string literals
+    let openCount = 0;
+    let inStr2 = false;
+    let strCh2 = "";
+    for (let i = 0; i < balancedFilter.length; i++) {
+        const c = balancedFilter[i];
+        if (inStr2) {
+            if (c === "\\" && i + 1 < balancedFilter.length) {
+                i++;
+                continue;
+            }
+            if (c === strCh2) inStr2 = false;
+            continue;
+        }
+        if (c === "'" || c === '"') {
+            inStr2 = true;
+            strCh2 = c;
+            continue;
+        }
+        if (c === "(") openCount++;
+        else if (c === ")") openCount--;
+    }
+    if (openCount > 0) {
+        balancedFilter += ")".repeat(openCount);
+    } else if (openCount < 0) {
+        balancedFilter = "(".repeat(-openCount) + balancedFilter;
+    }
 
     // Evaluate the final boolean expression
     try {
         const func = new Function(
             "d2Functions",
             "variableValues",
-            `return (${normalizedFilter})`,
+            `return (${balancedFilter})`,
         );
         const value = func(d2Functions, variableValues);
         return value;
@@ -472,8 +599,9 @@ export function evaluateProgramIndicatorsForEvents(
     const results = new Map<string, Record<string, 1>>();
 
     for (const event of events) {
-        const trackedEntityOrAttributes =
-            trackedEntitiesByEvent?.get(event.event);
+        const trackedEntityOrAttributes = trackedEntitiesByEvent?.get(
+            event.event,
+        );
         const indicatorResults = evaluateProgramIndicatorsForEvent(
             event,
             indicators,

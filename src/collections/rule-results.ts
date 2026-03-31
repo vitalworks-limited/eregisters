@@ -5,7 +5,7 @@ import { RuleResultSchema } from "../schemas";
 export const ruleResultsCollection = createCollection(
     dexieCollectionOptions({
         id: "ruleResults",
-        dbName: "MOHRegisterDB",
+        dbName: "MOHRegister_RuleResults",
         tableName: "ruleResults",
         schema: RuleResultSchema,
         awaitPersistence: false,

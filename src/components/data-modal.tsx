@@ -1,6 +1,6 @@
 import { UserAddOutlined } from "@ant-design/icons";
 import type { FormInstance } from "antd";
-import { Button, Flex, Form, Modal, Typography } from "antd";
+import { Button, Flex, Form, Grid, Modal, Typography } from "antd";
 import React from "react";
 import { SyncStatusComp } from "./sync-status-comp";
 import {
@@ -37,6 +37,8 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
     hasAddAnother = false,
     status = "draft",
 }: DataModalProps<T>) {
+    const screens = Grid.useBreakpoint();
+    const isMobile = !screens.md;
     const [form] = Form.useForm<T>();
     const [loading, setLoading] = React.useState(false);
 
@@ -87,17 +89,26 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
             width="95vw"
             footer={
                 <Flex
-                    justify="space-between"
-                    align="center"
+                    justify={isMobile ? "center" : "space-between"}
+                    align={isMobile ? "stretch" : "center"}
+                    vertical={isMobile}
+                    gap={isMobile ? 8 : 0}
                     style={{ padding: "8px 0" }}
                 >
                     <SyncStatusComp syncStatus={status} />
-                    <Flex gap="middle">
+                    <Flex
+                        gap="middle"
+                        vertical={isMobile}
+                        style={isMobile ? { width: "100%" } : undefined}
+                    >
                         <Button
                             onClick={() => {
                                 onClose();
                             }}
-                            style={{ borderRadius: 8 }}
+                            style={{
+                                borderRadius: 8,
+                                ...(isMobile && { width: "100%" }),
+                            }}
                         >
                             Cancel
                         </Button>
@@ -111,8 +122,18 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
                                 borderColor: "#7c3aed",
                                 borderRadius: 8,
                                 fontWeight: 500,
-                                paddingLeft: 32,
-                                paddingRight: 32,
+                                ...(isMobile
+                                    ? {
+                                          width: "100%",
+                                          whiteSpace: "normal" as const,
+                                          wordBreak: "break-word" as const,
+                                          height: "auto",
+                                          padding: "8px 16px",
+                                      }
+                                    : {
+                                          paddingLeft: 32,
+                                          paddingRight: 32,
+                                      }),
                             }}
                         >
                             {submitButtonText}
@@ -126,8 +147,19 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
                                     borderColor: "#7c3aed",
                                     borderRadius: 8,
                                     fontWeight: 500,
-                                    paddingLeft: 32,
-                                    paddingRight: 32,
+                                    ...(isMobile
+                                        ? {
+                                              width: "100%",
+                                              whiteSpace: "normal" as const,
+                                              wordBreak:
+                                                  "break-word" as const,
+                                              height: "auto",
+                                              padding: "8px 16px",
+                                          }
+                                        : {
+                                              paddingLeft: 32,
+                                              paddingRight: 32,
+                                          }),
                                 }}
                                 onClick={() => handleOk(true)}
                                 loading={loading}

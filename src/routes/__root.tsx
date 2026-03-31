@@ -307,7 +307,7 @@ function LayoutWithDrafts() {
                 placement="right"
                 onClose={() => setDrawerOpen(false)}
                 open={drawerOpen}
-                width={280}
+                size={280}
             >
                 {navItems(true)}
             </Drawer>

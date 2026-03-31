@@ -1,4 +1,4 @@
-import { assertEvent, assign, fromPromise, setup } from "xstate";
+import { assertEvent, assign, fromPromise, raise, setup } from "xstate";
 import {
     DataElement,
     Enrollment,
@@ -305,6 +305,39 @@ export const syncMachine = setup({
                     await eventsCollection.utils.bulkInsertLocally(
                         mergedEvents,
                     );
+
+                    // Evaluate indicators for pulled events inline
+                    if (mergedEvents.length > 0) {
+                        const indicators =
+                            await db.programIndicators.toArray();
+                        if (indicators.length > 0) {
+                            const teMap = new Map(
+                                mergedTrackedEntities.map((te) => [
+                                    te.trackedEntity,
+                                    te,
+                                ]),
+                            );
+                            for (const event of mergedEvents) {
+                                const te = teMap.get(event.trackedEntity);
+                                if (te) {
+                                    const results =
+                                        evaluateProgramIndicatorsForEvent(
+                                            event,
+                                            indicators,
+                                            te,
+                                        );
+                                    await db.indicatorEvaluations.put({
+                                        id: event.event,
+                                        eventId: event.event,
+                                        results,
+                                        updatedAt: new Date().toISOString(),
+                                        version: 1,
+                                    });
+                                }
+                            }
+                        }
+                    }
+
                     hasMoreData = instances.length === pageSize;
                     currentPage++;
                 }
@@ -1369,7 +1402,6 @@ export const syncMachine = setup({
                         },
                     },
                 },
-
                 failure: {},
             },
         },
