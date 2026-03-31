@@ -61,6 +61,7 @@ export interface SyncContext {
     error: Error | null;
     engine: ReturnType<typeof useDataEngine>;
     lastDataPull: string | undefined;
+    lastDataPush: string | undefined;
     lastMetadataPull: string | undefined;
     skipLastMetadataPull: boolean;
     resources: Resource[];
@@ -74,14 +75,13 @@ export interface SyncContext {
 
 export type SyncEvent =
     | {
-          type: "QUEUE";
-          entity: FlattenedTrackedEntity | FlattenedEvent | FlattenedEnrollment;
-      }
-    | {
           type: "SYNC_ENTITIES";
           entities: Array<
               FlattenedTrackedEntity | FlattenedEvent | FlattenedEnrollment
           >;
+      }
+    | {
+          type: "PUSH_DATA";
       }
     | { type: "RETRY" }
     | { type: "START_METADATA_SYNC"; user: string }
@@ -112,6 +112,7 @@ export const syncMachine = setup({
             >;
             initialLastMetadataPull?: string;
             initialLastDataPull?: string;
+            initialLastDataPush?: string;
             user: string;
             orgUnit: string;
         },
@@ -135,6 +136,32 @@ export const syncMachine = setup({
         logDirectSync: ({ event }) => {
             assertEvent(event, "SYNC_ENTITIES");
             console.log("Attempting direct sync:", event.entities);
+        },
+
+        persistLastDataPull: ({ context }) => {
+            db.syncState.put({
+                id: "current",
+                status: "idle",
+                isOnline: true,
+                isSyncing: false,
+                lastPullAt: context.lastDataPull,
+                lastPushAt: context.lastDataPush,
+                pendingCount: 0,
+                updatedAt: new Date().toISOString(),
+            });
+        },
+
+        persistLastDataPush: ({ context }) => {
+            db.syncState.put({
+                id: "current",
+                status: "idle",
+                isOnline: true,
+                isSyncing: false,
+                lastPullAt: context.lastDataPull,
+                lastPushAt: context.lastDataPush,
+                pendingCount: 0,
+                updatedAt: new Date().toISOString(),
+            });
         },
     },
     actors: {
@@ -633,6 +660,9 @@ export const syncMachine = setup({
                     params: {
                         async: false,
                         importStrategy: "CREATE_AND_UPDATE",
+                        atomicMode: "OBJECT",
+                        skipPatternValidation: "true",
+                        skipSideEffects: "true",
                     },
                 });
 
@@ -746,7 +776,7 @@ export const syncMachine = setup({
                 input,
             }: {
                 input: {
-                    engine: any;
+                    engine: ReturnType<typeof useDataEngine>;
                     trackedEntitiesCollection: ReturnType<
                         typeof createTrackedEntityCollection
                     >;
@@ -771,31 +801,25 @@ export const syncMachine = setup({
                     enrollmentsCollection.utils.getTable();
 
                 // 1. Query collections for pending entities
-                const pendingTEs = await teTable
-                    .where({ syncStatus: "pending" })
-                    .toArray();
+                const pendingTEs = (await teTable.toArray()).filter(
+                    (e) => e.syncStatus === "pending",
+                );
 
-                const pendingEnrollments = await enrollTable
-                    .where({ syncStatus: "pending" })
-                    .toArray();
+                const pendingEnrollments = (await enrollTable.toArray()).filter(
+                    (e) => e.syncStatus === "pending",
+                );
 
-                const pendingEvents = (
-                    await eventTable.where({ syncStatus: "pending" }).toArray()
-                ).filter((event) => event.occurredAt);
+                const pendingEvents = (await eventTable.toArray()).filter(
+                    (e) => e.syncStatus === "pending" && e.occurredAt,
+                );
 
                 if (
                     pendingTEs.length === 0 &&
                     pendingEnrollments.length === 0 &&
                     pendingEvents.length === 0
                 ) {
-                    console.log("No pending entities to sync");
                     return { processed: 0, succeeded: 0, failed: 0 };
                 }
-
-                console.log(
-                    `Batch syncing: ${pendingTEs.length} TEs, ${pendingEnrollments.length} enrollments, ${pendingEvents.length} events`,
-                );
-
                 // 2. Filter by dependencies
                 const teIds = new Set(pendingTEs.map((te) => te.trackedEntity));
 
@@ -855,6 +879,9 @@ export const syncMachine = setup({
                     params: {
                         async: false,
                         importStrategy: "CREATE_AND_UPDATE",
+                        atomicMode: "OBJECT",
+                        skipPatternValidation: "true",
+                        skipSideEffects: "true",
                     },
                 });
                 let succeeded = 0;
@@ -917,10 +944,10 @@ export const syncMachine = setup({
 
                 // 2. Get all synced/pending events
                 const eventTable = eventsCollection.utils.getTable();
-                const events = await eventTable
-                    .where("syncStatus")
-                    .anyOf(["synced", "pending"])
-                    .toArray();
+                const events = (await eventTable.toArray()).filter(
+                    (e) =>
+                        e.syncStatus === "synced" || e.syncStatus === "pending",
+                );
 
                 if (events.length === 0) {
                     console.log("No events to evaluate");
@@ -1020,6 +1047,7 @@ export const syncMachine = setup({
             trackedEntitiesCollection,
             initialLastMetadataPull,
             initialLastDataPull,
+            initialLastDataPush,
             user,
             orgUnit,
         },
@@ -1045,6 +1073,7 @@ export const syncMachine = setup({
             eventsCollection,
             trackedEntitiesCollection,
             lastDataPull: initialLastDataPull,
+            lastDataPush: initialLastDataPush,
             lastMetadataPull: initialLastMetadataPull,
             skipLastMetadataPull: true,
             user,
@@ -1165,12 +1194,14 @@ export const syncMachine = setup({
                         SYNC_ENTITIES: {
                             target: "directSync",
                         },
+                        PUSH_DATA: {
+                            target: "batchSync",
+                        },
                     },
                     after: {
                         30000: { target: "batchSync" },
                     },
                 },
-
                 directSync: {
                     entry: "logDirectSync",
                     always: [{ target: "uploadingDirect" }],
@@ -1192,7 +1223,7 @@ export const syncMachine = setup({
                             };
                         },
                         onDone: {
-                            target: "idle",
+                            target: "updateLastDataPush",
                             actions: () => {
                                 console.log("✅ Direct sync successful");
                             },
@@ -1221,7 +1252,7 @@ export const syncMachine = setup({
                             eventsCollection: context.eventsCollection,
                         }),
                         onDone: {
-                            target: "idle",
+                            target: "updateLastDataPush",
                         },
                         onError: {
                             target: "idle",
@@ -1230,6 +1261,16 @@ export const syncMachine = setup({
                             },
                         },
                     },
+                },
+
+                updateLastDataPush: {
+                    entry: [
+                        assign({
+                            lastDataPush: () => new Date().toISOString(),
+                        }),
+                        "persistLastDataPush",
+                    ],
+                    always: "idle",
                 },
             },
         },
@@ -1303,9 +1344,12 @@ export const syncMachine = setup({
                     },
                 },
                 updateLastDataPull: {
-                    entry: assign({
-                        lastDataPull: () => new Date().toISOString(),
-                    }),
+                    entry: [
+                        assign({
+                            lastDataPull: () => new Date().toISOString(),
+                        }),
+                        "persistLastDataPull",
+                    ],
                     always: "waiting",
                 },
 

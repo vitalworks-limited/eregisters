@@ -43,7 +43,7 @@ export default function ProgramStageForm({
             {programStage.programStageSections.flatMap((section) => {
                 if (ruleResult.hiddenSections.includes(section.id)) return [];
                 return (
-                    <Row gutter={[16, 0]} key={section.id}>
+                    <Row gutter={[16, 8]} key={section.id}>
                         {section.dataElements.map((dataElement) => (
                             <DataElementRenderer
                                 key={dataElement.id}

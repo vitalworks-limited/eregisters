@@ -29,15 +29,13 @@ export interface SyncOperation {
     priority: number;
 }
 
-// Machine state persistence
 export interface MachineState {
-    id: string; // Always "tracker-machine" for single state
-    context: any; // XState machine context
-    state: string; // Current machine state
+    id: string;
+    context: any;
+    state: string;
     updatedAt: string;
 }
 
-// Village reference data
 export interface Village {
     village_id: string;
     village_name: string;
@@ -46,7 +44,6 @@ export interface Village {
     District: string;
 }
 
-// Program rules cache entry
 export interface RuleCacheEntry {
     key: string;
     result: ProgramRuleResult;
@@ -54,28 +51,23 @@ export interface RuleCacheEntry {
     dataValues: Record<string, any>;
     attributes: Record<string, any>;
 }
-
-// Metadata version tracking with per-type lastUpdated timestamps
 export interface MetadataVersion {
-    id: string; // Always "metadata-version"
-    lastSync: string; // Overall last sync timestamp (ISO 8601)
+    id: string;
+    lastSync: string;
     versions: {
-        // Per-type lastUpdated timestamps for incremental sync
-        programs?: string; // ISO 8601 timestamp
-        dataElements?: string; // ISO 8601 timestamp
-        attributes?: string; // ISO 8601 timestamp
-        programRules?: string; // ISO 8601 timestamp
-        programRuleVariables?: string; // ISO 8601 timestamp
-        optionSets?: string; // ISO 8601 timestamp
-        optionGroups?: string; // ISO 8601 timestamp
-        villages?: string; // ISO 8601 timestamp
-        relationshipTypes?: string; // ISO 8601 timestamp
+        programs?: string;
+        dataElements?: string;
+        attributes?: string;
+        programRules?: string;
+        programRuleVariables?: string;
+        optionSets?: string;
+        optionGroups?: string;
+        villages?: string;
+        relationshipTypes?: string;
     };
 }
-
-// Metadata sync progress tracking
 export interface MetadataSyncProgress {
-    id: string; // Always "metadata-sync-progress"
+    id: string;
     status: "idle" | "checking" | "syncing" | "error" | "success";
     progress?: {
         total: number;
@@ -87,41 +79,29 @@ export interface MetadataSyncProgress {
     lastSync?: string;
     updatedAt: string;
 }
-
-// Sync state persistence for sync manager
 export interface SyncState {
-    id: string; // Always "current"
+    id: string;
     status: "idle" | "syncing" | "online" | "offline";
     isOnline: boolean;
     isSyncing: boolean;
-    lastSyncAt?: string; // ISO 8601 — last successful push sync
-    lastPullAt?: string; // ISO 8601 — last successful data pull from DHIS2
-    lastSyncDuration?: number; // Duration in milliseconds
-    lastSyncCount?: number; // Number of items synced
+    lastSyncAt?: string;
+    lastPullAt?: string;
+    lastPushAt?: string;
+    lastSyncDuration?: number;
+    lastSyncCount?: number;
     lastError?: string;
     pendingCount: number;
-    updatedAt: string; // ISO 8601 timestamp
-    // Per-orgUnit pull cursors: orgUnitId → lastPullAt ISO string
+    updatedAt: string;
     pullVersions?: Record<string, string>;
 }
-
-// Program indicator evaluation results
 export interface IndicatorEvaluation {
-    id: string; // Primary key: eventId
-    eventId: string; // Foreign key to event
-    results: Record<string, 1>; // indicatorId → 1 (only passing indicators)
-    updatedAt: string; // ISO 8601 timestamp
-    version: number; // For conflict resolution
+    id: string;
+    eventId: string;
+    results: Record<string, 1>;
+    updatedAt: string;
+    version: number;
 }
-
-/**
- * RegisterDatabase - Main Dexie database instance
- */
 export class RegisterDatabase extends Dexie {
-    // trackedEntities!: Table<FlattenedTrackedEntity, string>;
-    // enrollments!: Table<FlattenedEnrollment, string>;
-    // events!: Table<FlattenedEvent, string>;
-    syncQueue!: Table<SyncOperation, string>;
     programRules!: Table<ProgramRule, string>;
     programRuleVariables!: Table<ProgramRuleVariable, string>;
     optionGroups!: Table<
@@ -157,13 +137,6 @@ export class RegisterDatabase extends Dexie {
     constructor() {
         super("MOHRegisterDB");
         this.version(1).stores({
-            // trackedEntities:
-            //     "trackedEntity,orgUnit,createdAt,updatedAt,syncStatus,version,lastSynced,parentEntity,[trackedEntity+parentEntity],_updatedAt, _createdAt",
-            // events: "event,trackedEntity,programStage,enrollment,occurredAt,updatedAt,createdAt,syncStatus,version,lastSynced,parentEvent,[event+parentEvent],_updatedAt, _createdAt",
-
-            // enrollments:
-            //     "enrollment,trackedEntity,enrolledAt,version,syncStatus,lastSynced,createdAt,updatedAt,_updatedAt, _createdAt",
-            syncQueue: "id,status,priority,type,entityId,createdAt",
             programRules: "id,program",
             programRuleVariables: "id,program",
             dataElements: "id,name",
@@ -179,99 +152,5 @@ export class RegisterDatabase extends Dexie {
             indicatorEvaluations: "id,eventId,updatedAt,version",
         });
     }
-
-    /**
-     * Clear all data (useful for logout/reset)
-     */
-    async clearAllData(): Promise<void> {
-        // await this.trackedEntities.clear();
-        // await this.events.clear();
-        await this.syncQueue.clear();
-    }
-
-    /**
-     * Get pending sync operations ordered by priority and creation time
-     */
-    async getPendingSyncOperations(): Promise<SyncOperation[]> {
-        return await this.syncQueue
-            .where("status")
-            .equals("pending")
-            .or("status")
-            .equals("failed")
-            .sortBy("priority")
-            .then((ops) => ops.reverse()); // Higher priority first
-    }
-
-    /**
-     * Get total count of pending sync operations
-     */
-    async getPendingSyncCount(): Promise<number> {
-        return await this.syncQueue
-            .where("status")
-            .equals("pending")
-            .or("status")
-            .equals("failed")
-            .count();
-    }
-
-    /**
-     * Clean up old completed sync operations (older than 7 days)
-     */
-    async cleanupCompletedSyncOperations(): Promise<void> {
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-        await this.syncQueue
-            .where("status")
-            .equals("completed")
-            .and((op) => new Date(op.updatedAt) < sevenDaysAgo)
-            .delete();
-    }
-
-    /**
-     * Get entities with specific sync status
-     */
-    // async getEntitiesByStatus(
-    //     status: SyncStatus,
-    // ): Promise<FlattenedTrackedEntity[]> {
-    //     return await this.trackedEntities
-    //         .where("syncStatus")
-    //         .equals(status)
-    //         .toArray();
-    // }
-
-    /**
-     * Get events with specific sync status
-     */
-    // async getEventsByStatus(status: SyncStatus): Promise<FlattenedEvent[]> {
-    //     return await this.events.where("syncStatus").equals(status).toArray();
-    // }
-
-    /**
-     * Get count of items pending sync across all tables
-     */
-    // async getPendingChangesCount(): Promise<{
-    //     entities: number;
-    //     events: number;
-    //     total: number;
-    // }> {
-    //     const entities = await this.trackedEntities
-    //         .where("syncStatus")
-    //         .anyOf(["draft", "pending", "failed"])
-    //         .count();
-
-    //     const events = await this.events
-    //         .where("syncStatus")
-    //         .anyOf(["draft", "pending", "failed"])
-    //         .count();
-
-    //     return {
-    //         entities,
-    //         events,
-    //         total: entities + events,
-    //     };
-    // }
 }
-
-// Export singleton database instance
 export const db = new RegisterDatabase();

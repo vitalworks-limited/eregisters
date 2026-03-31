@@ -3,6 +3,7 @@ import { db } from "./index";
 export interface InitialSyncState {
     lastMetadataPull: string | undefined;
     lastDataPull: string | undefined;
+    lastDataPush: string | undefined;
 }
 
 /**
@@ -22,13 +23,14 @@ export async function loadInitialSyncState(): Promise<InitialSyncState> {
         return {
             lastMetadataPull: metadataVersion?.lastSync,
             lastDataPull: syncState?.lastPullAt,
+            lastDataPush: syncState?.lastPushAt,
         };
     } catch (error) {
         console.error("Failed to load initial sync state:", error);
-        // Return undefined values on error to trigger full sync
         return {
             lastMetadataPull: undefined,
             lastDataPull: undefined,
+            lastDataPush: undefined,
         };
     }
 }

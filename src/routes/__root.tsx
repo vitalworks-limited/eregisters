@@ -1,19 +1,29 @@
 import {
-    createRootRouteWithContext,
-    Link,
-    Outlet,
-} from "@tanstack/react-router";
-import React, { useState } from "react";
-import relativeTime from "dayjs/plugin/relativeTime";
-import dayjs from "dayjs";
-import {
     CloudDownloadOutlined,
+    CloudUploadOutlined,
     HomeOutlined,
     MenuOutlined,
     ReloadOutlined,
 } from "@ant-design/icons";
-import { Badge, Button, Drawer, Flex, Grid, Layout, Space, Tooltip, Typography } from "antd";
+import {
+    createRootRouteWithContext,
+    Link,
+    Outlet,
+} from "@tanstack/react-router";
+import {
+    Badge,
+    Button,
+    Drawer,
+    Flex,
+    Grid,
+    Layout,
+    Tooltip,
+    Typography,
+} from "antd";
+import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
 import { groupBy } from "lodash";
+import React, { useState } from "react";
 
 import { eq, useLiveSuspenseQuery } from "@tanstack/react-db";
 import { Spinner } from "../components/spinner";
@@ -76,8 +86,6 @@ export const RootRoute = createRootRouteWithContext<{
     loader: async ({ context: { user } }) => {
         try {
             let data = await queryInfo(user);
-
-            // Safety check: if orgUnit missing, wait and retry once
             if (!data.orgUnit) {
                 await new Promise((resolve) => setTimeout(resolve, 500));
                 data = await queryInfo(user);
@@ -96,7 +104,6 @@ function LayoutWithDrafts() {
     const { orgUnit } = RootRoute.useLoaderData();
     const syncActor = SyncContext.useActorRef();
     const syncingMetadata = SyncContext.useSelector((snapshot) => {
-        // Only show button loading if syncing AND have synced before (manual refresh)
         const isManualRefresh =
             (snapshot.matches({ metadataSync: "syncing" }) ||
                 snapshot.matches({ metadataSync: "fullRefresh" })) &&
@@ -106,7 +113,12 @@ function LayoutWithDrafts() {
     const syncingData = SyncContext.useSelector((a) =>
         a.matches({ dataPull: "syncing" }),
     );
+
+    const pushingData = SyncContext.useSelector((a) =>
+        a.matches({ dataSync: "batchSync" }),
+    );
     const lastDataPull = SyncContext.useSelector((a) => a.context.lastDataPull);
+    const lastDataPush = SyncContext.useSelector((a) => a.context.lastDataPush);
     const lastMetadataPull = SyncContext.useSelector(
         (a) => a.context.lastMetadataPull,
     );
@@ -148,20 +160,9 @@ function LayoutWithDrafts() {
             gap={vertical ? 16 : 10}
             vertical={vertical}
         >
-            <Badge
-                count={
-                    pendingEnrollments.length +
-                    pendingEvents.length +
-                    pendingTrackedEntities.length
-                }
-                style={{ backgroundColor: "#faad14" }}
-                title="Pending entities to sync"
-            />
             <Link to="/" onClick={() => setDrawerOpen(false)}>
                 <Flex align="center" justify="center" gap={5}>
-                    <HomeOutlined
-                        style={{ fontSize: 20, color: "#1890ff" }}
-                    />
+                    <HomeOutlined style={{ fontSize: 20, color: "#1890ff" }} />
                     <Text strong>{orgUnit?.name ?? "Loading..."}</Text>
                 </Flex>
             </Link>
@@ -178,8 +179,11 @@ function LayoutWithDrafts() {
                 >
                     <Flex vertical align="flex-start" gap={0}>
                         <span>{syncingData ? "Pulling..." : "Pull Data"}</span>
-                        {!syncingData && lastDataPull && (
-                            <Text type="secondary" style={{ fontSize: 10, lineHeight: 1 }}>
+                        {lastDataPull && (
+                            <Text
+                                type="secondary"
+                                style={{ fontSize: 10, lineHeight: 1 }}
+                            >
                                 {dayjs(lastDataPull).fromNow()}
                             </Text>
                         )}
@@ -197,14 +201,56 @@ function LayoutWithDrafts() {
                     style={{ height: "auto", padding: "4px 12px" }}
                 >
                     <Flex vertical align="flex-start" gap={0}>
-                        <span>{syncingMetadata ? "Syncing..." : "Sync Metadata"}</span>
-                        {!syncingMetadata && lastMetadataPull && (
-                            <Text type="secondary" style={{ fontSize: 10, lineHeight: 1 }}>
+                        <span>
+                            {syncingMetadata ? "Syncing..." : "Sync Metadata"}
+                        </span>
+                        {lastMetadataPull && (
+                            <Text
+                                type="secondary"
+                                style={{ fontSize: 10, lineHeight: 1 }}
+                            >
                                 {dayjs(lastMetadataPull).fromNow()}
                             </Text>
                         )}
                     </Flex>
                 </Button>
+            </Tooltip>
+
+            <Tooltip title="Push Data">
+                <Badge
+                    count={
+                        pendingEnrollments.length +
+                        pendingEvents.length +
+                        pendingTrackedEntities.length
+                    }
+                    style={{ backgroundColor: "#faad14" }}
+                    title="Pending entities to sync"
+                    showZero
+                >
+                    <Button
+                        danger
+                        icon={<CloudUploadOutlined />}
+                        onClick={() => {
+                            syncActor.send({ type: "PUSH_DATA" });
+                        }}
+                        loading={pushingData}
+                        style={{ height: "auto", padding: "4px 12px" }}
+                    >
+                        <Flex vertical align="flex-start" gap={0}>
+                            <span>
+                                {pushingData ? "Pushing..." : "Push Data"}
+                            </span>
+                            {lastDataPush && (
+                                <Text
+                                    type="secondary"
+                                    style={{ fontSize: 10, lineHeight: 1 }}
+                                >
+                                    {dayjs(lastDataPush).fromNow()}
+                                </Text>
+                            )}
+                        </Flex>
+                    </Button>
+                </Badge>
             </Tooltip>
             <Link to="/reports" onClick={() => setDrawerOpen(false)}>
                 Reports

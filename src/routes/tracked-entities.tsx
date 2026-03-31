@@ -73,7 +73,6 @@ function TrackedEntities() {
                 ),
             ),
     );
-    const appointments = 0;
     const navigate = TrackedEntitiesRoute.useNavigate();
     const { search } = TrackedEntitiesRoute.useSearch();
 
@@ -156,8 +155,11 @@ function TrackedEntities() {
                                             return [];
                                         }
                                         const current =
-                                            trackedEntityAttributes.get(id)!;
+                                            trackedEntityAttributes.get(id);
 
+                                        if (current === undefined) {
+                                            return [];
+                                        }
                                         const optionSet =
                                             current.optionSet?.id ?? "";
 

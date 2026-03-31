@@ -2,13 +2,17 @@ import { useCurrentUserInfo, useDataEngine } from "@dhis2/app-runtime";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { App, ConfigProvider, Typography } from "antd";
-import React, { FC } from "react";
+import React, { FC, useEffect, useState } from "react";
 import {
     createEnrollmentCollection,
     createEventCollection,
     createTrackedEntityCollection,
 } from "./collections";
 import { Spinner } from "./components/spinner";
+import {
+    InitialSyncState,
+    loadInitialSyncState,
+} from "./db/sync-state-loader";
 import { SyncContext } from "./machines/sync";
 import { queryClient } from "./query-client";
 import { router } from "./router";
@@ -52,10 +56,27 @@ const MyApp: FC = () => {
     const enrollmentsCollection = createEnrollmentCollection();
     const eventsCollection = createEventCollection();
     const userInfo = useCurrentUserInfo();
+    const [initialSyncState, setInitialSyncState] =
+        useState<InitialSyncState | null>(null);
+
+    useEffect(() => {
+        loadInitialSyncState().then(setInitialSyncState);
+    }, []);
 
     if (userInfo === undefined) {
         return <Typography.Text>No user found</Typography.Text>;
     }
+
+    if (initialSyncState === null) {
+        return (
+            <Spinner
+                component={
+                    <Typography.Text>Loading sync state...</Typography.Text>
+                }
+            />
+        );
+    }
+
     return (
         <ConfigProvider
             theme={{
@@ -83,6 +104,12 @@ const MyApp: FC = () => {
                                     .map(({ id }) => id)
                                     .join(";"),
                                 user: userInfo.id,
+                                initialLastDataPull:
+                                    initialSyncState.lastDataPull,
+                                initialLastMetadataPull:
+                                    initialSyncState.lastMetadataPull,
+                                initialLastDataPush:
+                                    initialSyncState.lastDataPush,
                             },
                         }}
                         key={`${userInfo.id}${userInfo.organisationUnits

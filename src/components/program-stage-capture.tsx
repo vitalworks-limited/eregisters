@@ -229,7 +229,7 @@ export const ProgramStageCapture: React.FC<{
                                     borderRadius: 6,
                                 }}
                             >
-                                Add {programStage.name}
+                                {isMobile ? "Add" : `Add ${programStage.name}`}
                             </Button>
                         </Flex>
                     );
