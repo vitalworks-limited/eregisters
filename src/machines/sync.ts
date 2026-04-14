@@ -1,4 +1,4 @@
-import { assertEvent, assign, fromPromise, raise, setup } from "xstate";
+import { assertEvent, assign, fromPromise, setup } from "xstate";
 import {
     DataElement,
     Enrollment,
@@ -17,32 +17,32 @@ import {
 
 import type { useDataEngine } from "@dhis2/app-runtime";
 import { createActorContext } from "@xstate/react";
+import { Table } from "dexie";
+import {
+    createEnrollmentCollection,
+    createEventCollection,
+    createTrackedEntityCollection,
+} from "../collections";
 import { db, MetadataVersion } from "../db";
+import {
+    mergeBulkEnrollments,
+    mergeBulkEvents,
+    mergeBulkTrackedEntities,
+} from "../db/merge-utils";
 import {
     transformEnrollment,
     transformEvent,
     transformTrackedEntity,
 } from "../db/transformers";
 import {
+    evaluateProgramIndicatorsForEvent,
+    evaluateProgramIndicatorsForEvents,
+} from "../utils/indicator-utils";
+import {
     flattenEnrollment,
     flattenEvent,
     flattenTrackedEntity,
 } from "../utils/utils";
-import {
-    createEnrollmentCollection,
-    createEventCollection,
-    createTrackedEntityCollection,
-} from "../collections";
-import {
-    mergeBulkEvents,
-    mergeBulkTrackedEntities,
-    mergeBulkEnrollments,
-} from "../db/merge-utils";
-import {
-    evaluateProgramIndicatorsForEvent,
-    evaluateProgramIndicatorsForEvents,
-} from "../utils/indicator-utils";
-import { Table } from "dexie";
 
 type Resource =
     | "programs"
@@ -138,20 +138,7 @@ export const syncMachine = setup({
             console.log("Attempting direct sync:", event.entities);
         },
 
-        persistLastDataPull: ({ context }) => {
-            db.syncState.put({
-                id: "current",
-                status: "idle",
-                isOnline: true,
-                isSyncing: false,
-                lastPullAt: context.lastDataPull,
-                lastPushAt: context.lastDataPush,
-                pendingCount: 0,
-                updatedAt: new Date().toISOString(),
-            });
-        },
-
-        persistLastDataPush: ({ context }) => {
+        persistSyncState: ({ context }) => {
             db.syncState.put({
                 id: "current",
                 status: "idle",
@@ -308,8 +295,7 @@ export const syncMachine = setup({
 
                     // Evaluate indicators for pulled events inline
                     if (mergedEvents.length > 0) {
-                        const indicators =
-                            await db.programIndicators.toArray();
+                        const indicators = await db.programIndicators.toArray();
                         if (indicators.length > 0) {
                             const teMap = new Map(
                                 mergedTrackedEntities.map((te) => [
@@ -599,13 +585,14 @@ export const syncMachine = setup({
                 }
 
                 const currentTimestamp = new Date().toISOString();
-                const version = (await db.metadataVersions.get(
-                    "metadata-version",
-                )) || {
-                    id: "metadata-version",
-                    lastSync: currentTimestamp,
-                    versions: {},
-                };
+                let version = await db.metadataVersions.get("metadata-version");
+                if (version === undefined) {
+                    version = {
+                        id: "metadata-version",
+                        lastSync: currentTimestamp,
+                        versions: {},
+                    };
+                }
                 version.versions[resource] = currentTimestamp;
                 version.lastSync = currentTimestamp;
                 await db.metadataVersions.put(version);
@@ -976,11 +963,15 @@ export const syncMachine = setup({
                 }
 
                 // 2. Get all synced/pending events
-                const eventTable = eventsCollection.utils.getTable();
-                const events = (await eventTable.toArray()).filter(
-                    (e) =>
-                        e.syncStatus === "synced" || e.syncStatus === "pending",
-                );
+                const eventTable: Table<FlattenedEvent, string> =
+                    eventsCollection.utils.getTable();
+                const events = await eventTable
+                    .filter(
+                        (e) =>
+                            e.syncStatus === "synced" ||
+                            e.syncStatus === "pending",
+                    )
+                    .toArray();
 
                 if (events.length === 0) {
                     console.log("No events to evaluate");
@@ -1301,7 +1292,7 @@ export const syncMachine = setup({
                         assign({
                             lastDataPush: () => new Date().toISOString(),
                         }),
-                        "persistLastDataPush",
+                        "persistSyncState",
                     ],
                     always: "idle",
                 },
@@ -1381,7 +1372,7 @@ export const syncMachine = setup({
                         assign({
                             lastDataPull: () => new Date().toISOString(),
                         }),
-                        "persistLastDataPull",
+                        "persistSyncState",
                     ],
                     always: "waiting",
                 },

@@ -15,7 +15,7 @@ import {
     executeProgramRules,
 } from "../utils/utils";
 
-import { FormEvent } from "./common";
+import { applyRuleResultsToForm, FormEvent } from "./common";
 
 export const eventFormMachine = setup({
     types: {
@@ -74,32 +74,9 @@ export const eventFormMachine = setup({
                 };
             },
         }),
-        applyRuleResults: assign(({ context }) => {
-            const { ruleResult, form } = context;
-            if (ruleResult && Object.keys(ruleResult.assignments).length > 0) {
-                form.setFieldsValue(ruleResult.assignments);
-            }
-            if (ruleResult && ruleResult.hiddenFields.length > 0) {
-                const currentData = form.getFieldsValue();
-                const fieldsToClear: Record<string, any> = {};
-                ruleResult.hiddenFields.forEach((hiddenFieldId) => {
-                    const currentValue = currentData[hiddenFieldId];
-                    if (
-                        currentValue !== undefined &&
-                        currentValue !== null &&
-                        currentValue !== ""
-                    ) {
-                        fieldsToClear[hiddenFieldId] = undefined;
-                    }
-                });
-                if (Object.keys(fieldsToClear).length > 0) {
-                    form.setFieldsValue(fieldsToClear);
-                }
-            }
-            return {
-                previousAssignments: { ...ruleResult.assignments },
-            };
-        }),
+        applyRuleResults: assign(({ context }) =>
+            applyRuleResultsToForm(context.ruleResult, context.form),
+        ),
         executeRulesSync: assign(({ context }) => {
             const {
                 programRules,

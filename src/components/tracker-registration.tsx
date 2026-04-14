@@ -23,6 +23,16 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
     );
     const state = TrackedEntityContext.useSelector((a) => a.value);
     const trackedEntityActor = TrackedEntityContext.useActorRef();
+    const initialFormData = TrackedEntityContext.useSelector((a) => ({
+        ...a.context.trackedEntity.attributes,
+        ...a.context.formData,
+    }));
+
+    // Re-apply form values after mount to handle the case where Ant Design's
+    // preserve={false} cleanup clears values set during machine initialization
+    useEffect(() => {
+        form.setFieldsValue(initialFormData);
+    }, []);
 
     const ageAtRegistration = Form.useWatch("xcYGVzmcWvi", form);
     const dob = Form.useWatch("Y3DE5CZWySr", form);

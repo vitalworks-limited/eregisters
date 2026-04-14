@@ -1,6 +1,6 @@
 import { createRoute, redirect } from "@tanstack/react-router";
-import React from "react";
 import { RootRoute } from "./__root";
+
 export const IndexRoute = createRoute({
     getParentRoute: () => RootRoute,
     path: "/",
@@ -12,8 +12,5 @@ export const IndexRoute = createRoute({
                 search: undefined,
             }),
         });
-    },
-    component: () => {
-        return <div>Welcome to MOH Registers</div>;
     },
 });

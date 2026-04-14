@@ -24,6 +24,13 @@ import { createGetValueProps, createNormalize, isDate } from "../utils/utils";
 import DobPicker from "./dob-picker";
 import VillageSelect from "./village-select";
 
+// Fields auto-populated by VillageSelect cascade — must not be manually edited
+const VILLAGE_CASCADED_FIELDS = new Set([
+    "XjgpfkoxffK", "lpAaZa1cKCB", "sOBCVNIm1kX", // District
+    "PKuyTiVCR89", "lqbqW3iYmKl", "qbxJxuZCyKu", // Subcounty
+    "W87HAtUHJjB", "BiergDUeQra", "SjvgaRn8m7Y",  // Parish
+]);
+
 export const DataElementField = React.memo<{
     dataElement: DataElement | TrackedEntityAttribute;
     hidden: boolean;
@@ -65,6 +72,7 @@ export const DataElementField = React.memo<{
         disabled = false,
     }) => {
         if (hidden) return null;
+        const isDisabled = disabled || VILLAGE_CASCADED_FIELDS.has(dataElement.id);
         const filterOption = useCallback((input: string, option: any) => {
             if (!option) return false;
             return (
@@ -75,7 +83,7 @@ export const DataElementField = React.memo<{
 
         let element: React.ReactNode = (
             <Input
-                disabled={disabled}
+                disabled={isDisabled}
                 onBlur={(e) => {
                     onFieldChange(dataElement.id, e.target.value);
                 }}
@@ -87,6 +95,8 @@ export const DataElementField = React.memo<{
             element = (
                 <VillageSelect
                     form={form}
+                    fieldId={dataElement.id}
+                    onFieldChange={onFieldChange}
                     watchFields={[
                         {
                             fieldId: [
@@ -123,12 +133,11 @@ export const DataElementField = React.memo<{
             element = (
                 <VillageSelect
                     form={form}
+                    fieldId={dataElement.id}
+                    onFieldChange={onFieldChange}
                     watchFields={[
                         { fieldId: "lpAaZa1cKCB", label: "District" },
-                        {
-                            fieldId: "lqbqW3iYmKl",
-                            label: "Subcounty",
-                        },
+                        { fieldId: "lqbqW3iYmKl", label: "Subcounty" },
                         { fieldId: "BiergDUeQra", label: "Parish" },
                     ]}
                     syncParentFields
@@ -140,12 +149,11 @@ export const DataElementField = React.memo<{
             element = (
                 <VillageSelect
                     form={form}
+                    fieldId={dataElement.id}
+                    onFieldChange={onFieldChange}
                     watchFields={[
                         { fieldId: "sOBCVNIm1kX", label: "District" },
-                        {
-                            fieldId: "qbxJxuZCyKu",
-                            label: "Subcounty",
-                        },
+                        { fieldId: "qbxJxuZCyKu", label: "Subcounty" },
                         { fieldId: "SjvgaRn8m7Y", label: "Parish" },
                     ]}
                     syncParentFields
@@ -160,7 +168,7 @@ export const DataElementField = React.memo<{
         ) {
             element = (
                 <Select
-                    disabled={disabled}
+                    disabled={isDisabled}
                     style={{ width: "100%" }}
                     options={finalOptions}
                     fieldNames={{
@@ -206,7 +214,7 @@ export const DataElementField = React.memo<{
 
             element = (
                 <Radio.Group
-                    disabled={disabled}
+                    disabled={isDisabled}
                     vertical={desktopRenderType === "VERTICAL_RADIOBUTTONS"}
                     onChange={handleRadioChange}
                 >
@@ -224,7 +232,7 @@ export const DataElementField = React.memo<{
         } else if (dataElement.optionSetValue && dataElement.optionSet) {
             element = (
                 <Select
-                    disabled={disabled}
+                    disabled={isDisabled}
                     style={{ width: "100%" }}
                     options={finalOptions}
                     fieldNames={{
@@ -241,7 +249,7 @@ export const DataElementField = React.memo<{
         } else if (dataElement.valueType === "BOOLEAN") {
             element = (
                 <Checkbox
-                    disabled={disabled}
+                    disabled={isDisabled}
                     onChange={(e) => {
                         const value = e.target.checked;
                         onFieldChange(dataElement.id, value);
@@ -253,7 +261,7 @@ export const DataElementField = React.memo<{
         } else if (dataElement.valueType === "DATETIME") {
             element = (
                 <DatePicker
-                    disabled={disabled}
+                    disabled={isDisabled}
                     style={{
                         width: "100%",
                     }}
@@ -270,7 +278,7 @@ export const DataElementField = React.memo<{
         } else if (isDate(dataElement.valueType)) {
             element = (
                 <DatePicker
-                    disabled={disabled}
+                    disabled={isDisabled}
                     style={{
                         width: "100%",
                     }}
@@ -286,7 +294,7 @@ export const DataElementField = React.memo<{
         } else if (dataElement.valueType === "LONG_TEXT") {
             element = (
                 <Input.TextArea
-                    disabled={disabled}
+                    disabled={isDisabled}
                     rows={4}
                     onBlur={(e) => {
                         onFieldChange(dataElement.id, e.target.value);
@@ -296,7 +304,7 @@ export const DataElementField = React.memo<{
         } else if (dataElement.valueType === "NUMBER") {
             element = (
                 <InputNumber
-                    disabled={disabled}
+                    disabled={isDisabled}
                     style={{
                         width: "100%",
                     }}
@@ -308,7 +316,7 @@ export const DataElementField = React.memo<{
         } else if (dataElement.valueType === "INTEGER") {
             element = (
                 <InputNumber
-                    disabled={disabled}
+                    disabled={isDisabled}
                     precision={0}
                     style={{
                         width: "100%",
@@ -324,7 +332,7 @@ export const DataElementField = React.memo<{
         } else if (dataElement.valueType === "INTEGER_POSITIVE") {
             element = (
                 <InputNumber
-                    disabled={disabled}
+                    disabled={isDisabled}
                     precision={0}
                     min={1}
                     style={{
@@ -341,7 +349,7 @@ export const DataElementField = React.memo<{
         } else if (dataElement.valueType === "UNIT_INTERVAL") {
             element = (
                 <InputNumber
-                    disabled={disabled}
+                    disabled={isDisabled}
                     style={{
                         width: "100%",
                     }}
@@ -356,7 +364,7 @@ export const DataElementField = React.memo<{
         } else if (dataElement.valueType === "INTEGER_ZERO_OR_POSITIVE") {
             element = (
                 <InputNumber
-                    disabled={disabled}
+                    disabled={isDisabled}
                     min={0}
                     precision={0}
                     style={{
@@ -370,7 +378,7 @@ export const DataElementField = React.memo<{
         } else if (dataElement.valueType === "PERCENTAGE") {
             element = (
                 <InputNumber
-                    disabled={disabled}
+                    disabled={isDisabled}
                     min={0}
                     precision={1}
                     max={100}

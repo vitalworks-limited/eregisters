@@ -17,6 +17,8 @@ interface VillageSelectProps {
     sortField?: keyof Village;
     allowDirectSearch?: boolean;
     syncParentFields?: boolean;
+    onFieldChange?: (fieldId: string, value: any) => void;
+    fieldId?: string;
 }
 
 export default function VillageSelect({
@@ -26,14 +28,33 @@ export default function VillageSelect({
     watchFields,
     filterFields,
     syncParentFields = false,
+    onFieldChange,
+    fieldId,
 }: VillageSelectProps) {
     const currentVillages = villages as Village[];
-    const getPlaceholder = () => {
-        return "Select Village";
-    };
+
     const handleVillageChange = async (selectedValue: string) => {
         onChange?.(selectedValue);
-        if (syncParentFields && selectedValue) {
+
+        if (!selectedValue) {
+            onFieldChange?.(fieldId!, undefined);
+            for (const { fieldId: wfId } of watchFields) {
+                const ids = Array.isArray(wfId) ? wfId : [wfId];
+                for (const id of ids) {
+                    form.setFieldValue(id, undefined);
+                    onFieldChange?.(id, undefined);
+                }
+            }
+            if (filterFields) {
+                for (const f of filterFields) {
+                    form.setFieldValue(f, undefined);
+                    onFieldChange?.(f, undefined);
+                }
+            }
+            return;
+        }
+
+        if (syncParentFields) {
             try {
                 const selectedVillage = currentVillages?.find(
                     ({ village_id, village_name }) =>
@@ -68,16 +89,31 @@ export default function VillageSelect({
                             form.setFieldValue(f, selectedValue);
                         }
                     }
+										
+                    if (fieldId) {
+                        onFieldChange?.(fieldId, selectedValue);
+                    }
+                    for (const d of districtUpdates) {
+                        onFieldChange?.(d, selectedVillage.District);
+                    }
+                    for (const s of subUpdates) {
+                        onFieldChange?.(s, selectedVillage.subcounty_name);
+                    }
+                    for (const p of parishUpdates) {
+                        onFieldChange?.(p, selectedVillage.parish_name);
+                    }
                 }
             } catch (error) {
                 console.error("Failed to sync parent fields:", error);
             }
+        } else if (fieldId) {
+            onFieldChange?.(fieldId, selectedValue);
         }
     };
 
     return (
         <Select
-            placeholder={getPlaceholder()}
+            placeholder="Select Village"
             value={value}
             onChange={handleVillageChange}
             options={currentVillages?.map((v) => {

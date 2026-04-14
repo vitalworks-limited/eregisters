@@ -55,15 +55,17 @@ export interface MetadataVersion {
     id: string;
     lastSync: string;
     versions: {
-        programs?: string;
-        dataElements?: string;
         attributes?: string;
-        programRules?: string;
-        programRuleVariables?: string;
+        programStages?: string;
+        dataElements?: string;
+        programs?: string;
+        trackedEntityTypes?: string;
         optionSets?: string;
+        programIndicators?: string;
+        me?: string;
         optionGroups?: string;
-        villages?: string;
-        relationshipTypes?: string;
+        programRuleVariables?: string;
+        programRules?: string;
     };
 }
 export interface MetadataSyncProgress {

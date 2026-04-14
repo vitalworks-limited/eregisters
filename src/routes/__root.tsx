@@ -51,17 +51,8 @@ const queryInfo = async (user: string) => {
         ),
         programRules,
         programRuleVariables,
-        optionGroups: new Map(
-            Object.entries(groupBy(optionGroups, "optionGroup")).map(
-                ([id, og]) => [id, og],
-            ),
-        ),
-        optionSets: new Map(
-            Object.entries(groupBy(optionSets, "optionSet")).map(([id, os]) => [
-                id,
-                os,
-            ]),
-        ),
+        optionGroups: new Map(Object.entries(groupBy(optionGroups, "optionGroup"))),
+        optionSets: new Map(Object.entries(groupBy(optionSets, "optionSet"))),
         program,
         programOrgUnits: new Set(
             program?.organisationUnits.map(({ id }) => id),
@@ -99,6 +90,53 @@ export const RootRoute = createRootRouteWithContext<{
         }
     },
 });
+
+function SyncButton({
+    tooltip,
+    icon,
+    isLoading,
+    idleLabel,
+    loadingLabel,
+    lastTime,
+    onClick,
+    type,
+    danger,
+}: {
+    tooltip: string;
+    icon: React.ReactNode;
+    isLoading: boolean;
+    idleLabel: string;
+    loadingLabel: string;
+    lastTime?: string;
+    onClick: () => void;
+    type?: "primary" | "default";
+    danger?: boolean;
+}) {
+    return (
+        <Tooltip title={tooltip}>
+            <Button
+                icon={icon}
+                loading={isLoading}
+                onClick={onClick}
+                type={type}
+                danger={danger}
+                style={{ height: "auto", padding: "4px 12px" }}
+            >
+                <Flex vertical align="flex-start" gap={0}>
+                    <span>{isLoading ? loadingLabel : idleLabel}</span>
+                    {lastTime && (
+                        <Text
+                            type="secondary"
+                            style={{ fontSize: 10, lineHeight: 1 }}
+                        >
+                            {lastTime}
+                        </Text>
+                    )}
+                </Flex>
+            </Button>
+        </Tooltip>
+    );
+}
 
 function LayoutWithDrafts() {
     const { orgUnit } = RootRoute.useLoaderData();
@@ -166,56 +204,25 @@ function LayoutWithDrafts() {
                     <Text strong>{orgUnit?.name ?? "Loading..."}</Text>
                 </Flex>
             </Link>
-            <Tooltip title="Pull latest data from server">
-                <Button
-                    icon={<CloudDownloadOutlined />}
-                    loading={syncingData}
-                    onClick={() => {
-                        syncActor.send({
-                            type: "START_DATA_SYNC",
-                        });
-                    }}
-                    style={{ height: "auto", padding: "4px 12px" }}
-                >
-                    <Flex vertical align="flex-start" gap={0}>
-                        <span>{syncingData ? "Pulling..." : "Pull Data"}</span>
-                        {lastDataPull && (
-                            <Text
-                                type="secondary"
-                                style={{ fontSize: 10, lineHeight: 1 }}
-                            >
-                                {dayjs(lastDataPull).fromNow()}
-                            </Text>
-                        )}
-                    </Flex>
-                </Button>
-            </Tooltip>
-            <Tooltip title="Sync metadata">
-                <Button
-                    type="primary"
-                    icon={<ReloadOutlined />}
-                    onClick={() => {
-                        syncActor.send({ type: "FULL_METADATA_SYNC" });
-                    }}
-                    loading={syncingMetadata}
-                    style={{ height: "auto", padding: "4px 12px" }}
-                >
-                    <Flex vertical align="flex-start" gap={0}>
-                        <span>
-                            {syncingMetadata ? "Syncing..." : "Sync Metadata"}
-                        </span>
-                        {lastMetadataPull && (
-                            <Text
-                                type="secondary"
-                                style={{ fontSize: 10, lineHeight: 1 }}
-                            >
-                                {dayjs(lastMetadataPull).fromNow()}
-                            </Text>
-                        )}
-                    </Flex>
-                </Button>
-            </Tooltip>
-
+            <SyncButton
+                tooltip="Pull latest data from server"
+                icon={<CloudDownloadOutlined />}
+                isLoading={syncingData}
+                idleLabel="Pull Data"
+                loadingLabel="Pulling..."
+                lastTime={lastDataPull ? dayjs(lastDataPull).fromNow() : undefined}
+                onClick={() => syncActor.send({ type: "START_DATA_SYNC" })}
+            />
+            <SyncButton
+                tooltip="Sync metadata"
+                icon={<ReloadOutlined />}
+                isLoading={syncingMetadata}
+                idleLabel="Sync Metadata"
+                loadingLabel="Syncing..."
+                lastTime={lastMetadataPull ? dayjs(lastMetadataPull).fromNow() : undefined}
+                onClick={() => syncActor.send({ type: "FULL_METADATA_SYNC" })}
+                type="primary"
+            />
             <Tooltip title="Push Data">
                 <Badge
                     count={
@@ -227,29 +234,16 @@ function LayoutWithDrafts() {
                     title="Pending entities to sync"
                     showZero
                 >
-                    <Button
-                        danger
+                    <SyncButton
+                        tooltip="Push Data"
                         icon={<CloudUploadOutlined />}
-                        onClick={() => {
-                            syncActor.send({ type: "PUSH_DATA" });
-                        }}
-                        loading={pushingData}
-                        style={{ height: "auto", padding: "4px 12px" }}
-                    >
-                        <Flex vertical align="flex-start" gap={0}>
-                            <span>
-                                {pushingData ? "Pushing..." : "Push Data"}
-                            </span>
-                            {lastDataPush && (
-                                <Text
-                                    type="secondary"
-                                    style={{ fontSize: 10, lineHeight: 1 }}
-                                >
-                                    {dayjs(lastDataPush).fromNow()}
-                                </Text>
-                            )}
-                        </Flex>
-                    </Button>
+                        isLoading={pushingData}
+                        idleLabel="Push Data"
+                        loadingLabel="Pushing..."
+                        lastTime={lastDataPush ? dayjs(lastDataPush).fromNow() : undefined}
+                        onClick={() => syncActor.send({ type: "PUSH_DATA" })}
+                        danger
+                    />
                 </Badge>
             </Tooltip>
             <Link to="/reports" onClick={() => setDrawerOpen(false)}>

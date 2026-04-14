@@ -63,7 +63,7 @@ function TrackedEntitiesSearch() {
                     ({ trackedEntityAttribute }) => trackedEntityAttribute.id,
                 ),
             ),
-        [],
+        [program],
     );
     const {
         data: trackedEntity,
@@ -99,10 +99,8 @@ function TrackedEntitiesSearch() {
         },
         [search],
     );
-    const handleCreate = async () => {
-        const newPatient = createEmptyTrackedEntity({
-            orgUnit: id,
-        });
+    const createAndOpenNewPatient = async () => {
+        const newPatient = createEmptyTrackedEntity({ orgUnit: id });
         const newEnrollment = createEmptyEnrollment({
             orgUnit: id,
             trackedEntity: newPatient.trackedEntity,
@@ -133,18 +131,6 @@ function TrackedEntitiesSearch() {
                 ...trackedEntityAttributes.get(id)!,
             }),
         ),
-        // {
-        //     displayInList: true,
-        //     displayFormName: "Actions",
-        //     name: "Actions",
-        //     id: "actions",
-        //     valueType: "TEXT",
-        //     optionSetValue: false,
-        //     generated: false,
-        //     unique: false,
-        //     pattern: "",
-        //     confidential: false,
-        // },
         {
             displayInList: true,
             displayFormName: "Registering Facility",
@@ -236,7 +222,7 @@ function TrackedEntitiesSearch() {
                     style={{ width: "100%" }}
                 >
                     <Text>{`${currentTrackedEntities.length} results matching`}</Text>
-                    <Button type="primary" size="large" onClick={handleCreate}>
+                    <Button type="primary" size="large" onClick={createAndOpenNewPatient}>
                         Register New Client
                     </Button>
                 </Flex>
@@ -319,21 +305,7 @@ function TrackedEntitiesSearch() {
                         });
                         if (addAnother) {
                             closeModal();
-
-                            const newPatient = createEmptyTrackedEntity({
-                                orgUnit: id,
-                            });
-                            const newEnrollment = createEmptyEnrollment({
-                                orgUnit: id,
-                                trackedEntity: newPatient.trackedEntity,
-                            });
-                            await trackedEntitiesCollection.utils.insertLocally(
-                                newPatient,
-                            );
-                            await enrollmentsCollection.utils.insertLocally(
-                                newEnrollment,
-                            );
-                            openModal(newPatient, newEnrollment);
+                            await createAndOpenNewPatient();
                         } else {
                             navigate({
                                 to: `/tracked-entity/$trackedEntity`,

@@ -53,6 +53,20 @@ export const TrackedEntityRoute = createRoute({
 
 const { Text, Title } = Typography;
 
+function renderTags(text: string | string[] | undefined, color: string) {
+    if (!text) return null;
+    const tags = Array.isArray(text) ? text : text.split(",");
+    return (
+        <Flex gap="small" align="center" wrap>
+            {tags.map((tag) => (
+                <Tag key={tag} color={color}>
+                    {tag.toUpperCase()}
+                </Tag>
+            ))}
+        </Flex>
+    );
+}
+
 function TrackedEntityComponent() {
     const {
         enrollmentsCollection,
@@ -169,69 +183,13 @@ function TrackedEntityComponent() {
                 title: "Services",
                 dataIndex: ["dataValues", "mrKZWf2WMIC"],
                 key: "services",
-                render: (text) => {
-                    if (Array.isArray(text)) {
-                        return (
-                            <Flex gap="small" align="center" wrap>
-                                {text.map((tag) => {
-                                    return (
-                                        <Tag key={tag} color="blue">
-                                            {tag.toUpperCase()}
-                                        </Tag>
-                                    );
-                                })}
-                            </Flex>
-                        );
-                    }
-
-                    if (!text || typeof text !== "string") return null;
-
-                    return (
-                        <Flex gap="small" align="center" wrap>
-                            {text.split(",").map((tag) => {
-                                return (
-                                    <Tag key={tag} color="blue">
-                                        {tag.toUpperCase()}
-                                    </Tag>
-                                );
-                            })}
-                        </Flex>
-                    );
-                },
+                render: (text) => renderTags(text, "blue"),
             },
             {
                 title: "Immunization",
                 dataIndex: ["dataValues", "ZuYU54N4pjS"],
                 key: "immunization",
-                render: (text) => {
-                    if (Array.isArray(text)) {
-                        return (
-                            <Flex gap="small" align="center" wrap>
-                                {text.map((tag) => {
-                                    return (
-                                        <Tag key={tag} color="green">
-                                            {tag.toUpperCase()}
-                                        </Tag>
-                                    );
-                                })}
-                            </Flex>
-                        );
-                    }
-
-                    if (!text || typeof text !== "string") return null;
-
-                    return (
-                        <Flex gap="small" align="center" wrap>
-                            {text.split(",").map((tag) => {
-                                return (
-                                    <Tag key={tag} color="green">
-                                        {tag.toUpperCase()}
-                                    </Tag>
-                                );
-                            })}
-                        </Flex>
-                    );
-                },
+                render: (text) => renderTags(text, "green"),
             },
             {
                 title: "Sync Status",
@@ -288,7 +246,7 @@ function TrackedEntityComponent() {
         ...enrollment.attributes,
         ...trackedEntity.attributes,
     }).map(([key, value]) => ({
-        key: key,
+        key,
         label: keys.get(key) || key,
         children: <Text>{String(value)}</Text>,
     }));
@@ -316,7 +274,7 @@ function TrackedEntityComponent() {
                 </Space>
             }
             extra={
-                <Button type="primary" icon={<PlusOutlined />} onClick={() => handleCreate()}>
+                <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
                     Add new visit
                 </Button>
             }
@@ -385,9 +343,7 @@ function TrackedEntityComponent() {
                 <Button
                     icon={<ArrowLeftOutlined />}
                     type="text"
-                    onClick={() => {
-                        navigate({ to: "/tracked-entities" });
-                    }}
+                    onClick={() => navigate({ to: "/tracked-entities" })}
                 >
                     Back
                 </Button>
@@ -532,17 +488,30 @@ function TrackedEntityComponent() {
                 enrollment={enrollment}
                 onSave={async ({ values }) => {
                     if (trackedEntityData && values) {
+                        const { enrolledAt, ...attributeValues } = values;
+
                         const tx1 = trackedEntitiesCollection.update(
                             trackedEntityData.trackedEntity,
                             (draft) => {
                                 draft.attributes = {
                                     ...trackedEntityData.attributes,
-                                    ...values,
+                                    ...attributeValues,
                                 };
                                 draft.syncStatus = "pending";
                             },
                         );
                         await tx1.isPersisted.promise;
+
+                        if (enrolledAt) {
+                            const tx2 = enrollmentsCollection.update(
+                                enrollment.enrollment,
+                                (draft) => {
+                                    draft.enrolledAt = enrolledAt;
+                                    draft.syncStatus = "pending";
+                                },
+                            );
+                            await tx2.isPersisted.promise;
+                        }
 
                         syncActor.send({
                             type: "SYNC_ENTITIES",
@@ -551,10 +520,19 @@ function TrackedEntityComponent() {
                                     ...trackedEntityData,
                                     attributes: {
                                         ...trackedEntityData.attributes,
-                                        ...values,
+                                        ...attributeValues,
                                     },
                                     syncStatus: "pending",
                                 },
+                                ...(enrolledAt
+                                    ? [
+                                          {
+                                              ...enrollment,
+                                              enrolledAt,
+                                              syncStatus: "pending" as const,
+                                          },
+                                      ]
+                                    : []),
                             ],
                         });
                     }
@@ -569,7 +547,7 @@ function TrackedEntityComponent() {
                                 programRules,
                                 programRuleVariables,
                                 program: "ueBhWkWll5v",
-                                trackedEntity,
+                                trackedEntity: trackedEntityData!,
                                 validDataElements: mainStageDataElements,
                                 form,
                                 trackedEntitiesCollection,
@@ -578,13 +556,7 @@ function TrackedEntityComponent() {
                     >
                         <Form form={form} layout="vertical" preserve={false}>
                             <TrackerRegistration
-                                trackedEntity={{
-                                    ...trackedEntity,
-                                    attributes: {
-                                        ...trackedEntity.attributes,
-                                        enrolledAt: enrollment.enrolledAt,
-                                    },
-                                }}
+                                trackedEntity={trackedEntityData!}
                                 form={form}
                             />
                         </Form>

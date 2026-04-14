@@ -1,4 +1,15 @@
-import { Card, Col, Collapse, Flex, Form, FormInstance, Grid, Row, Select, Tabs } from "antd";
+import {
+    Card,
+    Col,
+    Collapse,
+    Flex,
+    Form,
+    FormInstance,
+    Grid,
+    Row,
+    Select,
+    Tabs,
+} from "antd";
 import dayjs from "dayjs";
 import { orderBy } from "lodash";
 import React, { useEffect, useMemo, useState } from "react";
@@ -185,6 +196,16 @@ export default function MainEventCapture({
     const ruleResult = EventContext.useSelector(
         (state) => state.context.ruleResult,
     );
+
+    const createChild = async () => {
+        const { client, enrollment } = createPatientAndLink(
+            trackedEntity,
+            form.getFieldsValue(),
+        );
+        await trackedEntitiesCollection.utils.insertLocally(client);
+        await enrollmentsCollection.utils.insertLocally(enrollment);
+        openChildModal(client, enrollment);
+    };
     const onFieldChange = async (dataElement: string, value: any) => {
         eventActor.send({
             type: "FIELD_CHANGED",
@@ -196,13 +217,7 @@ export default function MainEventCapture({
 
         if (dataElement) {
             if (dataElement === "REWqohCg4Km" && value === "Yes") {
-                const { client, enrollment } = createPatientAndLink(
-                    trackedEntity,
-                    form.getFieldsValue(),
-                );
-                await trackedEntitiesCollection.utils.insertLocally(client);
-                await enrollmentsCollection.utils.insertLocally(enrollment);
-                openChildModal(client, enrollment);
+                await createChild();
             }
         }
     };
@@ -213,8 +228,9 @@ export default function MainEventCapture({
             bmiForAge === undefined &&
             services === undefined &&
             ageAtVisit === undefined
-        )
+        ) {
             return;
+        }
         eventActor.send({
             type: "FIELD_CHANGED",
             formData: {
@@ -452,9 +468,7 @@ export default function MainEventCapture({
                         accordion
                         activeKey={activeKey}
                         onChange={(key) =>
-                            setActiveKey(
-                                Array.isArray(key) ? key[0] : key,
-                            )
+                            setActiveKey(Array.isArray(key) ? key[0] : key)
                         }
                         items={tabItems}
                     />
@@ -563,18 +577,7 @@ export default function MainEventCapture({
 
                         if (addAnother) {
                             closeChildModal();
-
-                            const { client, enrollment } = createPatientAndLink(
-                                trackedEntity,
-                                values,
-                            );
-                            await trackedEntitiesCollection.utils.insertLocally(
-                                client,
-                            );
-                            await enrollmentsCollection.utils.insertLocally(
-                                enrollment,
-                            );
-                            openChildModal(client, enrollment);
+                            await createChild();
                         }
                     }
                 }}
