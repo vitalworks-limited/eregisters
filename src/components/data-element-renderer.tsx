@@ -17,7 +17,7 @@ interface DataElementRendererProps {
     mode?: "dataElement" | "attribute";
     xl?: number;
 }
-export const DataElementRenderer = ({
+export const DataElementRenderer = React.memo(({
     dataElementId,
     currentDataElements,
     ruleResult,
@@ -121,4 +121,4 @@ export const DataElementRenderer = ({
             }}
         />
     );
-};
+});
