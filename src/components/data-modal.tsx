@@ -1,7 +1,7 @@
 import { UserAddOutlined } from "@ant-design/icons";
 import type { FormInstance } from "antd";
-import { Button, Flex, Form, Grid, Modal, Typography } from "antd";
-import React from "react";
+import { Button, Flex, Form, Grid, Modal, Spin, Typography } from "antd";
+import React, { useEffect, useState } from "react";
 import { SyncStatusComp } from "./sync-status-comp";
 import {
     FlattenedEnrollment,
@@ -41,6 +41,22 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
     const isMobile = !screens.md;
     const [form] = Form.useForm<T>();
     const [loading, setLoading] = React.useState(false);
+
+    const [contentReady, setContentReady] = useState(false);
+
+    useEffect(() => {
+        if (open) {
+            // Defensive: reset before scheduling RAF. With destroyOnHidden=true this
+            // is a no-op (component remounts fresh), but guards if that ever changes.
+            setContentReady(false);
+            const raf = requestAnimationFrame(() => setContentReady(true));
+            return () => cancelAnimationFrame(raf); // cancel if open flips back before RAF fires
+        } else {
+            // Defensive reset: keeps correctness if destroyOnHidden is ever removed.
+            // No cleanup needed — no pending RAF to cancel in this branch.
+            setContentReady(false);
+        }
+    }, [open]);
 
     const handleOk = async (addAnother: boolean = false) => {
         try {
@@ -181,7 +197,14 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
                 },
             }}
         >
-            {children(form)}
+            {contentReady
+                ? children(form)
+                : (
+                    <Flex justify="center" align="center" style={{ padding: 40 }}>
+                        <Spin size="large" />
+                    </Flex>
+                )
+            }
         </Modal>
     );
 }
