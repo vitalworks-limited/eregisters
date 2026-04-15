@@ -60,10 +60,10 @@ Replace the IIFE with a `useMemo`:
 ```ts
 const tabItems = useMemo(() => {
     // existing IIFE body, unchanged
-}, [ruleResult, services, isMobile, onFieldChange, program, trackedEntity, mainEvent, enrollment]);
+}, [ruleResult, services, isMobile, onFieldChange, program, trackedEntity, mainEvent, enrollment, form, activeKey]);
 ```
 
-The full `ruleResult` object is a dep because it is passed as a prop to `DataElementRenderer` children inside the memo. This means tab rebuilds still occur when `ruleResult` changes (i.e. when program rules fire after a field edit). The benefit is narrower but real: `Form.useWatch` re-renders of `MainEventCapture` that occur before the XState actor has transitioned (and before `ruleResult` has changed) will not rebuild `tabItems`. These happen because React processes the `Form.useWatch` state update synchronously, before the `useEffect` that sends `FIELD_CHANGED` to the actor. This eliminates one of the two rebuild passes per field edit.
+The full `ruleResult` object is a dep because it is passed as a prop to `DataElementRenderer` children inside the memo. `activeKey` is a dep because it is passed as a controlled prop to both `Tabs` and `Collapse` — omitting it would cause stale active-tab state until another dep triggered a rebuild. `form` is a dep because it is passed to `DataElementRenderer`; in practice `FormInstance` identity is stable, but it is included for correctness. The benefit of memoizing is narrower but real: `Form.useWatch` re-renders of `MainEventCapture` that occur before the XState actor has transitioned (and before `ruleResult` has changed) will not rebuild `tabItems`. These happen because React processes the `Form.useWatch` state update synchronously, before the `useEffect` that sends `FIELD_CHANGED` to the actor. This eliminates one of the two rebuild passes per field edit.
 
 ### Change 4 — Wrap `DataElementRenderer` with `React.memo`
 
