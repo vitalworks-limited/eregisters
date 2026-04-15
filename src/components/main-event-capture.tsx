@@ -12,7 +12,7 @@ import {
 } from "antd";
 import dayjs from "dayjs";
 import { orderBy } from "lodash";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { EventContext, SyncContext, TrackedEntityContext } from "../machines";
 import { RootRoute } from "../routes/__root";
 import {
@@ -197,7 +197,7 @@ export default function MainEventCapture({
         (state) => state.context.ruleResult,
     );
 
-    const createChild = async () => {
+    const createChild = useCallback(async () => {
         const { client, enrollment } = createPatientAndLink(
             trackedEntity,
             form.getFieldsValue(),
@@ -205,8 +205,8 @@ export default function MainEventCapture({
         await trackedEntitiesCollection.utils.insertLocally(client);
         await enrollmentsCollection.utils.insertLocally(enrollment);
         openChildModal(client, enrollment);
-    };
-    const onFieldChange = async (dataElement: string, value: any) => {
+    }, [trackedEntity, form, trackedEntitiesCollection, enrollmentsCollection, openChildModal]);
+    const onFieldChange = useCallback(async (dataElement: string, value: any) => {
         eventActor.send({
             type: "FIELD_CHANGED",
             formData: {
@@ -220,7 +220,7 @@ export default function MainEventCapture({
                 await createChild();
             }
         }
-    };
+    }, [eventActor, form, createChild]);
     useEffect(() => {
         if (
             weightForAge === undefined &&
@@ -265,6 +265,129 @@ export default function MainEventCapture({
             setServiceTypes(optionSets.get("QwsvSPpnRul") ?? []);
         }
     }, [ruleResult.hiddenOptions["mrKZWf2WMIC"], optionSets]);
+
+    const tabItems = useMemo(
+        () =>
+            orderBy(
+                program.programStages.map((a) => ({
+                    ...a,
+                    sortOrder: stages.get(a.id),
+                })),
+                "sortOrder",
+                "asc",
+            ).flatMap((stage) => {
+                const currentDataElements = buildCurrentDataElements(stage);
+                if (
+                    stage.id === "opwSN351xGC" &&
+                    services &&
+                    String(services)
+                        .split(",")
+                        .some((a) =>
+                            [
+                                "TB",
+                                "DR-TB",
+                                "Leprosy",
+                                "ART",
+                                "HTS",
+                            ].includes(a),
+                        )
+                ) {
+                    return {
+                        key: stage.id,
+                        label: stage.name,
+                        children: (
+                            <ProgramStageCapture
+                                programStage={stage}
+                                trackedEntity={trackedEntity}
+                                mainEvent={mainEvent}
+                                enrollment={enrollment}
+                            />
+                        ),
+                    };
+                } else if (stage.id === "opwSN351xGC") {
+                    return [];
+                }
+                if (["zKGWob5AZKP", "DA0Yt3V16AN"].includes(stage.id)) {
+                    return {
+                        key: stage.id,
+                        label: stage.name,
+                        children: (
+                            <ProgramStageCapture
+                                programStage={stage}
+                                trackedEntity={trackedEntity}
+                                mainEvent={mainEvent}
+                                enrollment={enrollment}
+                            />
+                        ),
+                    };
+                }
+                return orderBy(
+                    stage.programStageSections,
+                    ["sortOrder"],
+                    ["asc"],
+                ).flatMap((section) => {
+                    if (
+                        ruleResult &&
+                        ruleResult.hiddenSections.includes(section.id)
+                    )
+                        return [];
+                    return [
+                        {
+                            key: `${stage.id}-${section.id}`,
+                            label: section.displayName || section.name,
+                            children: (
+                                <Card>
+                                    <Row gutter={[16, 0]}>
+                                        {section.dataElements.flatMap(
+                                            (dataElement) => {
+                                                if (
+                                                    dataElement.id ===
+                                                    "mrKZWf2WMIC"
+                                                )
+                                                    return [];
+                                                return (
+                                                    <DataElementRenderer
+                                                        key={dataElement.id}
+                                                        dataElementId={
+                                                            dataElement.id
+                                                        }
+                                                        currentDataElements={
+                                                            currentDataElements
+                                                        }
+                                                        ruleResult={
+                                                            ruleResult
+                                                        }
+                                                        sectionLength={
+                                                            section
+                                                                .dataElements
+                                                                .length
+                                                        }
+                                                        form={form}
+                                                        onFieldChange={
+                                                            onFieldChange
+                                                        }
+                                                    />
+                                                );
+                                            },
+                                        )}
+                                    </Row>
+                                    {["Maternity", "Postnatal"].includes(
+                                        section.name,
+                                    ) && (
+                                        <RelationshipEvent
+                                            section={section.name}
+                                            trackedEntity={trackedEntity}
+                                            mainEvent={mainEvent}
+                                        />
+                                    )}
+                                </Card>
+                            ),
+                        },
+                    ];
+                });
+            }),
+        [ruleResult, services, onFieldChange, program, trackedEntity, mainEvent, enrollment, form],
+    );
 
     return (
         <Flex vertical gap={10} style={{ width: "100%" }}>
@@ -343,162 +466,41 @@ export default function MainEventCapture({
                     </Col>
                 </Row>
             </Card>
-            {(() => {
-                const tabItems = orderBy(
-                    program.programStages.map((a) => ({
-                        ...a,
-                        sortOrder: stages.get(a.id),
-                    })),
-                    "sortOrder",
-                    "asc",
-                ).flatMap((stage) => {
-                    const currentDataElements = buildCurrentDataElements(stage);
-                    if (
-                        stage.id === "opwSN351xGC" &&
-                        services &&
-                        String(services)
-                            .split(",")
-                            .some((a) =>
-                                [
-                                    "TB",
-                                    "DR-TB",
-                                    "Leprosy",
-                                    "ART",
-                                    "HTS",
-                                ].includes(a),
-                            )
-                    ) {
-                        return {
-                            key: stage.id,
-                            label: stage.name,
-                            children: (
-                                <ProgramStageCapture
-                                    programStage={stage}
-                                    trackedEntity={trackedEntity}
-                                    mainEvent={mainEvent}
-                                    enrollment={enrollment}
-                                />
-                            ),
-                        };
-                    } else if (stage.id === "opwSN351xGC") {
-                        return [];
+            {isMobile ? (
+                <Collapse
+                    accordion
+                    activeKey={activeKey}
+                    onChange={(key) =>
+                        setActiveKey(Array.isArray(key) ? key[0] : key)
                     }
-                    if (["zKGWob5AZKP", "DA0Yt3V16AN"].includes(stage.id)) {
-                        return {
-                            key: stage.id,
-                            label: stage.name,
-                            children: (
-                                <ProgramStageCapture
-                                    programStage={stage}
-                                    trackedEntity={trackedEntity}
-                                    mainEvent={mainEvent}
-                                    enrollment={enrollment}
-                                />
-                            ),
-                        };
-                    }
-                    return orderBy(
-                        stage.programStageSections,
-                        ["sortOrder"],
-                        ["asc"],
-                    ).flatMap((section) => {
-                        if (
-                            ruleResult &&
-                            ruleResult.hiddenSections.includes(section.id)
-                        )
-                            return [];
-                        return [
-                            {
-                                key: `${stage.id}-${section.id}`,
-                                label: section.displayName || section.name,
-                                children: (
-                                    <Card>
-                                        <Row gutter={[16, 0]}>
-                                            {section.dataElements.flatMap(
-                                                (dataElement) => {
-                                                    if (
-                                                        dataElement.id ===
-                                                        "mrKZWf2WMIC"
-                                                    )
-                                                        return [];
-                                                    return (
-                                                        <DataElementRenderer
-                                                            key={dataElement.id}
-                                                            dataElementId={
-                                                                dataElement.id
-                                                            }
-                                                            currentDataElements={
-                                                                currentDataElements
-                                                            }
-                                                            ruleResult={
-                                                                ruleResult
-                                                            }
-                                                            sectionLength={
-                                                                section
-                                                                    .dataElements
-                                                                    .length
-                                                            }
-                                                            form={form}
-                                                            onFieldChange={
-                                                                onFieldChange
-                                                            }
-                                                        />
-                                                    );
-                                                },
-                                            )}
-                                        </Row>
-                                        {["Maternity", "Postnatal"].includes(
-                                            section.name,
-                                        ) && (
-                                            <RelationshipEvent
-                                                section={section.name}
-                                                trackedEntity={trackedEntity}
-                                                mainEvent={mainEvent}
-                                            />
-                                        )}
-                                    </Card>
-                                ),
-                            },
-                        ];
-                    });
-                });
-
-                return isMobile ? (
-                    <Collapse
-                        accordion
-                        activeKey={activeKey}
-                        onChange={(key) =>
-                            setActiveKey(Array.isArray(key) ? key[0] : key)
-                        }
-                        items={tabItems}
-                    />
-                ) : (
-                    <Tabs
-                        tabPlacement="start"
-                        items={tabItems}
-                        tabBarStyle={{
-                            background: "#fff",
+                    items={tabItems}
+                />
+            ) : (
+                <Tabs
+                    tabPlacement="start"
+                    items={tabItems}
+                    tabBarStyle={{
+                        background: "#fff",
+                        borderRadius: 0,
+                    }}
+                    styles={{
+                        content: {
+                            maxHeight: "63vh",
+                            overflow: "auto",
+                            padding: 0,
+                            margin: 0,
                             borderRadius: 0,
-                        }}
-                        styles={{
-                            content: {
-                                maxHeight: "63vh",
-                                overflow: "auto",
-                                padding: 0,
-                                margin: 0,
-                                borderRadius: 0,
-                                marginLeft: 8,
-                            },
-                            header: {
-                                maxHeight: "63vh",
-                                overflow: "auto",
-                            },
-                        }}
-                        onChange={setActiveKey}
-                        activeKey={activeKey}
-                    />
-                );
-            })()}
+                            marginLeft: 8,
+                        },
+                        header: {
+                            maxHeight: "63vh",
+                            overflow: "auto",
+                        },
+                    }}
+                    onChange={setActiveKey}
+                    activeKey={activeKey}
+                />
+            )}
 
             <DataModal<FlattenedTrackedEntity>
                 open={childIsOpen}
