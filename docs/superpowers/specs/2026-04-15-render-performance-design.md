@@ -5,27 +5,31 @@
 
 ## Problem
 
-Two compounding render performance issues cause noticeable lag when typing in form fields and when switching tabs inside the visit modal.
+Three compounding issues cause render lag when typing in form fields and when switching tabs inside the visit modal.
 
-**1. `createChild` and `onFieldChange` are unstable in `MainEventCapture`**
+**1. `createChild` is unstable**
 
-`onFieldChange` is defined as a plain `async` function in the component body (`src/components/main-event-capture.tsx`). Its reference changes on every render. It calls `createChild`, which also has an unstable reference and closes over `trackedEntity`, `form`, `trackedEntitiesCollection`, `enrollmentsCollection`, and `openChildModal`. Any child that receives `onFieldChange` as a prop cannot bail out via `React.memo` because the prop reference is always new.
+`createChild` in `src/components/main-event-capture.tsx` is a plain `async` function defined in the component body. Its reference changes on every render. `onFieldChange` calls `createChild`, so `onFieldChange` cannot be stabilised until `createChild` is.
 
-**2. `tabItems` is rebuilt on every render in `MainEventCapture`**
+**2. `onFieldChange` is unstable**
 
-An IIFE at line 346 runs unconditionally on every render. It sorts all program stages, calls `buildCurrentDataElements()` for each stage, and constructs all tab and section JSX. Any state change — including a single field edit — triggers a full rebuild of the entire tab structure.
+`onFieldChange` is also a plain `async` function. Its reference changes on every render, meaning any child that receives it as a prop cannot bail out of re-renders via `React.memo`.
 
-**3. `DataElementRenderer` is not memoized**
+**3. `tabItems` is rebuilt on every render**
 
-`DataElementField` (the leaf) is wrapped in `React.memo`, but `DataElementRenderer` is not. With 50+ fields visible at once, every `ruleResult` update causes all of them to re-render — running option filtering, message filtering, and hidden-field logic — even for fields whose rule result did not change.
+An IIFE at line 346 of `main-event-capture.tsx` runs unconditionally on every render. It sorts all program stages, calls `buildCurrentDataElements()` for each stage, and constructs all tab and section JSX. `MainEventCapture` subscribes to several `Form.useWatch` values (`weightForAge`, `bmi`, `bmiForAge`, `services`, `ageAtVisit`). When any of these change, `MainEventCapture` re-renders and the IIFE rebuilds the full tab structure — even though those field values do not affect which tabs or sections are shown.
 
-**Root cause of the useMemo problem**
+**4. `DataElementRenderer` is not memoized**
 
-`tabItems` cannot be memoized with a narrow dep on `ruleResult.hiddenSections` alone, because `ruleResult` is currently threaded into every `DataElementRenderer` as a prop. If `ruleResult` is a dep, `tabItems` rebuilds on every field edit — no benefit. The fix is to remove `ruleResult` from `DataElementRenderer`'s props entirely and have it read `ruleResult` directly from `EventContext`. This decouples tab structure from rule result changes, so `tabItems` only needs to rebuild when sections actually show or hide.
+`DataElementField` (the leaf) is wrapped in `React.memo`, but `DataElementRenderer` is not. Parent re-renders from `Form.useWatch` cause all `DataElementRenderer` instances to re-render, even when their specific inputs have not changed.
+
+## What Is Not a Problem
+
+`ruleResult` is passed as a prop to `DataElementRenderer` from four callsites across four files (`main-event-capture.tsx`, `program-stage-form.tsx`, `basic-form.tsx`, `tracker-registration.tsx`). The `tracker-registration.tsx` callsite reads `ruleResult` from `TrackedEntityContext`, not `EventContext`. Any solution that moves `ruleResult` reading into `DataElementRenderer` via context must account for this difference. To avoid this complexity, `ruleResult` remains a prop in this design — the performance gain from the other three changes is meaningful without touching the prop interface.
 
 ## Solution
 
-Five changes applied in dependency order across three files.
+Four changes applied in dependency order, touching two files only.
 
 ### Change 1 — Stabilise `createChild` with `useCallback`
 
@@ -37,11 +41,11 @@ const createChild = useCallback(async () => {
 }, [trackedEntity, form, trackedEntitiesCollection, enrollmentsCollection, openChildModal]);
 ```
 
-This must happen before Change 2, since `onFieldChange` calls `createChild`.
+This must happen before Change 2, since `onFieldChange` closes over `createChild`.
 
 ### Change 2 — Stabilise `onFieldChange` with `useCallback`
 
-Wrap `onFieldChange` in `useCallback` with deps that reflect its actual closure:
+Wrap `onFieldChange` in `useCallback`:
 
 ```ts
 const onFieldChange = useCallback(async (dataElement: string, value: any) => {
@@ -49,39 +53,19 @@ const onFieldChange = useCallback(async (dataElement: string, value: any) => {
 }, [eventActor, form, createChild]);
 ```
 
-### Change 3 — Move `ruleResult` into `DataElementRenderer` via context
+### Change 3 — Memoize `tabItems` with `useMemo`
 
-In `src/components/data-element-renderer.tsx`:
-
-- Remove `ruleResult` from the `DataElementRendererProps` interface
-- Remove the `ruleResult` parameter from the destructuring
-- Add an internal read from `EventContext`:
-
-```ts
-const ruleResult = EventContext.useSelector((state) => state.context.ruleResult);
-```
-
-All existing uses of `ruleResult` inside the component body remain unchanged.
-
-Remove the `ruleResult` prop from all `DataElementRenderer` callsites:
-- `src/components/main-event-capture.tsx` — inline usages in the IIFE
-- `src/components/program-stage-form.tsx` — field render loop
-
-Both callsites are always rendered inside an `EventContext.Provider`, so the context read is safe.
-
-### Change 4 — Memoize `tabItems` with `useMemo`
-
-Replace the IIFE in `src/components/main-event-capture.tsx` with a `useMemo`:
+Replace the IIFE with a `useMemo`:
 
 ```ts
 const tabItems = useMemo(() => {
     // existing IIFE body, unchanged
-}, [ruleResult.hiddenSections, services, isMobile, onFieldChange, program, trackedEntity, mainEvent, enrollment]);
+}, [ruleResult, services, isMobile, onFieldChange, program, trackedEntity, mainEvent, enrollment]);
 ```
 
-Because `ruleResult` is no longer passed as a prop to `DataElementRenderer` children inside the memo, `ruleResult` itself is not a dep. Only `ruleResult.hiddenSections` is needed — it controls which sections are included in the tab structure. Normal field edits that do not hide or show sections will not trigger a tab rebuild.
+The full `ruleResult` object is a dep because it is passed as a prop to `DataElementRenderer` children inside the memo. This means tab rebuilds still occur when `ruleResult` changes (i.e. when program rules fire after a field edit). The benefit is narrower but real: `Form.useWatch` re-renders of `MainEventCapture` that occur before the XState actor has transitioned (and before `ruleResult` has changed) will not rebuild `tabItems`. These happen because React processes the `Form.useWatch` state update synchronously, before the `useEffect` that sends `FIELD_CHANGED` to the actor. This eliminates one of the two rebuild passes per field edit.
 
-### Change 5 — Wrap `DataElementRenderer` with `React.memo`
+### Change 4 — Wrap `DataElementRenderer` with `React.memo`
 
 In `src/components/data-element-renderer.tsx`, wrap the export:
 
@@ -91,30 +75,27 @@ export const DataElementRenderer = React.memo(({ ... }) => {
 });
 ```
 
-The default shallow comparison is sufficient. Since `onFieldChange` is now stable (Change 2) and `ruleResult` is no longer a prop (Change 3), the only props that change between renders are those that genuinely require a field update. `React.memo` prevents re-renders of `DataElementRenderer` instances caused by parent re-renders unrelated to a specific field (e.g. `services` state change, `isMobile` flip).
-
-Note: `ruleResult` context subscriptions inside `DataElementRenderer` (Change 3) still trigger re-renders when `ruleResult` changes — `React.memo` does not block context-driven re-renders. This is correct behaviour: fields must update when program rules change.
+Default shallow comparison is sufficient. Since `onFieldChange` is now stable (Change 2), the `DataElementRenderer` memo can bail out of re-renders caused by parent re-renders where `ruleResult` and all other props are unchanged — specifically the `Form.useWatch` re-renders described in Change 3. When `ruleResult` is genuinely new (program rules fired), all `DataElementRenderer` instances re-render as before, which is correct.
 
 ## Affected Files
 
 | File | Changes |
 |------|---------|
-| `src/components/main-event-capture.tsx` | `useCallback` for `createChild` (Change 1); `useCallback` for `onFieldChange` (Change 2); remove `ruleResult` prop from `DataElementRenderer` calls (Change 3); `useMemo` for `tabItems` (Change 4) |
-| `src/components/data-element-renderer.tsx` | Remove `ruleResult` from props; add `EventContext.useSelector` (Change 3); wrap with `React.memo` (Change 5) |
-| `src/components/program-stage-form.tsx` | Remove `ruleResult` prop from `DataElementRenderer` calls (Change 3) |
+| `src/components/main-event-capture.tsx` | `useCallback` for `createChild` (Change 1); `useCallback` for `onFieldChange` (Change 2); `useMemo` for `tabItems` (Change 3) |
+| `src/components/data-element-renderer.tsx` | Wrap export with `React.memo` (Change 4) |
+
+No prop interface changes. No callsite changes. No other files touched.
 
 ## Order of Changes
 
-Changes must be applied in order:
-
 1. `createChild` → `useCallback` (Change 1)
 2. `onFieldChange` → `useCallback` (Change 2, depends on stable `createChild`)
-3. `ruleResult` moved to context in `DataElementRenderer` + callsites updated (Change 3)
-4. `tabItems` → `useMemo` (Change 4, requires stable `onFieldChange` and no `ruleResult` prop in children)
-5. `React.memo` on `DataElementRenderer` (Change 5, meaningful only after Changes 2 and 3 stabilise props)
+3. `tabItems` → `useMemo` (Change 3, requires stable `onFieldChange` in deps)
+4. `React.memo` on `DataElementRenderer` (Change 4, meaningful only after Change 2 stabilises `onFieldChange` prop)
 
 ## Trade-offs
 
 - `useMemo` deps must be kept accurate. If new values are added to the tab-building logic, they must be added to the deps array or tabs will show stale content.
-- Moving `ruleResult` into `DataElementRenderer` via context couples it to `EventContext`. All `DataElementRenderer` callsites must be inside an `EventContext.Provider` — this is currently true and must remain true.
-- `DataElementRenderer` will still re-render on every `ruleResult` change (via context subscription). The performance gain is that this re-render is triggered directly by the context, not cascaded through parent re-renders and `tabItems` rebuilds.
+- When `ruleResult` changes (after every field edit that fires a program rule), `tabItems` rebuilds and all `DataElementRenderer` instances re-render. `React.memo` cannot bail out in this case because `ruleResult` is a new object reference. This is correct behaviour — fields must reflect updated rule results.
+- The performance gain is specifically for field edits that trigger `Form.useWatch` re-renders before the XState transition completes. On fast devices this gap is small; on slow devices the gap (and thus the saving) is larger.
+- `ruleResult` referential stability is upstream of this design. If the XState actor always creates a new `ruleResult` object on every transition (even when rules produce identical output), `tabItems` will always rebuild on field edits. This is acceptable; the spec does not require the actor to optimise `ruleResult` identity.
