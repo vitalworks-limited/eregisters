@@ -40,7 +40,7 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
     const screens = Grid.useBreakpoint();
     const isMobile = !screens.md;
     const [form] = Form.useForm<T>();
-    const [loading, setLoading] = React.useState(false);
+    const [loading, setLoading] = useState(false);
 
     const [contentReady, setContentReady] = useState(false);
 
