@@ -1,4 +1,5 @@
 import { FormItemProps, TableProps } from "antd";
+import { Table as DexieTable } from "dexie";
 import dayjs from "dayjs";
 import { isEmpty } from "lodash";
 import {
@@ -18,6 +19,9 @@ import {
 } from "../schemas";
 import { generateUid } from "./id";
 import { zScoreBMIFA, zScoreHFA, zScoreWFA, zScoreWFH } from "./who-zscore";
+import { createEnrollmentCollection } from "../collections/enrollments";
+import { createEventCollection } from "../collections/events";
+import { createTrackedEntityCollection } from "../collections/tracked-entities";
 
 const GRID_TOTAL = 24;
 
@@ -1196,4 +1200,94 @@ export function buildCurrentAttributes(program: Program) {
             },
         ]),
     );
+}
+
+/**
+ * Recursively deletes all draft descendants of a given event or tracked entity.
+ * Deletes children only — does NOT delete the root node itself (caller's responsibility).
+ * Uses depth-first order: children are deleted before their parent.
+ */
+export async function deleteRecursiveDraftSubtree(
+    eventId: string | undefined,
+    trackedEntityId: string | undefined,
+    collections: {
+        eventsCollection: ReturnType<typeof createEventCollection>;
+        trackedEntitiesCollection: ReturnType<typeof createTrackedEntityCollection>;
+        enrollmentsCollection: ReturnType<typeof createEnrollmentCollection>;
+    },
+): Promise<void> {
+    const eventsTable: DexieTable<FlattenedEvent, string> =
+        collections.eventsCollection.utils.getTable();
+    const tETable: DexieTable<FlattenedTrackedEntity, string> =
+        collections.trackedEntitiesCollection.utils.getTable();
+    const enrollmentsTable: DexieTable<FlattenedEnrollment, string> =
+        collections.enrollmentsCollection.utils.getTable();
+
+    if (eventId) {
+        const childEvents = await eventsTable
+            .filter(
+                (e) =>
+                    e.parentEvent === eventId && e.syncStatus === "draft",
+            )
+            .toArray();
+        for (const child of childEvents) {
+            await deleteRecursiveDraftSubtree(
+                child.event,
+                undefined,
+                collections,
+            );
+            const tx = collections.eventsCollection.delete(child.event);
+            await tx.isPersisted.promise;
+        }
+    }
+
+    if (trackedEntityId) {
+        const childTEs = await tETable
+            .filter(
+                (te) =>
+                    te.parentEntity === trackedEntityId &&
+                    te.syncStatus === "draft",
+            )
+            .toArray();
+        for (const childTE of childTEs) {
+            // Delete enrollments for this child TE
+            const childEnrollments = await enrollmentsTable
+                .where("trackedEntity")
+                .equals(childTE.trackedEntity)
+                .toArray();
+            for (const enrollment of childEnrollments) {
+                const tx = collections.enrollmentsCollection.delete(
+                    enrollment.enrollment,
+                );
+                await tx.isPersisted.promise;
+            }
+            // Delete events for this child TE (recurse into their children first)
+            const childEvents = await eventsTable
+                .filter(
+                    (e) =>
+                        e.trackedEntity === childTE.trackedEntity &&
+                        e.syncStatus === "draft",
+                )
+                .toArray();
+            for (const event of childEvents) {
+                await deleteRecursiveDraftSubtree(
+                    event.event,
+                    undefined,
+                    collections,
+                );
+                const tx = collections.eventsCollection.delete(event.event);
+                await tx.isPersisted.promise;
+            }
+            // Recurse into child TE's own children, then delete the child TE
+            await deleteRecursiveDraftSubtree(
+                undefined,
+                childTE.trackedEntity,
+                collections,
+            );
+            const tx = collections.trackedEntitiesCollection.delete(
+                childTE.trackedEntity,
+            );
+            await tx.isPersisted.promise;
+        }
+    }
 }
