@@ -22,6 +22,7 @@ import {
 } from "../schemas";
 import {
     buildCurrentDataElements,
+    cancelDataModal,
     createEmptyEnrollment,
     createEmptyEvent,
     createEmptyTrackedEntity,
@@ -516,6 +517,13 @@ export default function MainEventCapture({
                 open={childIsOpen}
                 data={childData}
                 onClose={closeChildModal}
+                onCancel={() =>
+                    cancelDataModal(childData!, {
+                        eventsCollection,
+                        trackedEntitiesCollection,
+                        enrollmentsCollection,
+                    })
+                }
                 hasAddAnother={true}
                 enrollment={childEnrollment}
                 onSave={async ({ values, addAnother }) => {
