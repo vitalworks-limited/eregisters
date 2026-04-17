@@ -43,7 +43,7 @@ import {
     FlattenedEvent,
     FlattenedTrackedEntity,
 } from "../schemas";
-import { createEmptyEvent } from "../utils/utils";
+import { cancelDataModal, createEmptyEvent } from "../utils/utils";
 import { RootRoute } from "./__root";
 
 export const TrackedEntityRoute = createRoute({
@@ -429,6 +429,13 @@ function TrackedEntityComponent() {
                 onClose={() => {
                     closeModal();
                 }}
+                onCancel={() =>
+                    cancelDataModal(data!, {
+                        eventsCollection,
+                        trackedEntitiesCollection,
+                        enrollmentsCollection,
+                    })
+                }
                 enrollment={enrollment}
                 onSave={async ({ values }) => {
                     if (values && data && enrollment) {
@@ -570,6 +577,13 @@ function TrackedEntityComponent() {
                 open={trackedEntityIsOpen}
                 data={trackedEntityData}
                 onClose={closeTrackedEntityModal}
+                onCancel={() =>
+                    cancelDataModal(trackedEntityData!, {
+                        eventsCollection,
+                        trackedEntitiesCollection,
+                        enrollmentsCollection,
+                    })
+                }
                 enrollment={enrollment}
                 onSave={async ({ values }) => {
                     if (trackedEntityData && values) {
