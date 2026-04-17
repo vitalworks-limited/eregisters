@@ -28,7 +28,7 @@ import {
     FlattenedTrackedEntity,
     ProgramStage,
 } from "../schemas";
-import { createEmptyEvent } from "../utils/utils";
+import { cancelDataModal, createEmptyEvent } from "../utils/utils";
 import { DataModal } from "./data-modal";
 import ProgramStageForm from "./program-stage-form";
 
@@ -53,9 +53,12 @@ export const ProgramStageCapture: React.FC<{
         useModalState<FlattenedEvent>();
     const { dataElements, optionSets, programRuleVariables, programRules } =
         RootRoute.useLoaderData();
-    const eventsCollection = SyncContext.useSelector(
-        (a) => a.context.eventsCollection,
-    );
+    const { eventsCollection, trackedEntitiesCollection, enrollmentsCollection } =
+        SyncContext.useSelector((a) => ({
+            eventsCollection: a.context.eventsCollection,
+            trackedEntitiesCollection: a.context.trackedEntitiesCollection,
+            enrollmentsCollection: a.context.enrollmentsCollection,
+        }));
 
     const mainStageDataElements = useMemo(
         () =>
@@ -245,6 +248,13 @@ export const ProgramStageCapture: React.FC<{
                 open={isOpen}
                 data={data}
                 onClose={closeModal}
+                onCancel={() =>
+                    cancelDataModal(data!, {
+                        eventsCollection,
+                        trackedEntitiesCollection,
+                        enrollmentsCollection,
+                    })
+                }
                 enrollment={enrollment}
                 onSave={async ({ values, addAnother }) => {
                     if (values && data) {
