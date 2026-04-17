@@ -13,6 +13,7 @@ interface DataModalProps<T extends FlattenedTrackedEntity | FlattenedEvent> {
     open: boolean;
     data: T | null;
     onClose: () => void;
+    onCancel?: () => Promise<void>;
     onSave: (currentInfo: {
         values: Record<string, any>;
         addAnother?: boolean;
@@ -30,6 +31,7 @@ const { Text } = Typography;
 export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
     open,
     onClose,
+    onCancel,
     onSave,
     title = "Edit Data",
     children,
@@ -41,6 +43,7 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
     const isMobile = !screens.md;
     const [form] = Form.useForm<T>();
     const [loading, setLoading] = useState(false);
+    const [cancelling, setCancelling] = useState(false);
 
     const [contentReady, setContentReady] = useState(false);
 
@@ -73,10 +76,20 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
         }
     };
 
+    const handleCancel = async () => {
+        setCancelling(true);
+        try {
+            await onCancel?.();
+            onClose();
+        } finally {
+            setCancelling(false);
+        }
+    };
+
     return (
         <Modal
             open={open}
-            onCancel={onClose}
+            onCancel={handleCancel}
             centered
             destroyOnHidden={true}
             confirmLoading={loading}
@@ -118,9 +131,9 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
                         style={isMobile ? { width: "100%" } : undefined}
                     >
                         <Button
-                            onClick={() => {
-                                onClose();
-                            }}
+                            onClick={handleCancel}
+                            loading={cancelling}
+                            disabled={cancelling || loading}
                             style={{
                                 borderRadius: 8,
                                 ...(isMobile && { width: "100%" }),
