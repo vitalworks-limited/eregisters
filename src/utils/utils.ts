@@ -1291,3 +1291,67 @@ export async function deleteRecursiveDraftSubtree(
         }
     }
 }
+
+/**
+ * Handles cancel for a DataModal.
+ *
+ * New record (syncStatus === "draft"):
+ *   - Deletes the root record (and its enrollment if it's a TrackedEntity)
+ *   - Recursively deletes all draft children
+ *
+ * Existing record (syncStatus !== "draft"):
+ *   - Restores the record to its pre-edit snapshot via insertLocally
+ *   - Recursively deletes any draft children created during the session
+ *
+ * The `data` argument must be the snapshot captured at openModal() time
+ * (i.e. the value stored in useModalState's React state).
+ */
+export async function cancelDataModal(
+    data: FlattenedEvent | FlattenedTrackedEntity,
+    collections: {
+        eventsCollection: ReturnType<typeof createEventCollection>;
+        trackedEntitiesCollection: ReturnType<typeof createTrackedEntityCollection>;
+        enrollmentsCollection: ReturnType<typeof createEnrollmentCollection>;
+    },
+): Promise<void> {
+    if ("event" in data) {
+        // FlattenedEvent branch
+        if (data.syncStatus === "draft") {
+            const tx = collections.eventsCollection.delete(data.event);
+            await tx.isPersisted.promise;
+        } else {
+            await collections.eventsCollection.utils.insertLocally(data);
+        }
+        await deleteRecursiveDraftSubtree(data.event, undefined, collections);
+    } else if ("trackedEntityType" in data) {
+        // FlattenedTrackedEntity branch
+        if (data.syncStatus === "draft") {
+            const tx = collections.trackedEntitiesCollection.delete(
+                data.trackedEntity,
+            );
+            await tx.isPersisted.promise;
+            // Delete the linked enrollment (guard: enrollment may not exist)
+            const enrollmentsTable =
+                collections.enrollmentsCollection.utils.getTable();
+            const enrollment = await enrollmentsTable
+                .where("trackedEntity")
+                .equals(data.trackedEntity)
+                .first();
+            if (enrollment) {
+                const etx = collections.enrollmentsCollection.delete(
+                    enrollment.enrollment,
+                );
+                await etx.isPersisted.promise;
+            }
+        } else {
+            await collections.trackedEntitiesCollection.utils.insertLocally(
+                data,
+            );
+        }
+        await deleteRecursiveDraftSubtree(
+            undefined,
+            data.trackedEntity,
+            collections,
+        );
+    }
+}
