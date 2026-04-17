@@ -8,6 +8,7 @@ import { RootRoute } from "../routes/__root";
 import { TrackedEntitiesRoute } from "../routes/tracked-entities";
 import { FlattenedTrackedEntity } from "../schemas";
 import {
+    cancelDataModal,
     createEmptyEnrollment,
     createEmptyTrackedEntity,
 } from "../utils/utils";
@@ -26,10 +27,11 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
         programRules,
     } = RootRoute.useLoaderData();
     const syncActor = SyncContext.useActorRef();
-    const { enrollmentsCollection, trackedEntitiesCollection } =
+    const { enrollmentsCollection, trackedEntitiesCollection, eventsCollection } =
         SyncContext.useSelector((a) => ({
             enrollmentsCollection: a.context.enrollmentsCollection,
             trackedEntitiesCollection: a.context.trackedEntitiesCollection,
+            eventsCollection: a.context.eventsCollection,
         }));
 
     const mainStageDataElements = useMemo(
@@ -117,6 +119,13 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
                 open={isOpen}
                 data={trackedEntity}
                 onClose={closeModal}
+                onCancel={() =>
+                    cancelDataModal(trackedEntity!, {
+                        eventsCollection,
+                        trackedEntitiesCollection,
+                        enrollmentsCollection,
+                    })
+                }
                 enrollment={enrollment}
                 onSave={async ({ values, addAnother }) => {
                     if (values && trackedEntity && enrollment) {
