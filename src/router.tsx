@@ -16,7 +16,7 @@ const routeTree = RootRoute.addChildren([
     IndexRoute,
     TrackedEntitiesRoute.addChildren([TrackedEntitiesIndexRoute]),
     TrackedEntityRoute,
-		ReportsRoute
+    ReportsRoute,
 ]);
 export const router = createRouter({
     routeTree,
@@ -26,6 +26,7 @@ export const router = createRouter({
     context: {
         syncActor: undefined!,
         user: undefined!,
+        ou: undefined!,
     },
     defaultPreload: "intent",
     defaultPreloadStaleTime: 0,

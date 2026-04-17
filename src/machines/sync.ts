@@ -1,6 +1,7 @@
 import { assertEvent, assign, fromPromise, setup } from "xstate";
 import {
     DataElement,
+    Dhis2Report,
     Enrollment,
     Event,
     FlattenedEnrollment,
@@ -71,7 +72,149 @@ export interface SyncContext {
     trackedEntitiesCollection: ReturnType<typeof createTrackedEntityCollection>;
     user: string;
     orgUnit: string;
+    skipLastDataPull: boolean;
 }
+
+const syncReportToLocal = async ({
+    entities,
+    enrollmentsCollection,
+    eventsCollection,
+    trackedEntitiesCollection,
+    engine,
+}: {
+    entities: Array<
+        FlattenedTrackedEntity | FlattenedEnrollment | FlattenedEvent
+    >;
+    enrollmentsCollection: ReturnType<typeof createEnrollmentCollection>;
+    eventsCollection: ReturnType<typeof createEventCollection>;
+    trackedEntitiesCollection: ReturnType<typeof createTrackedEntityCollection>;
+    engine: ReturnType<typeof useDataEngine>;
+}) => {
+    const payload = entities.reduce<{
+        trackedEntities: TrackedEntity[];
+        enrollments: Enrollment[];
+        events: Event[];
+    }>(
+        (acc, entity) => {
+            if ("trackedEntityType" in entity) {
+                acc.trackedEntities.push(transformTrackedEntity(entity));
+            } else if ("enrolledAt" in entity) {
+                acc.enrollments.push(transformEnrollment(entity));
+            } else if ("event" in entity) {
+                acc.events.push(transformEvent(entity));
+            }
+            return acc;
+        },
+        {
+            trackedEntities: [],
+            enrollments: [],
+            events: [],
+        },
+    );
+    const response = (await engine.mutate({
+        resource: "tracker",
+        type: "create",
+        data: payload,
+        params: {
+            async: false,
+            importStrategy: "CREATE_AND_UPDATE",
+            atomicMode: "OBJECT",
+            skipPatternValidation: "true",
+            skipSideEffects: "true",
+        },
+    })) as unknown as Dhis2Report;
+    const failedResponses = new Map(
+        response.validationReport.errorReports.map((a) => [a.uid, a.message]),
+    );
+
+    const syncedEvents = new Set(
+        response.bundleReport.typeReportMap.EVENT.objectReports.map(
+            (a) => a.uid,
+        ),
+    );
+    const syncedEnrollments = new Set(
+        response.bundleReport.typeReportMap.ENROLLMENT.objectReports.map(
+            (a) => a.uid,
+        ),
+    );
+
+    const syncedEntities = new Set(
+        response.bundleReport.typeReportMap.TRACKED_ENTITY.objectReports.map(
+            (a) => a.uid,
+        ),
+    );
+
+    const updatedEntities: FlattenedTrackedEntity[] = entities.flatMap((a) => {
+        if ("trackedEntityType" in a && failedResponses.has(a.trackedEntity)) {
+            return {
+                ...a,
+                syncStatus: "failed",
+                lastSynced: new Date().toISOString(),
+                syncError: failedResponses.get(a.trackedEntity),
+            };
+        } else if (
+            "trackedEntityType" in a &&
+            syncedEntities.has(a.trackedEntity)
+        ) {
+            return {
+                ...a,
+                syncStatus: "synced",
+                lastSynced: new Date().toISOString(),
+                syncError: failedResponses.get(a.trackedEntity),
+            };
+        }
+        return [];
+    });
+
+    const updatedEnrolments: FlattenedEnrollment[] = entities.flatMap((a) => {
+        if ("enrolledAt" in a && failedResponses.has(a.enrollment)) {
+            return {
+                ...a,
+                syncStatus: "failed",
+                lastSynced: new Date().toISOString(),
+                syncError: failedResponses.get(a.enrollment),
+            };
+        } else if ("enrolledAt" in a && syncedEnrollments.has(a.enrollment)) {
+            return {
+                ...a,
+                syncStatus: "synced",
+                lastSynced: new Date().toISOString(),
+                syncError: failedResponses.get(a.enrollment),
+            };
+        }
+        return [];
+    });
+
+    const updatedEvents: FlattenedEvent[] = entities.flatMap((a) => {
+        if ("event" in a && failedResponses.has(a.event)) {
+            return {
+                ...a,
+                syncStatus: "failed",
+                lastSynced: new Date().toISOString(),
+                syncError: failedResponses.get(a.event),
+            };
+        } else if ("event" in a && syncedEvents.has(a.event)) {
+            return {
+                ...a,
+                syncStatus: "synced",
+                lastSynced: new Date().toISOString(),
+                syncError: failedResponses.get(a.event),
+            };
+        }
+        return [];
+    });
+
+    await trackedEntitiesCollection.utils.bulkUpdateLocally(updatedEntities);
+    await enrollmentsCollection.utils.bulkUpdateLocally(updatedEnrolments);
+    await eventsCollection.utils.bulkUpdateLocally(updatedEvents);
+
+    return {
+        processed: entities.length,
+        succeeded:
+            syncedEntities.size + syncedEnrollments.size + syncedEvents.size,
+        failed: failedResponses.size,
+    };
+};
 
 export type SyncEvent =
     | {
@@ -199,6 +342,7 @@ export const syncMachine = setup({
                 trackedEntitiesCollection: ReturnType<
                     typeof createTrackedEntityCollection
                 >;
+                skipLastDataPull: boolean;
             }
         >(
             async ({
@@ -210,6 +354,7 @@ export const syncMachine = setup({
                     enrollmentsCollection,
                     eventsCollection,
                     trackedEntitiesCollection,
+                    skipLastDataPull,
                 },
             }) => {
                 let currentPage = 1;
@@ -226,7 +371,7 @@ export const syncMachine = setup({
                         pageSize: pageSize,
                     };
 
-                    if (lastDataPull) {
+                    if (lastDataPull && !skipLastDataPull) {
                         params.updatedAfter = lastDataPull;
                     }
 
@@ -255,9 +400,12 @@ export const syncMachine = setup({
                         },
                     );
 
-                    const teTable = trackedEntitiesCollection.utils.getTable();
-                    const eventTable = eventsCollection.utils.getTable();
-                    const enrollTable = enrollmentsCollection.utils.getTable();
+                    const teTable: Table<FlattenedTrackedEntity, string> =
+                        trackedEntitiesCollection.utils.getTable();
+                    const eventTable: Table<FlattenedEvent, string> =
+                        eventsCollection.utils.getTable();
+                    const enrollTable: Table<FlattenedEnrollment, string> =
+                        enrollmentsCollection.utils.getTable();
 
                     const mergedTrackedEntities =
                         await mergeBulkTrackedEntities(
@@ -652,143 +800,16 @@ export const syncMachine = setup({
                     enrollmentsCollection,
                     eventsCollection,
                 } = input;
-                const payload = entities.reduce(
-                    (acc, entity) => {
-                        if ("trackedEntityType" in entity) {
-                            acc.trackedEntities.push(
-                                transformTrackedEntity(entity),
-                            );
-                        } else if ("enrolledAt" in entity) {
-                            acc.enrollments.push(transformEnrollment(entity));
-                        } else if ("event" in entity) {
-                            acc.events.push(transformEvent(entity));
-                        }
 
-                        return acc;
-                    },
-                    {
-                        trackedEntities: [] as TrackedEntity[],
-                        enrollments: [] as Enrollment[],
-                        events: [] as Event[],
-                    },
-                );
-
-                await engine.mutate({
-                    resource: "tracker",
-                    type: "create",
-                    data: payload,
-                    params: {
-                        async: false,
-                        importStrategy: "CREATE_AND_UPDATE",
-                        atomicMode: "OBJECT",
-                        skipPatternValidation: "true",
-                        skipSideEffects: "true",
-                    },
-                });
-
-                // Update entity status after successful upload
-                await Promise.all(
-                    entities.flatMap((entity) => {
-                        if ("trackedEntityType" in entity) {
-                            return trackedEntitiesCollection.utils.updateLocally(
-                                entity.trackedEntity,
-                                {
-                                    syncStatus: "synced",
-                                    lastSynced: new Date().toISOString(),
-                                    syncError: "",
-                                },
-                            );
-                        }
-                        if ("enrolledAt" in entity) {
-                            return enrollmentsCollection.utils.updateLocally(
-                                entity.enrollment,
-                                {
-                                    syncStatus: "synced",
-                                    lastSynced: new Date().toISOString(),
-                                    syncError: "",
-                                },
-                            );
-                        }
-                        if ("event" in entity) {
-                            return eventsCollection.utils.updateLocally(
-                                entity.event,
-                                {
-                                    syncStatus: "synced",
-                                    lastSynced: new Date().toISOString(),
-                                    syncError: "",
-                                },
-                            );
-                        }
-                        return [];
-                    }),
-                );
-
-                return { success: true };
-            },
-        ),
-        updateEntityToSynced: fromPromise(
-            async ({
-                input,
-            }: {
-                input: {
-                    entities: Array<
-                        | FlattenedTrackedEntity
-                        | FlattenedEnrollment
-                        | FlattenedEvent
-                    >;
-                    trackedEntitiesCollection: ReturnType<
-                        typeof createTrackedEntityCollection
-                    >;
-                    enrollmentsCollection: ReturnType<
-                        typeof createEnrollmentCollection
-                    >;
-                    eventsCollection: ReturnType<typeof createEventCollection>;
-                };
-            }) => {
-                const {
-                    entities,
-                    trackedEntitiesCollection,
+                const result = await syncReportToLocal({
                     enrollmentsCollection,
                     eventsCollection,
-                } = input;
+                    trackedEntitiesCollection,
+                    entities,
+                    engine,
+                });
 
-                await Promise.all(
-                    entities.flatMap((entity) => {
-                        if ("trackedEntityType" in entity) {
-                            return trackedEntitiesCollection.utils.updateLocally(
-                                entity.trackedEntity,
-                                {
-                                    syncStatus: "synced",
-                                    lastSynced: new Date().toISOString(),
-                                    syncError: "",
-                                },
-                            );
-                        }
-                        if ("enrolledAt" in entity) {
-                            return enrollmentsCollection.utils.updateLocally(
-                                entity.enrollment,
-                                {
-                                    syncStatus: "synced",
-                                    lastSynced: new Date().toISOString(),
-                                    syncError: "",
-                                },
-                            );
-                        }
-                        if ("event" in entity) {
-                            return eventsCollection.utils.updateLocally(
-                                entity.event,
-                                {
-                                    syncStatus: "synced",
-                                    lastSynced: new Date().toISOString(),
-                                    syncError: "",
-                                },
-                            );
-                        }
-                        return [];
-                    }),
-                );
-
-                return { success: true };
+                return result;
             },
         ),
         processBatchSync: fromPromise(
@@ -820,126 +841,29 @@ export const syncMachine = setup({
                 const enrollTable: Table<FlattenedEnrollment, string> =
                     enrollmentsCollection.utils.getTable();
 
-                // 1. Query collections for pending entities
-                const pendingTEs = (await teTable.toArray()).filter(
-                    (e) => e.syncStatus === "pending",
-                );
+                const pendingTEs = await teTable
+                    .filter((e) => e.syncStatus === "pending")
+                    .toArray();
 
-                const pendingEnrollments = (await enrollTable.toArray()).filter(
-                    (e) => e.syncStatus === "pending",
-                );
+                const pendingEnrollments = await enrollTable
+                    .filter((e) => e.syncStatus === "pending" && !!e.enrolledAt)
+                    .toArray();
 
-                const pendingEvents = (await eventTable.toArray()).filter(
-                    (e) => e.syncStatus === "pending" && e.occurredAt,
-                );
+                const pendingEvents = await eventTable
+                    .filter((e) => e.syncStatus === "pending" && !!e.occurredAt)
+                    .toArray();
 
-                if (
-                    pendingTEs.length === 0 &&
-                    pendingEnrollments.length === 0 &&
-                    pendingEvents.length === 0
-                ) {
-                    return { processed: 0, succeeded: 0, failed: 0 };
-                }
-                // 2. Filter by dependencies
-                const teIds = new Set(pendingTEs.map((te) => te.trackedEntity));
-
-                // Enrollments: only if parent TE is synced OR in this batch
-                const validEnrollments: FlattenedEnrollment[] = [];
-                for (const enr of pendingEnrollments) {
-                    if (teIds.has(enr.trackedEntity)) {
-                        validEnrollments.push(enr);
-                    } else {
-                        const te = trackedEntitiesCollection.get(
-                            enr.trackedEntity,
-                        );
-                        if (te?.syncStatus === "synced") {
-                            validEnrollments.push(enr);
-                        }
-                    }
-                }
-
-                const enrollIds = new Set(
-                    validEnrollments.map((e) => e.enrollment),
-                );
-                const validEvents: FlattenedEvent[] = [];
-                for (const evt of pendingEvents) {
-                    if (enrollIds.has(evt.enrollment)) {
-                        validEvents.push(evt);
-                    } else {
-                        const enr = enrollmentsCollection.get(evt.enrollment);
-                        if (enr?.syncStatus === "synced") {
-                            validEvents.push(evt);
-                        }
-                    }
-                }
-
-                if (
-                    pendingTEs.length === 0 &&
-                    validEnrollments.length === 0 &&
-                    validEvents.length === 0
-                ) {
-                    console.log(
-                        "No entities ready to sync (dependencies not met)",
-                    );
-                    return { processed: 0, succeeded: 0, failed: 0 };
-                }
-
-                // 3. Build flat batch payload
-                const payload = {
-                    trackedEntities: pendingTEs.map(transformTrackedEntity),
-                    enrollments: validEnrollments.map(transformEnrollment),
-                    events: validEvents.map(transformEvent),
-                };
-
-                // 4. Send to DHIS2
-                await engine.mutate({
-                    resource: "tracker",
-                    type: "create",
-                    data: payload,
-                    params: {
-                        async: false,
-                        importStrategy: "CREATE_AND_UPDATE",
-                        atomicMode: "OBJECT",
-                        skipPatternValidation: "true",
-                        skipSideEffects: "true",
-                    },
+                return syncReportToLocal({
+                    enrollmentsCollection,
+                    trackedEntitiesCollection,
+                    eventsCollection,
+                    entities: [
+                        ...pendingTEs,
+                        ...pendingEnrollments,
+                        ...pendingEvents,
+                    ],
+                    engine,
                 });
-                let succeeded = 0;
-                let failed = 0;
-
-                await trackedEntitiesCollection.utils.bulkUpdateLocally(
-                    pendingTEs.map((a) => ({
-                        ...a,
-                        syncStatus: "synced",
-                        lastSynced: new Date().toISOString(),
-                        syncError: "",
-                    })),
-                );
-                await enrollmentsCollection.utils.bulkUpdateLocally(
-                    validEnrollments.map((a) => ({
-                        ...a,
-                        syncStatus: "synced",
-                        lastSynced: new Date().toISOString(),
-                        syncError: "",
-                    })),
-                );
-                await eventsCollection.utils.bulkUpdateLocally(
-                    validEvents.map((a) => ({
-                        ...a,
-                        syncStatus: "synced",
-                        lastSynced: new Date().toISOString(),
-                        syncError: "",
-                    })),
-                );
-
-                return {
-                    processed:
-                        pendingTEs.length +
-                        validEnrollments.length +
-                        validEvents.length,
-                    succeeded,
-                    failed,
-                };
             },
         ),
         evaluateAllIndicators: fromPromise<
@@ -954,15 +878,12 @@ export const syncMachine = setup({
             async ({
                 input: { eventsCollection, trackedEntitiesCollection },
             }) => {
-                // 1. Get all program indicators from db
                 const indicators = await db.programIndicators.toArray();
 
                 if (indicators.length === 0) {
                     console.log("No program indicators found");
                     return;
                 }
-
-                // 2. Get all synced/pending events
                 const eventTable: Table<FlattenedEvent, string> =
                     eventsCollection.utils.getTable();
                 const events = await eventTable
@@ -977,8 +898,6 @@ export const syncMachine = setup({
                     console.log("No events to evaluate");
                     return;
                 }
-
-                // 3. Build tracked entities map
                 const trackedEntitiesMap = new Map<
                     string,
                     FlattenedTrackedEntity
@@ -998,15 +917,11 @@ export const syncMachine = setup({
                         }
                     }
                 }
-
-                // 4. Evaluate indicators
                 const results = evaluateProgramIndicatorsForEvents(
                     events,
                     indicators,
                     trackedEntitiesMap,
                 );
-
-                // 5. Store results in database
                 const evaluations = Array.from(results.entries()).map(
                     ([eventId, indicatorResults]) => ({
                         id: eventId,
@@ -1031,25 +946,20 @@ export const syncMachine = setup({
                 trackedEntity: FlattenedTrackedEntity;
             }
         >(async ({ input: { event, trackedEntity } }) => {
-            // 1. Get all program indicators
             const indicators = await db.programIndicators.toArray();
 
             if (indicators.length === 0) {
                 console.log("No program indicators found");
                 return;
             }
-
-            // 2. Evaluate indicators for this single event
             const indicatorResults = evaluateProgramIndicatorsForEvent(
                 event,
                 indicators,
                 trackedEntity,
             );
-
-            // 3. Store result using event ID as primary key
             await db.indicatorEvaluations.put({
-                id: event.event, // Event ID as primary key (ensures uniqueness)
-                eventId: event.event, // Same value for querying
+                id: event.event,
+                eventId: event.event,
                 results: indicatorResults,
                 updatedAt: new Date().toISOString(),
                 version: 1,
@@ -1102,6 +1012,7 @@ export const syncMachine = setup({
             skipLastMetadataPull: true,
             user,
             orgUnit,
+            skipLastDataPull: true,
         };
     },
     states: {
@@ -1248,9 +1159,6 @@ export const syncMachine = setup({
                         },
                         onDone: {
                             target: "updateLastDataPush",
-                            actions: () => {
-                                console.log("✅ Direct sync successful");
-                            },
                         },
                         onError: {
                             target: "idle",
@@ -1333,7 +1241,10 @@ export const syncMachine = setup({
                             eventsCollection,
                             trackedEntitiesCollection,
                         }),
-                        onDone: "syncing",
+                        onDone: {
+                            actions: assign({ skipLastDataPull: false }),
+                            target: "syncing",
+                        },
                         onError: "failure",
                     },
                 },
@@ -1349,6 +1260,7 @@ export const syncMachine = setup({
                                 eventsCollection,
                                 trackedEntitiesCollection,
                                 orgUnit,
+                                skipLastDataPull,
                             },
                         }) => ({
                             engine,
@@ -1358,6 +1270,7 @@ export const syncMachine = setup({
                             orgUnit,
                             program: "ueBhWkWll5v",
                             trackedEntitiesCollection,
+                            skipLastDataPull,
                         }),
 
                         onDone: {
@@ -1371,6 +1284,7 @@ export const syncMachine = setup({
                     entry: [
                         assign({
                             lastDataPull: () => new Date().toISOString(),
+                            skipLastDataPull: true,
                         }),
                         "persistSyncState",
                     ],

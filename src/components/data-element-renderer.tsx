@@ -17,7 +17,8 @@ interface DataElementRendererProps {
     mode?: "dataElement" | "attribute";
     xl?: number;
 }
-export const DataElementRenderer = React.memo(({
+export const DataElementRenderer = React.memo(
+({
     dataElementId,
     currentDataElements,
     ruleResult,
@@ -121,4 +122,34 @@ export const DataElementRenderer = React.memo(({
             }}
         />
     );
+},
+(prev, next) => {
+    if (prev.dataElementId !== next.dataElementId) return false;
+    if (prev.sectionLength !== next.sectionLength) return false;
+    if (prev.currentDataElements !== next.currentDataElements) return false;
+    if (prev.form !== next.form) return false;
+    if (prev.onFieldChange !== next.onFieldChange) return false;
+    if (prev.mode !== next.mode) return false;
+    if (prev.xl !== next.xl) return false;
+    if (prev.ruleResult === next.ruleResult) return true;
+    // ruleResult reference changed — compare only what this field cares about
+    const id = prev.dataElementId;
+    const p = prev.ruleResult;
+    const n = next.ruleResult;
+    if (p.hiddenFields.includes(id) !== n.hiddenFields.includes(id)) return false;
+    if (p.hiddenSections.includes(id) !== n.hiddenSections.includes(id)) return false;
+    if ((id in p.assignments) !== (id in n.assignments)) return false;
+    if (String(p.assignments[id]) !== String(n.assignments[id])) return false;
+    if (p.shownOptionGroups[id] !== n.shownOptionGroups[id]) return false;
+    if (p.hiddenOptions[id] !== n.hiddenOptions[id]) return false;
+    const pErr = p.errors.filter((m) => m.key === id);
+    const nErr = n.errors.filter((m) => m.key === id);
+    if (pErr.length !== nErr.length) return false;
+    const pWarn = p.warnings.filter((m) => m.key === id);
+    const nWarn = n.warnings.filter((m) => m.key === id);
+    if (pWarn.length !== nWarn.length) return false;
+    const pMsg = p.messages.filter((m) => m.key === id);
+    const nMsg = n.messages.filter((m) => m.key === id);
+    if (pMsg.length !== nMsg.length) return false;
+    return true;
 });

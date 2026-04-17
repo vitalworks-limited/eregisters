@@ -27,6 +27,7 @@ import {
     Typography,
 } from "antd";
 import dayjs from "dayjs";
+import { Table as DexieTable } from "dexie";
 import React, { useMemo } from "react";
 import { z } from "zod";
 import { DataModal } from "../components/data-modal";
@@ -37,7 +38,11 @@ import { TrackerRegistration } from "../components/tracker-registration";
 import { useModalState } from "../hooks/useModalState";
 import { EventContext, TrackedEntityContext } from "../machines";
 import { SyncContext } from "../machines/sync";
-import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
+import {
+    FlattenedEnrollment,
+    FlattenedEvent,
+    FlattenedTrackedEntity,
+} from "../schemas";
 import { createEmptyEvent } from "../utils/utils";
 import { RootRoute } from "./__root";
 
@@ -122,6 +127,7 @@ function TrackedEntityComponent() {
                     and(
                         eq(events.trackedEntity, tei),
                         eq(events.programStage, "K2nxbE9ubSs"),
+                        eq(events.orgUnit, id),
                     ),
                 )
                 .orderBy(({ events }) => events.occurredAt, "desc");
@@ -133,7 +139,9 @@ function TrackedEntityComponent() {
         (q) => {
             return q
                 .from({ events: eventsCollection })
-                .where(({ events }) => eq(events.event, data?.event))
+                .where(({ events }) =>
+                    and(eq(events.event, data?.event), eq(events.orgUnit, id)),
+                )
                 .findOne();
         },
         [data?.event],
@@ -143,7 +151,12 @@ function TrackedEntityComponent() {
         (q) =>
             q
                 .from({ enrollments: enrollmentsCollection })
-                .where(({ enrollments }) => eq(enrollments.trackedEntity, tei))
+                .where(({ enrollments }) =>
+                    and(
+                        eq(enrollments.trackedEntity, tei),
+                        eq(enrollments.orgUnit, id),
+                    ),
+                )
                 .findOne(),
         [tei],
     );
@@ -153,7 +166,10 @@ function TrackedEntityComponent() {
             q
                 .from({ trackedEntity: trackedEntitiesCollection })
                 .where(({ trackedEntity }) =>
-                    eq(trackedEntity.trackedEntity, tei),
+                    and(
+                        eq(trackedEntity.trackedEntity, tei),
+                        eq(trackedEntity.orgUnit, id),
+                    ),
                 )
                 .findOne(),
         [tei],
@@ -234,7 +250,9 @@ function TrackedEntityComponent() {
                                 }
                             }}
                         >
-                            <Button danger icon={<DeleteOutlined />}>Delete</Button>
+                            <Button danger icon={<DeleteOutlined />}>
+                                Delete
+                            </Button>
                         </Popconfirm>
                     </Flex>
                 ),
@@ -274,7 +292,11 @@ function TrackedEntityComponent() {
                 </Space>
             }
             extra={
-                <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+                <Button
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={handleCreate}
+                >
                     Add new visit
                 </Button>
             }
@@ -294,6 +316,7 @@ function TrackedEntityComponent() {
             expandIcon={({ isActive }) => (
                 <CaretRightOutlined rotate={isActive ? 90 : 0} />
             )}
+            style={{ backgroundColor: "white" }}
             items={[
                 {
                     key: "1",
@@ -329,7 +352,13 @@ function TrackedEntityComponent() {
     );
 
     return (
-        <>
+        <Flex
+            style={{
+                padding: "8px 0",
+            }}
+            vertical
+            gap={5}
+        >
             <Flex
                 vertical={isMobile}
                 align={isMobile ? "flex-start" : "center"}
@@ -348,7 +377,12 @@ function TrackedEntityComponent() {
                     Back
                 </Button>
                 <Flex align="center" gap={8} wrap>
-                    <UserOutlined style={{ fontSize: isMobile ? 16 : 18, color: "#1f4788" }} />
+                    <UserOutlined
+                        style={{
+                            fontSize: isMobile ? 16 : 18,
+                            color: "#1f4788",
+                        }}
+                    />
                     <Title level={isMobile ? 5 : 4} style={{ margin: 0 }}>
                         {firstName} {surname}
                     </Title>
@@ -370,20 +404,18 @@ function TrackedEntityComponent() {
                     {leftPanel}
                 </Flex>
             ) : (
-                <Splitter style={{ height: "calc(100vh - 100px)" }}>
-                    <Splitter.Panel style={{ padding: 10 }}>
-                        <Flex vertical gap="16px">
-                            {leftPanel}
-                        </Flex>
+                <Splitter style={{ height: "calc(100vh - 181px)" }}>
+                    <Splitter.Panel style={{ padding: "0 10px" }}>
+                        {leftPanel}
                     </Splitter.Panel>
                     <Splitter.Panel
                         defaultSize="25%"
+                        style={{ padding: "0 10px" }}
                         collapsible={{
                             start: true,
                             end: true,
                             showCollapsibleIcon: true,
                         }}
-                        style={{ padding: 10 }}
                     >
                         {rightPanel}
                     </Splitter.Panel>
@@ -400,42 +432,95 @@ function TrackedEntityComponent() {
                 enrollment={enrollment}
                 onSave={async ({ values }) => {
                     if (values && data && enrollment) {
-                        const tx = eventsCollection.update(
-                            data.event,
-                            (draft) => {
-                                draft.dataValues = {
-                                    ...data.dataValues,
-                                    ...values,
-                                };
-                                draft.syncStatus = "pending";
-                            },
-                        );
-                        await tx.isPersisted.promise;
+                        const eventTable: DexieTable<FlattenedEvent, string> =
+                            eventsCollection.utils.getTable();
 
-                        syncActor.send({
-                            type: "SYNC_ENTITIES",
-                            entities: [
-                                {
-                                    ...data,
-                                    dataValues: {
-                                        ...data.dataValues,
-                                        ...values,
-                                    },
-                                    syncStatus: "pending",
-                                },
-                            ],
-                        });
-                        syncActor.send({
-                            type: "EVALUATE_INDICATORS",
-                            trackedEntity,
-                            event: {
+                        const trackedEntityTable: DexieTable<
+                            FlattenedTrackedEntity,
+                            string
+                        > = trackedEntitiesCollection.utils.getTable();
+
+                        const enrollmentTable: DexieTable<
+                            FlattenedEnrollment,
+                            string
+                        > = enrollmentsCollection.utils.getTable();
+
+                        const relatedEvents = await eventTable
+                            .filter(
+                                (a) =>
+                                    a.parentEvent === data.event &&
+                                    a.syncStatus !== "synced",
+                            )
+                            .toArray();
+
+                        const relatedTrackedEntities = await trackedEntityTable
+                            .filter(
+                                (te) =>
+                                    te.parentEntity ===
+                                        trackedEntity.trackedEntity &&
+                                    te.syncStatus !== "synced",
+                            )
+                            .toArray();
+
+                        const relatedEnrollments = await enrollmentTable
+                            .filter((e) =>
+                                relatedTrackedEntities
+                                    .map((rt) => rt.trackedEntity)
+                                    .includes(e.trackedEntity),
+                            )
+                            .toArray();
+
+                        const entities: Array<
+                            | FlattenedEvent
+                            | FlattenedTrackedEntity
+                            | FlattenedEnrollment
+                        > = [
+                            {
                                 ...data,
                                 dataValues: {
                                     ...data.dataValues,
                                     ...values,
                                 },
-                                syncStatus: "pending",
                             },
+                            ...relatedEvents,
+                            ...relatedTrackedEntities,
+                            ...relatedEnrollments,
+                        ].map((a) => ({
+                            ...a,
+                            syncStatus: "pending",
+                        }));
+                        const payload = entities.flatMap((a) => {
+                            if ("trackedEntityType" in a) {
+                                const tx = trackedEntitiesCollection.update(
+                                    a.trackedEntity,
+                                    (draft) => {
+                                        draft.syncStatus = a.syncStatus;
+                                    },
+                                );
+                                return tx.isPersisted.promise;
+                            } else if ("enrolledAt" in a) {
+                                const tx = enrollmentsCollection.update(
+                                    a.enrollment,
+                                    (draft) => {
+                                        draft.syncStatus = a.syncStatus;
+                                    },
+                                );
+                                return tx.isPersisted.promise;
+                            } else if ("event" in a) {
+                                const tx = eventsCollection.update(
+                                    a.event,
+                                    (draft) => {
+                                        draft.syncStatus = a.syncStatus;
+                                    },
+                                );
+                                return tx.isPersisted.promise;
+                            }
+                            return [];
+                        });
+                        await Promise.all(payload);
+                        syncActor.send({
+                            type: "SYNC_ENTITIES",
+                            entities,
                         });
                     }
                 }}
@@ -563,6 +648,6 @@ function TrackedEntityComponent() {
                     </TrackedEntityContext.Provider>
                 )}
             </DataModal>
-        </>
+        </Flex>
     );
 }

@@ -13,6 +13,7 @@ import {
 import {
     createEmptyProgramRuleResult,
     executeProgramRules,
+    programRuleResultsEqual,
 } from "../utils/utils";
 
 import { applyRuleResultsToForm, FormEvent } from "./common";
@@ -99,7 +100,9 @@ export const eventFormMachine = setup({
             });
 
             return {
-                ruleResult: result,
+                ruleResult: programRuleResultsEqual(result, ruleResult)
+                    ? ruleResult
+                    : result,
             };
         }),
     },

@@ -9,15 +9,13 @@ import {
     createTrackedEntityCollection,
 } from "./collections";
 import { Spinner } from "./components/spinner";
-import {
-    InitialSyncState,
-    loadInitialSyncState,
-} from "./db/sync-state-loader";
+import { InitialSyncState, loadInitialSyncState } from "./db/sync-state-loader";
 import { SyncContext } from "./machines/sync";
 import { queryClient } from "./query-client";
 import { router } from "./router";
+import { isEmpty } from "lodash";
 
-const Main = () => {
+const Main = ({ user, ou }: { user: string; ou: string }) => {
     const syncActor = SyncContext.useActorRef();
     const isFirstTimeLoading = SyncContext.useSelector((snapshot) => {
         const isMetadataNotReady =
@@ -30,8 +28,6 @@ const Main = () => {
 
     const { metadataSync } = SyncContext.useSelector((a) => a.value);
 
-    const userInfo = useCurrentUserInfo();
-
     if (isFirstTimeLoading) {
         return (
             <Spinner
@@ -43,12 +39,7 @@ const Main = () => {
             />
         );
     }
-    return (
-        <RouterProvider
-            router={router}
-            context={{ syncActor, user: userInfo?.id }}
-        />
-    );
+    return <RouterProvider router={router} context={{ syncActor, user, ou }} />;
 };
 const MyApp: FC = () => {
     const engine = useDataEngine();
@@ -63,8 +54,12 @@ const MyApp: FC = () => {
         loadInitialSyncState().then(setInitialSyncState);
     }, []);
 
-    if (userInfo === undefined) {
-        return <Typography.Text>No user found</Typography.Text>;
+    if (isEmpty(userInfo) || userInfo.organisationUnits.length > 1) {
+        return (
+            <Typography.Text>
+                No user found or user assigned multiple organisations
+            </Typography.Text>
+        );
     }
 
     if (initialSyncState === null) {
@@ -76,6 +71,10 @@ const MyApp: FC = () => {
             />
         );
     }
+    const {
+        id: user,
+        organisationUnits: [{ id: orgUnit }],
+    } = userInfo;
 
     return (
         <ConfigProvider
@@ -85,6 +84,9 @@ const MyApp: FC = () => {
                         rowHoverBg: "#F1EFFD",
                     },
                     Card: {},
+                    Tabs: {
+                        cardGutter: 5,
+                    },
                 },
                 token: {
                     fontSize: 16,
@@ -100,10 +102,8 @@ const MyApp: FC = () => {
                                 enrollmentsCollection,
                                 eventsCollection,
                                 trackedEntitiesCollection,
-                                orgUnit: userInfo.organisationUnits
-                                    .map(({ id }) => id)
-                                    .join(";"),
-                                user: userInfo.id,
+                                orgUnit,
+                                user,
                                 initialLastDataPull:
                                     initialSyncState.lastDataPull,
                                 initialLastMetadataPull:
@@ -112,11 +112,9 @@ const MyApp: FC = () => {
                                     initialSyncState.lastDataPush,
                             },
                         }}
-                        key={`${userInfo.id}${userInfo.organisationUnits
-                            .map(({ id }) => id)
-                            .join(";")}`}
+                        key={`${user}${orgUnit}`}
                     >
-                        <Main />
+                        <Main user={user} ou={orgUnit} />
                     </SyncContext.Provider>
                 </QueryClientProvider>
             </App>

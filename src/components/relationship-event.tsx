@@ -1,12 +1,11 @@
 import { eq, useLiveSuspenseQuery } from "@tanstack/react-db";
-import { Tabs } from "antd";
+import { Flex, Tabs, Typography } from "antd";
 import React, { Key, useState } from "react";
 import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
 import { createEmptyEvent } from "../utils/utils";
 import Relation from "./relation";
 
-import { EventContext, SyncContext } from "../machines";
-import { RootRoute } from "../routes/__root";
+import { SyncContext } from "../machines";
 
 const getChildLabel = (to: FlattenedTrackedEntity["attributes"]): string => {
     const firstName = to["KSq9EyZ8ZFi"];
@@ -64,7 +63,6 @@ export default function RelationshipEvent({
 
     const onChange = async (activeKey: Key) => {
         const current = events.find((x) => x.trackedEntity === activeKey);
-
         const currentChild = children.find(
             ({ trackedEntity }) => trackedEntity === activeKey,
         );
@@ -87,34 +85,76 @@ export default function RelationshipEvent({
                 },
                 parentEvent: mainEvent.event,
             });
-            const tx = eventsCollection.insert({
-                ...newEvent,
-                syncStatus: "pending",
-            });
+            const tx = eventsCollection.insert(newEvent);
             await tx.isPersisted.promise;
         }
         setActiveKey(() => String(activeKey));
     };
     return (
-        <Tabs
-            items={children.map((trackedEntity) => {
-                return {
-                    key: trackedEntity.trackedEntity,
-                    label: getChildLabel(trackedEntity.attributes),
-                    destroyOnHidden: true,
-                    children: (
-                        <Relation
-                            key={trackedEntity.trackedEntity}
-                            section={section}
-                            mainEvent={mainEvent}
-                            trackedEntity={trackedEntity}
-                        />
-                    ),
-                };
-            })}
-            onChange={onChange}
-            accessKey={activeKey}
-            activeKey={activeKey}
-        />
+        <Flex vertical gap={5}>
+            <Typography.Title level={4}>Newborns</Typography.Title>
+            <Tabs
+                type="editable-card"
+                hideAdd
+                styles={{
+                    // root: {
+                    //     background: "#fff",
+                    //     borderRadius: 12,
+                    //     padding: 8,
+                    // },
+                    // header: {
+                    //     marginBottom: 8,
+                    //     background: "#f5f5f5",
+                    //     borderRadius: 10,
+                    //     padding: 6,
+                    // },
+                    // item: {
+                    //     padding: "12px 18px",
+                    //     fontSize: 15,
+                    //     fontWeight: 600,
+                    //     borderRadius: 8,
+                    // },
+                    // indicator: {
+                    //     height: 3,
+                    //     borderRadius: 999,
+                    // },
+                    // content: {
+                    //     padding: 12,
+                    //     background: "#fff",
+                    //     borderRadius: 10,
+                    //     border: "1px solid #f0f0f0",
+                    // },
+                }}
+                items={children.map((trackedEntity) => {
+                    return {
+                        key: trackedEntity.trackedEntity,
+												closeIcon:trackedEntity.syncStatus === "draft",
+                        label: (
+                            <Flex vertical>
+                                <Typography.Text>
+                                    {getChildLabel(trackedEntity.attributes)}
+                                </Typography.Text>
+                                <Typography.Text>
+                                    {trackedEntity.syncStatus}
+                                </Typography.Text>
+                            </Flex>
+                        ),
+                        destroyOnHidden: true,
+                        children: (
+                            <Relation
+                                key={trackedEntity.trackedEntity}
+                                section={section}
+                                mainEvent={mainEvent}
+                                trackedEntity={trackedEntity}
+                            />
+                        ),
+                    };
+                })}
+                onChange={onChange}
+                accessKey={activeKey}
+                activeKey={activeKey}
+								
+            />
+        </Flex>
     );
 }

@@ -1,5 +1,5 @@
 import { PlusOutlined } from "@ant-design/icons";
-import { Button, Card, Form, Space, Typography } from "antd";
+import { Button, Card, Form, Grid, Space, Typography } from "antd";
 import React, { useMemo } from "react";
 
 import { useModalState } from "../hooks/useModalState";
@@ -17,6 +17,8 @@ import { SyncContext } from "../machines/sync";
 
 const { Title, Text } = Typography;
 const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
+    const screens = Grid.useBreakpoint();
+    const isMobile = !screens.lg;
     const {
         orgUnit: { id },
         programRuleVariables,
@@ -65,7 +67,10 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
             variant="borderless"
             style={{
                 textAlign: "center",
-                padding: "60px 40px",
+                height: isMobile ? undefined : "calc(100vh - 144px - 127px)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
             }}
         >
             <Space

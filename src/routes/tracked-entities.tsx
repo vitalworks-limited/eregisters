@@ -1,8 +1,5 @@
-import {
-    CalendarOutlined,
-    ScheduleOutlined,
-    UserOutlined,
-} from "@ant-design/icons";
+import { CalendarOutlined, UserOutlined } from "@ant-design/icons";
+import { and, eq, not, useLiveSuspenseQuery } from "@tanstack/react-db";
 import { createRoute, Outlet } from "@tanstack/react-router";
 import {
     Button,
@@ -20,11 +17,9 @@ import React from "react";
 import { DataElementField } from "../components/data-element-field";
 import { ClientSchema } from "../schemas";
 import { RootRoute } from "./__root";
-import { eq, useLiveSuspenseQuery, not, and } from "@tanstack/react-db";
 
 import dayjs from "dayjs";
 import { SyncContext } from "../machines";
-import { useCurrentUserInfo } from "@dhis2/app-runtime";
 
 const { Content } = Layout;
 const { Title } = Typography;
@@ -36,20 +31,20 @@ export const TrackedEntitiesRoute = createRoute({
 });
 
 function TrackedEntities() {
+    const {
+        program,
+        trackedEntityAttributes,
+        optionSets,
+        orgUnit: { id },
+    } = RootRoute.useLoaderData();
     const { enrollmentsCollection, trackedEntitiesCollection } =
         SyncContext.useSelector((a) => ({
             enrollmentsCollection: a.context.enrollmentsCollection,
             trackedEntitiesCollection: a.context.trackedEntitiesCollection,
         }));
 
-    const currentUser = useCurrentUserInfo();
-
-    const orgUnit = (
-        currentUser?.organisationUnits.map((a) => a.id) ?? []
-    ).join(";");
     const [form] = Form.useForm();
-    const { program, trackedEntityAttributes, optionSets } =
-        RootRoute.useLoaderData();
+
     const { data: total } = useLiveSuspenseQuery(
         (q) =>
             q
@@ -57,10 +52,10 @@ function TrackedEntities() {
                 .where(({ trackedEntities }) =>
                     and(
                         not(eq(trackedEntities.syncStatus, "draft")),
-                        eq(trackedEntities.orgUnit, orgUnit),
+                        eq(trackedEntities.orgUnit, id),
                     ),
                 ),
-        [orgUnit],
+        [id],
     );
     const { data: enrollments } = useLiveSuspenseQuery((q) =>
         q
@@ -69,7 +64,7 @@ function TrackedEntities() {
                 and(
                     eq(enrollments.enrolledAt, dayjs().format("YYYY-MM-DD")),
                     not(eq(enrollments.syncStatus, "draft")),
-                    eq(enrollments.orgUnit, orgUnit),
+                    eq(enrollments.orgUnit, id),
                 ),
             ),
     );
@@ -136,7 +131,11 @@ function TrackedEntities() {
                     <Card
                         title={<Title level={4}>Search clients</Title>}
                         variant="borderless"
-                        style={{ height: "100%" }}
+                        style={{
+                            height: isMobile
+                                ? undefined
+                                : "calc(100vh - 144px)",
+                        }}
                     >
                         <Form
                             form={form}

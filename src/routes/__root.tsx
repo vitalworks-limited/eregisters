@@ -35,7 +35,7 @@ dayjs.extend(relativeTime);
 const { Header } = Layout;
 const { Title, Text } = Typography;
 
-const queryInfo = async (user: string) => {
+const queryInfo = async (user: string, id: string) => {
     const dataElements = await db.dataElements.toArray();
     const trackedEntityAttributes = await db.trackedEntityAttributes.toArray();
     const programRules = await db.programRules.toArray();
@@ -43,7 +43,8 @@ const queryInfo = async (user: string) => {
     const optionGroups = await db.optionGroups.toArray();
     const optionSets = await db.optionSets.toArray();
     const [program] = await db.programs.toArray();
-    const [orgUnit] = await db.organisationUnits.where({ user }).toArray();
+    const orgUnit = await db.organisationUnits.get({ id, user });
+    if (orgUnit === undefined) throw new Error("No user with orgUnit found");
     return {
         dataElements: new Map(dataElements.map((de) => [de.id, de])),
         trackedEntityAttributes: new Map(
@@ -51,7 +52,9 @@ const queryInfo = async (user: string) => {
         ),
         programRules,
         programRuleVariables,
-        optionGroups: new Map(Object.entries(groupBy(optionGroups, "optionGroup"))),
+        optionGroups: new Map(
+            Object.entries(groupBy(optionGroups, "optionGroup")),
+        ),
         optionSets: new Map(Object.entries(groupBy(optionSets, "optionSet"))),
         program,
         programOrgUnits: new Set(
@@ -67,6 +70,7 @@ const queryInfo = async (user: string) => {
 export const RootRoute = createRootRouteWithContext<{
     syncActor: ReturnType<typeof SyncContext.useActorRef>;
     user: string;
+    ou: string;
 }>()({
     component: LayoutWithDrafts,
     pendingComponent: () => (
@@ -74,19 +78,14 @@ export const RootRoute = createRootRouteWithContext<{
             component={<Typography.Text>Loading Metadata</Typography.Text>}
         />
     ),
-    loader: async ({ context: { user } }) => {
+    loader: async ({ context: { user, ou } }) => {
         try {
-            let data = await queryInfo(user);
-            if (!data.orgUnit) {
-                await new Promise((resolve) => setTimeout(resolve, 500));
-                data = await queryInfo(user);
-            }
-
+            let data = await queryInfo(user, ou);
             return data;
         } catch (error) {
             await db.delete();
             await db.open();
-            return await queryInfo(user);
+            return await queryInfo(user, ou);
         }
     },
 });
@@ -176,6 +175,7 @@ function LayoutWithDrafts() {
                 eq(trackedEntities.syncStatus, "pending"),
             ),
     );
+
     const { data: pendingEnrollments } = useLiveSuspenseQuery((q) =>
         q
             .from({ enrollments: enrollmentsCollection })
@@ -187,8 +187,28 @@ function LayoutWithDrafts() {
             .where(({ events }) => eq(events.syncStatus, "pending")),
     );
 
+    const { data: failedTrackedEntities } = useLiveSuspenseQuery((q) =>
+        q
+            .from({ trackedEntities: trackedEntitiesCollection })
+            .where(({ trackedEntities }) =>
+                eq(trackedEntities.syncStatus, "failed"),
+            ),
+    );
+
+    const { data: failedEnrollments } = useLiveSuspenseQuery((q) =>
+        q
+            .from({ enrollments: enrollmentsCollection })
+            .where(({ enrollments }) => eq(enrollments.syncStatus, "failed")),
+    );
+    const { data: failedEvents } = useLiveSuspenseQuery((q) =>
+        q
+            .from({ events: eventsCollection })
+            .where(({ events }) => eq(events.syncStatus, "failed")),
+    );
+
     const screens = Grid.useBreakpoint();
-    const isMobile = !screens.md;
+    const isMobile = !screens.lg;
+		const isLarge = !screens.xl
     const [drawerOpen, setDrawerOpen] = useState(false);
 
     const navItems = (vertical: boolean) => (
@@ -210,7 +230,9 @@ function LayoutWithDrafts() {
                 isLoading={syncingData}
                 idleLabel="Pull Data"
                 loadingLabel="Pulling..."
-                lastTime={lastDataPull ? dayjs(lastDataPull).fromNow() : undefined}
+                lastTime={
+                    lastDataPull ? dayjs(lastDataPull).fromNow() : undefined
+                }
                 onClick={() => syncActor.send({ type: "START_DATA_SYNC" })}
             />
             <SyncButton
@@ -219,7 +241,11 @@ function LayoutWithDrafts() {
                 isLoading={syncingMetadata}
                 idleLabel="Sync Metadata"
                 loadingLabel="Syncing..."
-                lastTime={lastMetadataPull ? dayjs(lastMetadataPull).fromNow() : undefined}
+                lastTime={
+                    lastMetadataPull
+                        ? dayjs(lastMetadataPull).fromNow()
+                        : undefined
+                }
                 onClick={() => syncActor.send({ type: "FULL_METADATA_SYNC" })}
                 type="primary"
             />
@@ -240,8 +266,40 @@ function LayoutWithDrafts() {
                         isLoading={pushingData}
                         idleLabel="Push Data"
                         loadingLabel="Pushing..."
-                        lastTime={lastDataPush ? dayjs(lastDataPush).fromNow() : undefined}
+                        lastTime={
+                            lastDataPush
+                                ? dayjs(lastDataPush).fromNow()
+                                : undefined
+                        }
                         onClick={() => syncActor.send({ type: "PUSH_DATA" })}
+                        danger
+                    />
+                </Badge>
+            </Tooltip>
+
+            <Tooltip title="Failed Records">
+                <Badge
+                    count={
+                        failedEnrollments.length +
+                        failedEvents.length +
+                        failedTrackedEntities.length
+                    }
+                    style={{ backgroundColor: "red" }}
+                    title="Failed Records"
+                    showZero
+                >
+                    <SyncButton
+                        tooltip="View"
+                        icon={<CloudUploadOutlined />}
+                        isLoading={false}
+                        lastTime={
+                            lastDataPush
+                                ? dayjs(lastDataPush).fromNow()
+                                : undefined
+                        }
+                        idleLabel="View"
+                        loadingLabel="Viewing..."
+                        onClick={() => console.log("What can we do")}
                         danger
                     />
                 </Badge>
@@ -286,7 +344,7 @@ function LayoutWithDrafts() {
                     </Title>
                 </Flex>
 
-                {isMobile ? (
+                {isMobile || isLarge ? (
                     <Button
                         type="text"
                         icon={<MenuOutlined style={{ fontSize: 20 }} />}

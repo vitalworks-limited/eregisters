@@ -383,6 +383,95 @@ export const FlattenedEnrollmentSchema = EnrollmentsSchema.omit({
     version: z.number(),
 });
 
+export const Dhis2ReportSchema = z.object({
+    status: z.string(),
+    validationReport: z.object({
+        errorReports: z.array(
+            z.object({
+                message: z.string(),
+                errorCode: z.string(),
+                trackerType: z.string(),
+                uid: z.string(),
+                args: z.array(z.string()),
+            }),
+        ),
+        warningReports: z.array(z.unknown()),
+    }),
+    stats: z.object({
+        created: z.number(),
+        updated: z.number(),
+        deleted: z.number(),
+        ignored: z.number(),
+        total: z.number(),
+    }),
+    bundleReport: z.object({
+        typeReportMap: z.object({
+            RELATIONSHIP: z.object({
+                trackerType: z.string(),
+                stats: z.object({
+                    created: z.number(),
+                    updated: z.number(),
+                    deleted: z.number(),
+                    ignored: z.number(),
+                    total: z.number(),
+                }),
+                objectReports: z.array(z.unknown()),
+            }),
+            TRACKED_ENTITY: z.object({
+                trackerType: z.string(),
+                stats: z.object({
+                    created: z.number(),
+                    updated: z.number(),
+                    deleted: z.number(),
+                    ignored: z.number(),
+                    total: z.number(),
+                }),
+                objectReports: z.array(
+                    z.object({
+                        trackerType: z.string(),
+                        uid: z.string(),
+                        errorReports: z.array(z.unknown()),
+                    }),
+                ),
+            }),
+            EVENT: z.object({
+                trackerType: z.string(),
+                stats: z.object({
+                    created: z.number(),
+                    updated: z.number(),
+                    deleted: z.number(),
+                    ignored: z.number(),
+                    total: z.number(),
+                }),
+                objectReports: z.array(
+                    z.object({
+                        trackerType: z.string(),
+                        uid: z.string(),
+                        errorReports: z.array(z.unknown()),
+                    }),
+                ),
+            }),
+            ENROLLMENT: z.object({
+                trackerType: z.string(),
+                stats: z.object({
+                    created: z.number(),
+                    updated: z.number(),
+                    deleted: z.number(),
+                    ignored: z.number(),
+                    total: z.number(),
+                }),
+                objectReports: z.array(
+                    z.object({
+                        trackerType: z.string(),
+                        uid: z.string(),
+                        errorReports: z.array(z.unknown()),
+                    }),
+                ),
+            }),
+        }),
+    }),
+});
+
 export type Client = z.infer<typeof ClientSchema>;
 export type Program = z.infer<typeof ProgramSchema>;
 export type ProgramStage = z.infer<typeof ProgramStageSchema>;
@@ -425,6 +514,8 @@ export const MessageSchema = z.object({
 });
 
 export type Message = z.infer<typeof MessageSchema>;
+
+export type Dhis2Report = z.infer<typeof Dhis2ReportSchema>;
 
 export type ProgramRuleResult = {
     assignments: Record<string, any>;

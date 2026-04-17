@@ -1,22 +1,18 @@
 import { Form, FormInstance, Row, Typography } from "antd";
-import React from "react";
-import { EventContext, SyncContext } from "../machines";
+import React, { useCallback } from "react";
+import { EventContext } from "../machines";
 import { RootRoute } from "../routes/__root";
-import { FlattenedEvent } from "../schemas";
 import { buildCurrentDataElements } from "../utils/utils";
 import { DataElementRenderer } from "./data-element-renderer";
 
 export default function BasicForm({
     section,
     form,
-    event,
 }: {
     section: string;
     form: FormInstance;
-    event: FlattenedEvent;
 }) {
     const eventActor = EventContext.useActorRef();
-    const syncActor = SyncContext.useActorRef();
     const { program } = RootRoute.useLoaderData();
     const ruleResult = EventContext.useSelector(
         (state) => state.context.ruleResult,
@@ -30,25 +26,13 @@ export default function BasicForm({
         ({ name }) => name === "Child Health Services",
     )!;
 
-    const onFieldChange = (dataElement: string, value: any) => {
+    const onFieldChange = useCallback((dataElement: string, value: any) => {
         const allValues = { ...form.getFieldsValue(), [dataElement]: value };
         eventActor.send({
             type: "FIELD_CHANGED",
             formData: allValues,
         });
-        syncActor.send({
-            type: "SYNC_ENTITIES",
-            entities: [
-                {
-                    ...event,
-                    dataValues: {
-                        ...event.dataValues,
-                        ...allValues,
-                    },
-                },
-            ],
-        });
-    };
+    }, [eventActor, form]);
     return (
         <Form form={form} component={false} layout="vertical">
             <Typography.Title level={4} style={{ marginBottom: 16 }}>

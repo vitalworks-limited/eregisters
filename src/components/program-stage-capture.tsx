@@ -49,7 +49,6 @@ export const ProgramStageCapture: React.FC<{
 }) => {
     const screens = Grid.useBreakpoint();
     const isMobile = !screens.lg;
-    const syncActor = SyncContext.useActorRef();
     const { data, isOpen, openModal, closeModal } =
         useModalState<FlattenedEvent>();
     const { dataElements, optionSets, programRuleVariables, programRules } =
@@ -69,12 +68,15 @@ export const ProgramStageCapture: React.FC<{
     );
 
     const handleCreate = async () => {
+        console.log(mainEvent);
         const newEvent = createEmptyEvent({
             trackedEntity: trackedEntity.trackedEntity,
             program: enrollment.program,
             orgUnit: enrollment.orgUnit,
             enrollment: enrollment.enrollment,
             programStage: programStage.id,
+            occurredAt:
+                mainEvent.dataValues["occurredAt"] || mainEvent.occurredAt,
             dataValues: {
                 occurredAt:
                     mainEvent.dataValues["occurredAt"] || mainEvent.occurredAt,
@@ -101,9 +103,12 @@ export const ProgramStageCapture: React.FC<{
     const columns: TableProps<FlattenedEvent>["columns"] = [
         {
             title: "Date",
-            dataIndex: ["dataValues", "occurredAt"],
             key: "date",
-            render: (date) => dayjs(date).format("MMM DD, YYYY"),
+            render: (_, row) => {
+                return dayjs(
+                    row.dataValues["occurredAt"] || row.occurredAt,
+                ).format("MMM DD, YYYY");
+            },
         },
         ...programStage.programStageSections.flatMap((section) => {
             return section.dataElements.map((de) => {
@@ -247,24 +252,10 @@ export const ProgramStageCapture: React.FC<{
                             data.event,
                             (draft) => {
                                 draft.dataValues = values;
-                                draft.syncStatus = "pending";
+                                draft.syncStatus = "draft";
                                 draft.parentEvent = mainEvent.event;
                             },
                         );
-                        syncActor.send({
-                            type: "SYNC_ENTITIES",
-                            entities: [
-                                {
-                                    ...data,
-                                    dataValues: {
-                                        ...data.dataValues,
-                                        ...values,
-                                    },
-                                    syncStatus: "pending",
-                                    parentEvent: mainEvent.event,
-                                },
-                            ],
-                        });
                         await tx.isPersisted.promise;
                         if (addAnother) {
                             closeModal();

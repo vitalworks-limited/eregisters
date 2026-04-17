@@ -55,7 +55,6 @@ function TrackedEntitiesSearch() {
             trackedEntitiesCollection: a.context.trackedEntitiesCollection,
         }));
     const navigate = TrackedEntitiesIndexRoute.useNavigate();
-
     const mainStageDataElements = useMemo(
         () =>
             new Set(
@@ -95,7 +94,9 @@ function TrackedEntitiesSearch() {
                 );
             }
 
-            return query;
+            return query.where(({ trackedEntity }) =>
+                eq(trackedEntity.orgUnit, id),
+            );
         },
         [search],
     );
@@ -222,11 +223,16 @@ function TrackedEntitiesSearch() {
                     style={{ width: "100%" }}
                 >
                     <Text>{`${currentTrackedEntities.length} results matching`}</Text>
-                    <Button type="primary" size="large" onClick={createAndOpenNewPatient}>
+                    <Button
+                        type="primary"
+                        size="large"
+                        onClick={createAndOpenNewPatient}
+                    >
                         Register New Client
                     </Button>
                 </Flex>
             }
+            style={{ height: "calc(100vh - 144px)" }}
         >
             <Table
                 columns={columns}

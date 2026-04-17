@@ -161,7 +161,6 @@ export default function MainEventCapture({
         trackedEntitiesCollection: a.context.trackedEntitiesCollection,
         eventsCollection: a.context.eventsCollection,
     }));
-    const syncActor = SyncContext.useActorRef();
     const {
         data: childData,
         isOpen: childIsOpen,
@@ -205,22 +204,31 @@ export default function MainEventCapture({
         await trackedEntitiesCollection.utils.insertLocally(client);
         await enrollmentsCollection.utils.insertLocally(enrollment);
         openChildModal(client, enrollment);
-    }, [trackedEntity, form, trackedEntitiesCollection, enrollmentsCollection, openChildModal]);
-    const onFieldChange = useCallback(async (dataElement: string, value: any) => {
-        eventActor.send({
-            type: "FIELD_CHANGED",
-            formData: {
-                ...form.getFieldsValue(),
-                [dataElement]: value,
-            },
-        });
+    }, [
+        trackedEntity,
+        form,
+        trackedEntitiesCollection,
+        enrollmentsCollection,
+        openChildModal,
+    ]);
+    const onFieldChange = useCallback(
+        async (dataElement: string, value: any) => {
+            eventActor.send({
+                type: "FIELD_CHANGED",
+                formData: {
+                    ...form.getFieldsValue(),
+                    [dataElement]: value,
+                },
+            });
 
-        if (dataElement) {
-            if (dataElement === "REWqohCg4Km" && value === "Yes") {
-                await createChild();
+            if (dataElement) {
+                if (dataElement === "REWqohCg4Km" && value === "Yes") {
+                    await createChild();
+                }
             }
-        }
-    }, [eventActor, form, createChild]);
+        },
+        [eventActor, form, createChild],
+    );
     useEffect(() => {
         if (
             weightForAge === undefined &&
@@ -283,13 +291,9 @@ export default function MainEventCapture({
                     String(services)
                         .split(",")
                         .some((a) =>
-                            [
-                                "TB",
-                                "DR-TB",
-                                "Leprosy",
-                                "ART",
-                                "HTS",
-                            ].includes(a),
+                            ["TB", "DR-TB", "Leprosy", "ART", "HTS"].includes(
+                                a,
+                            ),
                         )
                 ) {
                     return {
@@ -354,12 +358,9 @@ export default function MainEventCapture({
                                                         currentDataElements={
                                                             currentDataElements
                                                         }
-                                                        ruleResult={
-                                                            ruleResult
-                                                        }
+                                                        ruleResult={ruleResult}
                                                         sectionLength={
-                                                            section
-                                                                .dataElements
+                                                            section.dataElements
                                                                 .length
                                                         }
                                                         form={form}
@@ -386,7 +387,16 @@ export default function MainEventCapture({
                     ];
                 });
             }),
-        [ruleResult, services, onFieldChange, program, trackedEntity, mainEvent, enrollment, form],
+        [
+            ruleResult,
+            services,
+            onFieldChange,
+            program,
+            trackedEntity,
+            mainEvent,
+            enrollment,
+            form,
+        ],
     );
 
     return (
@@ -531,7 +541,6 @@ export default function MainEventCapture({
                             (draft) => {
                                 draft.parentEntity =
                                     trackedEntity.trackedEntity;
-                                draft.syncStatus = "pending";
                             },
                         );
 
@@ -541,41 +550,11 @@ export default function MainEventCapture({
                             childEnrollment.enrollment,
                             (draft) => {
                                 draft.attributes = childData.attributes;
-                                draft.syncStatus = "pending";
                             },
                         );
                         await tx2.isPersisted.promise;
-                        const tx3 = eventsCollection.insert({
-                            ...childEvent,
-                            syncStatus: "pending",
-                        });
+                        const tx3 = eventsCollection.insert(childEvent);
                         await tx3.isPersisted.promise;
-
-                        syncActor.send({
-                            type: "SYNC_ENTITIES",
-                            entities: [
-                                {
-                                    ...childData,
-                                    attributes: {
-                                        ...childData.attributes,
-                                        ...values,
-                                    },
-                                    syncStatus: "pending",
-                                },
-                                {
-                                    ...childEnrollment,
-                                    attributes: {
-                                        ...childEnrollment.attributes,
-                                        ...values,
-                                    },
-                                    syncStatus: "pending",
-                                },
-                                {
-                                    ...childEvent,
-                                    syncStatus: "pending",
-                                },
-                            ],
-                        });
 
                         if (addAnother) {
                             closeChildModal();
