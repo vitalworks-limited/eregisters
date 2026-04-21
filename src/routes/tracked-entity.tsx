@@ -10,7 +10,7 @@ import {
 import { createRoute } from "@tanstack/react-router";
 import type { DescriptionsProps, TableProps } from "antd";
 
-import { and, eq, useLiveSuspenseQuery } from "@tanstack/react-db";
+import { and, eq, not, useLiveSuspenseQuery } from "@tanstack/react-db";
 import {
     Button,
     Card,
@@ -128,6 +128,7 @@ function TrackedEntityComponent() {
                         eq(events.trackedEntity, tei),
                         eq(events.programStage, "K2nxbE9ubSs"),
                         eq(events.orgUnit, id),
+                        not(eq(events.syncStatus, "deleted")),
                     ),
                 )
                 .orderBy(({ events }) => events.occurredAt, "desc");
@@ -140,7 +141,11 @@ function TrackedEntityComponent() {
             return q
                 .from({ events: eventsCollection })
                 .where(({ events }) =>
-                    and(eq(events.event, data?.event), eq(events.orgUnit, id)),
+                    and(
+                        eq(events.event, data?.event),
+                        eq(events.orgUnit, id),
+                        not(eq(events.syncStatus, "deleted")),
+                    ),
                 )
                 .findOne();
         },

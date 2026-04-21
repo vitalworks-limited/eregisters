@@ -1,4 +1,4 @@
-import { and, eq, useLiveSuspenseQuery } from "@tanstack/react-db";
+import { and, eq, not, useLiveSuspenseQuery } from "@tanstack/react-db";
 import { Form } from "antd";
 import React, { useMemo } from "react";
 import { EventContext, SyncContext } from "../machines";
@@ -47,6 +47,7 @@ export default function Relation({
                     and(
                         eq(events.parentEvent, mainEvent.event),
                         eq(events.trackedEntity, trackedEntity.trackedEntity),
+                        not(eq(events.syncStatus, "deleted")),
                     ),
                 )
                 .findOne(),

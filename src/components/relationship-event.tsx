@@ -1,4 +1,4 @@
-import { eq, useLiveSuspenseQuery } from "@tanstack/react-db";
+import { and, eq, not, useLiveSuspenseQuery } from "@tanstack/react-db";
 import { Flex, Tabs, Typography } from "antd";
 import React, { Key, useState } from "react";
 import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
@@ -39,14 +39,22 @@ export default function RelationshipEvent({
         q
             .from({ trackedEntity: trackedEntitiesCollection })
             .where(({ trackedEntity }) =>
-                eq(trackedEntity.parentEntity, tei.trackedEntity),
+                and(
+                    eq(trackedEntity.parentEntity, tei.trackedEntity),
+                    not(eq(trackedEntity.syncStatus, "deleted")),
+                ),
             ),
     );
 
     const { data: events } = useLiveSuspenseQuery((q) =>
         q
             .from({ event: eventsCollection })
-            .where(({ event }) => eq(event.parentEvent, mainEvent.event)),
+            .where(({ event }) =>
+                and(
+                    eq(event.parentEvent, mainEvent.event),
+                    not(eq(event.syncStatus, "deleted")),
+                ),
+            ),
     );
     const { data: enrollment } = useLiveSuspenseQuery((q) =>
         q
