@@ -61,9 +61,10 @@ function ModalContent<T extends FlattenedTrackedEntity | FlattenedEvent>({
     setLoading,
 }: ModalContentProps<T>) {
     const [form] = Form.useForm<T>();
-    const watchedValues = Form.useWatch((values) => values, form);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const watchedValues: Record<string, any> = Form.useWatch((values) => values, form) ?? {};
     const isSubmitDisabled =
-        requiredFields?.some((f) => !watchedValues?.[f]) ?? false;
+        requiredFields?.some((f) => !watchedValues[f]) ?? false;
 
     const [contentReady, setContentReady] = useState(false);
 
