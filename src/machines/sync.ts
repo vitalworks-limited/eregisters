@@ -985,7 +985,11 @@ export const syncMachine = setup({
                     .filter((e) => e.syncStatus === "pending" && !!e.occurredAt)
                     .toArray();
 
-                return syncReportToLocal({
+                const deletedEvents = await eventTable
+                    .filter((e) => e.syncStatus === "deleted")
+                    .toArray();
+
+                const upsertResult = await syncReportToLocal({
                     enrollmentsCollection,
                     trackedEntitiesCollection,
                     eventsCollection,
@@ -998,6 +1002,18 @@ export const syncMachine = setup({
                     validAttributeIds,
                     validDataElementsByStage,
                 });
+
+                const deleteResult = await syncDeleteToLocal({
+                    deletedEvents,
+                    engine,
+                    eventsCollection,
+                });
+
+                return {
+                    processed: upsertResult.processed + deletedEvents.length,
+                    succeeded: upsertResult.succeeded + deleteResult.succeeded,
+                    failed: upsertResult.failed + deleteResult.failed,
+                };
             },
         ),
         evaluateAllIndicators: fromPromise<
