@@ -186,26 +186,6 @@ function LayoutWithDrafts() {
             .from({ events: eventsCollection })
             .where(({ events }) => eq(events.syncStatus, "pending")),
     );
-
-    const { data: failedTrackedEntities } = useLiveSuspenseQuery((q) =>
-        q
-            .from({ trackedEntities: trackedEntitiesCollection })
-            .where(({ trackedEntities }) =>
-                eq(trackedEntities.syncStatus, "failed"),
-            ),
-    );
-
-    const { data: failedEnrollments } = useLiveSuspenseQuery((q) =>
-        q
-            .from({ enrollments: enrollmentsCollection })
-            .where(({ enrollments }) => eq(enrollments.syncStatus, "failed")),
-    );
-    const { data: failedEvents } = useLiveSuspenseQuery((q) =>
-        q
-            .from({ events: eventsCollection })
-            .where(({ events }) => eq(events.syncStatus, "failed")),
-    );
-
     const screens = Grid.useBreakpoint();
     const isMobile = !screens.lg;
 		const isLarge = !screens.xl
@@ -272,34 +252,6 @@ function LayoutWithDrafts() {
                                 : undefined
                         }
                         onClick={() => syncActor.send({ type: "PUSH_DATA" })}
-                        danger
-                    />
-                </Badge>
-            </Tooltip>
-
-            <Tooltip title="Failed Records">
-                <Badge
-                    count={
-                        failedEnrollments.length +
-                        failedEvents.length +
-                        failedTrackedEntities.length
-                    }
-                    style={{ backgroundColor: "red" }}
-                    title="Failed Records"
-                    showZero
-                >
-                    <SyncButton
-                        tooltip="View"
-                        icon={<CloudUploadOutlined />}
-                        isLoading={false}
-                        lastTime={
-                            lastDataPush
-                                ? dayjs(lastDataPush).fromNow()
-                                : undefined
-                        }
-                        idleLabel="View"
-                        loadingLabel="Viewing..."
-                        onClick={() => console.log("What can we do")}
                         danger
                     />
                 </Badge>

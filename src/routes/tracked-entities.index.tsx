@@ -344,7 +344,11 @@ function TrackedEntitiesSearch() {
                             },
                         }}
                     >
-                        <Form form={form} layout="vertical">
+                        <Form
+                            form={form}
+                            layout="vertical"
+                            initialValues={trackedEntity?.attributes}
+                        >
                             <TrackerRegistration
                                 trackedEntity={trackedEntity!}
                                 form={form}

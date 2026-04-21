@@ -225,6 +225,7 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
                                 form={form}
                                 layout="vertical"
                                 preserve={false}
+                                initialValues={trackedEntity?.attributes}
                             >
                                 <TrackerRegistration
                                     trackedEntity={trackedEntity!}

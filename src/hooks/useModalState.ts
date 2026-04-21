@@ -13,11 +13,13 @@ export function useModalState<
         null,
     );
     const [isOpen, setIsOpen] = useState(false);
+    const [isNew, setIsNew] = useState(false);
 
     const openModal = useCallback(
-        (modalData: T, enrollment: FlattenedEnrollment) => {
+        (modalData: T, enrollment: FlattenedEnrollment, newRecord = false) => {
             setData(modalData);
             setEnrollment(enrollment);
+            setIsNew(newRecord);
             setIsOpen(true);
         },
         [],
@@ -26,6 +28,7 @@ export function useModalState<
     const closeModal = useCallback(() => {
         setData(null);
         setEnrollment(null);
+        setIsNew(false);
         setIsOpen(false);
     }, []);
 
@@ -37,6 +40,7 @@ export function useModalState<
         data,
         enrollment,
         isOpen,
+        isNew,
         openModal,
         closeModal,
         updateData,

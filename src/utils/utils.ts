@@ -437,10 +437,6 @@ export function executeProgramRules({
                 break;
             }
 
-            const fullMatch = processedExpression.substring(
-                startPos,
-                closeParenPos + 1,
-            );
             const argsStr = processedExpression.substring(
                 openParenPos + 1,
                 closeParenPos,
@@ -778,8 +774,8 @@ export function executeProgramRules({
                         // console.log(`  🙈 HIDEFIELD: ${targetId}`);
                         if (!result.hiddenFields.includes(targetId)) {
                             result.hiddenFields.push(targetId);
+                            // result.assignments[targetId] = "";
                         }
-                        result.assignments[targetId] = "";
                     }
                     break;
 
@@ -1212,7 +1208,9 @@ export async function deleteRecursiveDraftSubtree(
     trackedEntityId: string | undefined,
     collections: {
         eventsCollection: ReturnType<typeof createEventCollection>;
-        trackedEntitiesCollection: ReturnType<typeof createTrackedEntityCollection>;
+        trackedEntitiesCollection: ReturnType<
+            typeof createTrackedEntityCollection
+        >;
         enrollmentsCollection: ReturnType<typeof createEnrollmentCollection>;
     },
 ): Promise<void> {
@@ -1226,8 +1224,7 @@ export async function deleteRecursiveDraftSubtree(
     if (eventId) {
         const childEvents = await eventsTable
             .filter(
-                (e) =>
-                    e.parentEvent === eventId && e.syncStatus === "draft",
+                (e) => e.parentEvent === eventId && e.syncStatus === "draft",
             )
             .toArray();
         for (const child of childEvents) {
@@ -1310,7 +1307,9 @@ export async function cancelDataModal(
     data: FlattenedEvent | FlattenedTrackedEntity,
     collections: {
         eventsCollection: ReturnType<typeof createEventCollection>;
-        trackedEntitiesCollection: ReturnType<typeof createTrackedEntityCollection>;
+        trackedEntitiesCollection: ReturnType<
+            typeof createTrackedEntityCollection
+        >;
         enrollmentsCollection: ReturnType<typeof createEnrollmentCollection>;
     },
 ): Promise<void> {

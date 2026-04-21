@@ -49,16 +49,19 @@ export const ProgramStageCapture: React.FC<{
 }) => {
     const screens = Grid.useBreakpoint();
     const isMobile = !screens.lg;
-    const { data, isOpen, openModal, closeModal } =
+    const { data, isOpen, isNew, openModal, closeModal } =
         useModalState<FlattenedEvent>();
     const { dataElements, optionSets, programRuleVariables, programRules } =
         RootRoute.useLoaderData();
-    const { eventsCollection, trackedEntitiesCollection, enrollmentsCollection } =
-        SyncContext.useSelector((a) => ({
-            eventsCollection: a.context.eventsCollection,
-            trackedEntitiesCollection: a.context.trackedEntitiesCollection,
-            enrollmentsCollection: a.context.enrollmentsCollection,
-        }));
+    const {
+        eventsCollection,
+        trackedEntitiesCollection,
+        enrollmentsCollection,
+    } = SyncContext.useSelector((a) => ({
+        eventsCollection: a.context.eventsCollection,
+        trackedEntitiesCollection: a.context.trackedEntitiesCollection,
+        enrollmentsCollection: a.context.enrollmentsCollection,
+    }));
 
     const mainStageDataElements = useMemo(
         () =>
@@ -71,7 +74,6 @@ export const ProgramStageCapture: React.FC<{
     );
 
     const handleCreate = async () => {
-        console.log(mainEvent);
         const newEvent = createEmptyEvent({
             trackedEntity: trackedEntity.trackedEntity,
             program: enrollment.program,
@@ -88,7 +90,7 @@ export const ProgramStageCapture: React.FC<{
         });
         const tx = eventsCollection.insert(newEvent);
         await tx.isPersisted.promise;
-        openModal(newEvent, enrollment);
+        openModal(newEvent, enrollment, true);
     };
 
     const { data: events } = useLiveSuspenseQuery((q) =>
@@ -273,7 +275,7 @@ export const ProgramStageCapture: React.FC<{
                         }
                     }
                 }}
-                title={programStage.name}
+                title={isNew ? programStage.name : `Edit ${programStage.name}`}
                 submitButtonText={`Save ${programStage.name}`}
                 hasAddAnother={true}
             >
@@ -302,6 +304,7 @@ export const ProgramStageCapture: React.FC<{
                                     form={form}
                                     layout="vertical"
                                     preserve={false}
+                                    initialValues={data?.dataValues}
                                 >
                                     <ProgramStageForm
                                         form={form}

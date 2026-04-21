@@ -13,13 +13,34 @@ export function applyRuleResultsToForm(
     form: FormInstance,
 ): { previousAssignments: Record<string, any> } {
     if (ruleResult && Object.keys(ruleResult.assignments).length > 0) {
-        form.setFieldsValue(ruleResult.assignments);
+        const assignmentsToApply: Record<string, any> = {};
+        Object.entries(ruleResult.assignments).forEach(([key, value]) => {
+            const hasNewValue =
+                value !== null && value !== undefined && value !== "";
+            // form.getFieldValue reads directly from the internal store,
+            // so it sees values set by setFieldsValue even before Form.Item
+            // fields have registered (which happens later in useEffect).
+            const currentValue = form.getFieldValue(key);
+            const hasCurrentValue =
+                currentValue !== undefined &&
+                currentValue !== null &&
+                currentValue !== "";
+            // Apply assignment only if it has a real value, or the field is
+            // currently empty (so empty assignments don't wipe existing values).
+            if (hasNewValue || !hasCurrentValue) {
+                assignmentsToApply[key] = value;
+            }
+        });
+        if (Object.keys(assignmentsToApply).length > 0) {
+            form.setFieldsValue(assignmentsToApply);
+        }
     }
     if (ruleResult && ruleResult.hiddenFields.length > 0) {
-        const currentData = form.getFieldsValue();
         const fieldsToClear: Record<string, any> = {};
         ruleResult.hiddenFields.forEach((hiddenFieldId) => {
-            const currentValue = currentData[hiddenFieldId];
+            // Use getFieldValue (store-level) rather than getFieldsValue
+            // so we can read values set via setFieldsValue before fields register.
+            const currentValue = form.getFieldValue(hiddenFieldId);
             if (
                 currentValue !== undefined &&
                 currentValue !== null &&

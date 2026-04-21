@@ -45,7 +45,7 @@ const stages: Map<string, number> = new Map([
     ["zKGWob5AZKP", 3],
     ["K2nxbE9ubSs", 2],
     ["DA0Yt3V16AN", 4],
-    ["wmPg6qplttg", 8],
+    ["wmPg6qplttg", 0],
 ]);
 
 const createPatientAndLink = (
@@ -595,6 +595,7 @@ export default function MainEventCapture({
                                     form={form}
                                     layout="vertical"
                                     preserve={false}
+                                    initialValues={childData?.attributes}
                                 >
                                     {childData ? (
                                         <TrackerRegistration

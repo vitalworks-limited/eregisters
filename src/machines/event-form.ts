@@ -53,10 +53,7 @@ export const eventFormMachine = setup({
     },
     actions: {
         updateForm: ({ context: { form, event } }) => {
-            form.setFieldsValue({
-                ...form.getFieldsValue(),
-                ...event.dataValues,
-            });
+            form.setFieldsValue(event.dataValues);
         },
         updateFormData: assign({
             formData: ({ context: { event, formData } }) => {

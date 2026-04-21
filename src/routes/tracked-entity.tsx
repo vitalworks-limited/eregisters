@@ -84,7 +84,7 @@ function TrackedEntityComponent() {
     }));
 
     const syncActor = SyncContext.useActorRef();
-    const { data, isOpen, openModal, closeModal } =
+    const { data, isOpen, isNew, openModal, closeModal } =
         useModalState<FlattenedEvent>();
 
     const {
@@ -208,6 +208,21 @@ function TrackedEntityComponent() {
                 render: (text) => renderTags(text, "green"),
             },
             {
+                title: "Referral",
+                dataIndex: ["dataValues", "EzGu4kzZZTz"],
+                key: "referral",
+            },
+            {
+                title: "Weight",
+                dataIndex: ["dataValues", "scpPwoNsS27"],
+                key: "weight",
+            },
+            {
+                title: "Height",
+                dataIndex: ["dataValues", "uIFJ94mZt0S"],
+                key: "height",
+            },
+            {
                 title: "Sync Status",
                 dataIndex: "syncStatus",
                 key: "syncStatus",
@@ -279,7 +294,7 @@ function TrackedEntityComponent() {
         });
         const tx = eventsCollection.insert(newEvent);
         await tx.isPersisted.promise;
-        openModal(newEvent, enrollment);
+        openModal(newEvent, enrollment, true);
     };
 
     const leftPanel = (
@@ -452,13 +467,13 @@ function TrackedEntityComponent() {
                             string
                         > = enrollmentsCollection.utils.getTable();
 
-                        const relatedEvents = await eventTable
-                            .filter(
-                                (a) =>
-                                    a.parentEvent === data.event &&
-                                    a.syncStatus !== "synced",
-                            )
+                        const allRelatedEvents = await eventTable
+                            .filter((a) => a.parentEvent === data.event)
                             .toArray();
+
+                        const relatedEvents = allRelatedEvents.filter(
+                            (a) => a.syncStatus !== "synced",
+                        );
 
                         const relatedTrackedEntities = await trackedEntityTable
                             .filter(
@@ -477,6 +492,22 @@ function TrackedEntityComponent() {
                             )
                             .toArray();
 
+                        const labTests = allRelatedEvents
+                            .flatMap((e) => {
+                                const test = e.dataValues["uiTFOkMMwV3"];
+                                const result =
+                                    e.dataValues["TeQOPJ6zH3t"] ??
+                                    e.dataValues["yzmgiNZEUCz"];
+                                if (!test && !result) return [];
+                                return [`${test ?? ""}:${result ?? ""}`];
+                            })
+                            .join(",");
+
+                        const medicines = allRelatedEvents
+                            .map((e) => e.dataValues["ZDN18IlfOGh"])
+                            .filter(Boolean)
+                            .join(",");
+
                         const entities: Array<
                             | FlattenedEvent
                             | FlattenedTrackedEntity
@@ -487,6 +518,8 @@ function TrackedEntityComponent() {
                                 dataValues: {
                                     ...data.dataValues,
                                     ...values,
+                                    yD9PfCqR9KO: labTests,
+                                    EC6EsBLkoGF: medicines,
                                 },
                             },
                             ...relatedEvents,
@@ -531,8 +564,9 @@ function TrackedEntityComponent() {
                         });
                     }
                 }}
-                title="New Visit"
+                title={isNew ? "New Visit" : "Edit Visit"}
                 submitButtonText="Save Visit"
+                requiredFields={["occurredAt", "mrKZWf2WMIC"]}
             >
                 {(form) => {
                     if (data) {
@@ -558,6 +592,7 @@ function TrackedEntityComponent() {
                                     form={form}
                                     layout="vertical"
                                     preserve={false}
+                                    initialValues={data?.dataValues}
                                 >
                                     <MainEventCapture
                                         form={form}
@@ -653,7 +688,12 @@ function TrackedEntityComponent() {
                             },
                         }}
                     >
-                        <Form form={form} layout="vertical" preserve={false}>
+                        <Form
+                            form={form}
+                            layout="vertical"
+                            preserve={false}
+                            initialValues={trackedEntityData?.attributes}
+                        >
                             <TrackerRegistration
                                 trackedEntity={trackedEntityData!}
                                 form={form}
