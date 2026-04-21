@@ -894,15 +894,48 @@ export const syncMachine = setup({
                     validDataElementsByStage,
                 } = input;
 
-                const result = await syncReportToLocal({
-                    enrollmentsCollection,
-                    eventsCollection,
-                    trackedEntitiesCollection,
-                    entities,
-                    engine,
-                    validAttributeIds,
-                    validDataElementsByStage,
-                });
+                const toUpsert = entities.filter(
+                    (e) =>
+                        !("event" in e) ||
+                        (e as FlattenedEvent).syncStatus !== "deleted",
+                );
+                const toDelete = entities.filter(
+                    (e) =>
+                        "event" in e &&
+                        (e as FlattenedEvent).syncStatus === "deleted",
+                ) as FlattenedEvent[];
+
+                let result = { processed: 0, succeeded: 0, failed: 0 };
+
+                if (toUpsert.length > 0) {
+                    const upsertResult = await syncReportToLocal({
+                        enrollmentsCollection,
+                        eventsCollection,
+                        trackedEntitiesCollection,
+                        entities: toUpsert,
+                        engine,
+                        validAttributeIds,
+                        validDataElementsByStage,
+                    });
+                    result = {
+                        processed: result.processed + upsertResult.processed,
+                        succeeded: result.succeeded + upsertResult.succeeded,
+                        failed: result.failed + upsertResult.failed,
+                    };
+                }
+
+                if (toDelete.length > 0) {
+                    const deleteResult = await syncDeleteToLocal({
+                        deletedEvents: toDelete,
+                        engine,
+                        eventsCollection,
+                    });
+                    result = {
+                        processed: result.processed + toDelete.length,
+                        succeeded: result.succeeded + deleteResult.succeeded,
+                        failed: result.failed + deleteResult.failed,
+                    };
+                }
 
                 return result;
             },
