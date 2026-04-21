@@ -4,7 +4,7 @@ import {
     EyeOutlined,
     PlusOutlined,
 } from "@ant-design/icons";
-import { and, eq, useLiveSuspenseQuery } from "@tanstack/react-db";
+import { and, eq, not, useLiveSuspenseQuery } from "@tanstack/react-db";
 import {
     Button,
     Flex,
@@ -28,7 +28,7 @@ import {
     FlattenedTrackedEntity,
     ProgramStage,
 } from "../schemas";
-import { cancelDataModal, createEmptyEvent } from "../utils/utils";
+import { cancelDataModal, createEmptyEvent, deleteEventWithChildren } from "../utils/utils";
 import { DataModal } from "./data-modal";
 import ProgramStageForm from "./program-stage-form";
 
@@ -53,6 +53,7 @@ export const ProgramStageCapture: React.FC<{
         useModalState<FlattenedEvent>();
     const { dataElements, optionSets, programRuleVariables, programRules } =
         RootRoute.useLoaderData();
+    const syncActor = SyncContext.useActorRef();
     const {
         eventsCollection,
         trackedEntitiesCollection,
@@ -98,6 +99,7 @@ export const ProgramStageCapture: React.FC<{
             return and(
                 eq(event.programStage, programStage.id),
                 eq(event.parentEvent, mainEvent.event),
+                not(eq(event.syncStatus, "deleted")),
             );
         }),
     );
@@ -149,16 +151,22 @@ export const ProgramStageCapture: React.FC<{
                         okType="danger"
                         onConfirm={async () => {
                             try {
-                                const tx = eventsCollection.update(
-                                    record.event,
-                                    (draft) => {
-                                        draft.syncStatus = "deleted";
-                                    },
-                                );
-                                await tx.isPersisted.promise;
-                                message.success(
-                                    "Event marked for deletion and will sync to DHIS2",
-                                );
+                                const { markedDeleted } =
+                                    await deleteEventWithChildren(
+                                        record.event,
+                                        {
+                                            eventsCollection,
+                                            trackedEntitiesCollection,
+                                            enrollmentsCollection,
+                                        },
+                                    );
+                                if (markedDeleted.length > 0) {
+                                    syncActor.send({
+                                        type: "SYNC_ENTITIES",
+                                        entities: markedDeleted,
+                                    });
+                                }
+                                message.success("Event deleted");
                             } catch (error) {
                                 console.error("Failed to delete event:", error);
                                 message.error("Failed to delete event");
