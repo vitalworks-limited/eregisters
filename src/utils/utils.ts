@@ -22,6 +22,7 @@ import { zScoreBMIFA, zScoreHFA, zScoreWFA, zScoreWFH } from "./who-zscore";
 import { createEnrollmentCollection } from "../collections/enrollments";
 import { createEventCollection } from "../collections/events";
 import { createTrackedEntityCollection } from "../collections/tracked-entities";
+import { db } from "../db";
 
 const GRID_TOTAL = 24;
 
@@ -1287,6 +1288,129 @@ export async function deleteRecursiveDraftSubtree(
             await tx.isPersisted.promise;
         }
     }
+}
+
+/**
+ * Deletes an event and its full subtree (both parentEvent and parentEntity dimensions).
+ * - Draft/pending events are hard-deleted locally immediately.
+ * - Synced/failed events are marked syncStatus="deleted" for DHIS2 deletion.
+ * Returns the list of non-draft events marked for deletion so callers can trigger sync.
+ */
+export async function deleteEventWithChildren(
+    eventId: string,
+    collections: {
+        eventsCollection: ReturnType<typeof createEventCollection>;
+        trackedEntitiesCollection: ReturnType<
+            typeof createTrackedEntityCollection
+        >;
+        enrollmentsCollection: ReturnType<typeof createEnrollmentCollection>;
+    },
+): Promise<{ markedDeleted: FlattenedEvent[] }> {
+    const eventsTable: DexieTable<FlattenedEvent, string> =
+        collections.eventsCollection.utils.getTable();
+    const teTable: DexieTable<FlattenedTrackedEntity, string> =
+        collections.trackedEntitiesCollection.utils.getTable();
+    const enrollmentsTable: DexieTable<FlattenedEnrollment, string> =
+        collections.enrollmentsCollection.utils.getTable();
+
+    const markedDeleted: FlattenedEvent[] = [];
+
+    // Get the root event to know its trackedEntity (needed for TE-children dimension)
+    const rootEvent = await eventsTable.get(eventId);
+    if (!rootEvent) return { markedDeleted };
+
+    // --- Recursive helper ---
+    async function processEvent(event: FlattenedEvent): Promise<void> {
+        // 1. Event-children dimension: events whose parentEvent === this event
+        const directChildEvents = await eventsTable
+            .filter((e) => e.parentEvent === event.event)
+            .toArray();
+        for (const child of directChildEvents) {
+            await processEvent(child);
+        }
+
+        // 2. TE-children dimension: TEs whose parentEntity === this event's trackedEntity
+        //    then process all events belonging to those child TEs
+        const childTEs = await teTable
+            .filter((te) => te.parentEntity === event.trackedEntity)
+            .toArray();
+        for (const childTE of childTEs) {
+            // Find all events for this child TE
+            const childTEEvents = await eventsTable
+                .filter((e) => e.trackedEntity === childTE.trackedEntity)
+                .toArray();
+            for (const childTEEvent of childTEEvents) {
+                await processEvent(childTEEvent);
+            }
+            // Clean up the child TE's enrollments
+            const childEnrollments = await enrollmentsTable
+                .where("trackedEntity")
+                .equals(childTE.trackedEntity)
+                .toArray();
+            for (const enrollment of childEnrollments) {
+                if (
+                    enrollment.syncStatus === "draft" ||
+                    enrollment.syncStatus === "pending"
+                ) {
+                    const tx = collections.enrollmentsCollection.delete(
+                        enrollment.enrollment,
+                    );
+                    await tx.isPersisted.promise;
+                } else {
+                    const tx = collections.enrollmentsCollection.update(
+                        enrollment.enrollment,
+                        (d) => {
+                            d.syncStatus = "deleted";
+                        },
+                    );
+                    await tx.isPersisted.promise;
+                }
+            }
+            // Clean up the child TE itself
+            if (
+                childTE.syncStatus === "draft" ||
+                childTE.syncStatus === "pending"
+            ) {
+                const tx = collections.trackedEntitiesCollection.delete(
+                    childTE.trackedEntity,
+                );
+                await tx.isPersisted.promise;
+            } else {
+                const tx = collections.trackedEntitiesCollection.update(
+                    childTE.trackedEntity,
+                    (d) => {
+                        d.syncStatus = "deleted";
+                    },
+                );
+                await tx.isPersisted.promise;
+            }
+        }
+
+        // 3. Now handle this event itself (after its children are processed)
+        if (
+            event.syncStatus === "draft" ||
+            event.syncStatus === "pending"
+        ) {
+            const tx = collections.eventsCollection.delete(event.event);
+            await tx.isPersisted.promise;
+            await db.indicatorEvaluations
+                .where("eventId")
+                .equals(event.event)
+                .delete();
+        } else {
+            const tx = collections.eventsCollection.update(
+                event.event,
+                (d) => {
+                    d.syncStatus = "deleted";
+                },
+            );
+            await tx.isPersisted.promise;
+            markedDeleted.push({ ...event, syncStatus: "deleted" });
+        }
+    }
+
+    await processEvent(rootEvent);
+    return { markedDeleted };
 }
 
 /**
