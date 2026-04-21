@@ -16,7 +16,10 @@ import type {
  * Converts flat attributes object to array of {attribute, value} objects
  * Handles parent entity relationship via FhyNxUVOpjh attribute
  */
-export function transformTrackedEntity(te: FlattenedTrackedEntity) {
+export function transformTrackedEntity(
+    te: FlattenedTrackedEntity,
+    validAttributeIds?: Set<string>,
+) {
     const { attributes, ...rest } = te;
     const { enrolledAt, ...teAttributes } = attributes;
 
@@ -28,6 +31,8 @@ export function transformTrackedEntity(te: FlattenedTrackedEntity) {
         ...rest,
         attributes: Object.entries(finalAttributes).flatMap(
             ([attribute, value]: [string, any]) => {
+                if (validAttributeIds?.size && !validAttributeIds.has(attribute))
+                    return [];
                 if (value !== undefined && value !== null && value !== "") {
                     return { attribute, value: String(value) };
                 }
@@ -36,7 +41,10 @@ export function transformTrackedEntity(te: FlattenedTrackedEntity) {
         ),
     };
 }
-export function transformEnrollment(enrollment: FlattenedEnrollment) {
+export function transformEnrollment(
+    enrollment: FlattenedEnrollment,
+    validAttributeIds?: Set<string>,
+) {
     const { attributes, ...rest } = enrollment;
     const { enrolledAt, ...enrollmentAttributes } = attributes;
 
@@ -45,6 +53,8 @@ export function transformEnrollment(enrollment: FlattenedEnrollment) {
         enrolledAt: enrolledAt || rest.enrolledAt,
         attributes: Object.entries(enrollmentAttributes).flatMap(
             ([attribute, value]: [string, any]) => {
+                if (validAttributeIds?.size && !validAttributeIds.has(attribute))
+                    return [];
                 if (value !== undefined && value !== null && value !== "") {
                     return { attribute, value: String(value) };
                 }
@@ -54,7 +64,10 @@ export function transformEnrollment(enrollment: FlattenedEnrollment) {
     };
 }
 
-export function transformEvent(event: FlattenedEvent) {
+export function transformEvent(
+    event: FlattenedEvent,
+    validDataElementIds?: Set<string>,
+) {
     const { dataValues, ...eventRest } = event;
     const { occurredAt, ...otherDataElements } = dataValues;
 
@@ -71,6 +84,8 @@ export function transformEvent(event: FlattenedEvent) {
         ...eventRest,
         dataValues: Object.entries(finalDataValues).flatMap(
             ([dataElement, value]: [string, any]) => {
+                if (validDataElementIds?.size && !validDataElementIds.has(dataElement))
+                    return [];
                 if (value !== undefined && value !== null && value !== "") {
                     if (Array.isArray(value)) {
                         return { dataElement, value: value.join(",") };

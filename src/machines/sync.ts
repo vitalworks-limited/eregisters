@@ -45,6 +45,35 @@ import {
     flattenTrackedEntity,
 } from "../utils/utils";
 
+function deriveValidIds(program: Program | undefined): {
+    validAttributeIds: Set<string>;
+    validDataElementsByStage: Map<string, Set<string>>;
+} {
+    if (!program) {
+        return {
+            validAttributeIds: new Set(),
+            validDataElementsByStage: new Map(),
+        };
+    }
+    return {
+        validAttributeIds: new Set(
+            program.programTrackedEntityAttributes.map(
+                (ptea) => ptea.trackedEntityAttribute.id,
+            ),
+        ),
+        validDataElementsByStage: new Map(
+            program.programStages.map((stage) => [
+                stage.id,
+                new Set(
+                    stage.programStageDataElements.map(
+                        (psde) => psde.dataElement.id,
+                    ),
+                ),
+            ]),
+        ),
+    };
+}
+
 type Resource =
     | "programs"
     | "programStages"
@@ -73,6 +102,8 @@ export interface SyncContext {
     user: string;
     orgUnit: string;
     skipLastDataPull: boolean;
+    validAttributeIds: Set<string>;
+    validDataElementsByStage: Map<string, Set<string>>;
 }
 
 const syncReportToLocal = async ({
@@ -81,6 +112,8 @@ const syncReportToLocal = async ({
     eventsCollection,
     trackedEntitiesCollection,
     engine,
+    validAttributeIds,
+    validDataElementsByStage,
 }: {
     entities: Array<
         FlattenedTrackedEntity | FlattenedEnrollment | FlattenedEvent
@@ -89,6 +122,8 @@ const syncReportToLocal = async ({
     eventsCollection: ReturnType<typeof createEventCollection>;
     trackedEntitiesCollection: ReturnType<typeof createTrackedEntityCollection>;
     engine: ReturnType<typeof useDataEngine>;
+    validAttributeIds: Set<string>;
+    validDataElementsByStage: Map<string, Set<string>>;
 }) => {
     const payload = entities.reduce<{
         trackedEntities: TrackedEntity[];
@@ -97,11 +132,18 @@ const syncReportToLocal = async ({
     }>(
         (acc, entity) => {
             if ("trackedEntityType" in entity) {
-                acc.trackedEntities.push(transformTrackedEntity(entity));
+                acc.trackedEntities.push(
+                    transformTrackedEntity(entity, validAttributeIds),
+                );
             } else if ("enrolledAt" in entity) {
-                acc.enrollments.push(transformEnrollment(entity));
+                acc.enrollments.push(
+                    transformEnrollment(entity, validAttributeIds),
+                );
             } else if ("event" in entity) {
-                acc.events.push(transformEvent(entity));
+                const stageIds =
+                    validDataElementsByStage.get(entity.programStage) ??
+                    new Set<string>();
+                acc.events.push(transformEvent(entity, stageIds));
             }
             return acc;
         },
@@ -314,9 +356,11 @@ export const syncMachine = setup({
                     const metadataVersion =
                         await db.metadataVersions.get("metadata-version");
                     const wasIndexedDBDeleted = !metadataVersion?.lastSync;
+                    const [program] = await db.programs.toArray();
                     return {
                         needsSyncing: hasEmptyTables || wasIndexedDBDeleted,
                         metadataVersion: metadataVersion,
+                        program,
                     };
                 } catch (error) {
                     await db.delete();
@@ -324,6 +368,7 @@ export const syncMachine = setup({
                     return {
                         needsSyncing: true,
                         metadataVersion: undefined,
+                        program: undefined,
                     };
                 }
             },
@@ -478,7 +523,7 @@ export const syncMachine = setup({
             },
         ),
         pullResource: fromPromise<
-            MetadataVersion | undefined,
+            { version: MetadataVersion | undefined; program: Program | undefined },
             {
                 resources: Resource[];
                 engine: ReturnType<typeof useDataEngine>;
@@ -747,7 +792,8 @@ export const syncMachine = setup({
             }
 
             const version = await db.metadataVersions.get("metadata-version");
-            return version;
+            const [program] = await db.programs.toArray();
+            return { version, program };
         }),
         deleteAllMetadata: fromPromise(async () => {}),
         deleteAllData: fromPromise<
@@ -791,6 +837,8 @@ export const syncMachine = setup({
                         typeof createEnrollmentCollection
                     >;
                     eventsCollection: ReturnType<typeof createEventCollection>;
+                    validAttributeIds: Set<string>;
+                    validDataElementsByStage: Map<string, Set<string>>;
                 };
             }) => {
                 const {
@@ -799,6 +847,8 @@ export const syncMachine = setup({
                     trackedEntitiesCollection,
                     enrollmentsCollection,
                     eventsCollection,
+                    validAttributeIds,
+                    validDataElementsByStage,
                 } = input;
 
                 const result = await syncReportToLocal({
@@ -807,6 +857,8 @@ export const syncMachine = setup({
                     trackedEntitiesCollection,
                     entities,
                     engine,
+                    validAttributeIds,
+                    validDataElementsByStage,
                 });
 
                 return result;
@@ -825,6 +877,8 @@ export const syncMachine = setup({
                         typeof createEnrollmentCollection
                     >;
                     eventsCollection: ReturnType<typeof createEventCollection>;
+                    validAttributeIds: Set<string>;
+                    validDataElementsByStage: Map<string, Set<string>>;
                 };
             }) => {
                 const {
@@ -832,6 +886,8 @@ export const syncMachine = setup({
                     trackedEntitiesCollection,
                     enrollmentsCollection,
                     eventsCollection,
+                    validAttributeIds,
+                    validDataElementsByStage,
                 } = input;
 
                 const teTable: Table<FlattenedTrackedEntity, string> =
@@ -863,6 +919,8 @@ export const syncMachine = setup({
                         ...pendingEvents,
                     ],
                     engine,
+                    validAttributeIds,
+                    validDataElementsByStage,
                 });
             },
         ),
@@ -1013,6 +1071,8 @@ export const syncMachine = setup({
             user,
             orgUnit,
             skipLastDataPull: true,
+            validAttributeIds: new Set<string>(),
+            validDataElementsByStage: new Map<string, Set<string>>(),
         };
     },
     states: {
@@ -1034,6 +1094,7 @@ export const syncMachine = setup({
                                     skipLastMetadataPull: false,
                                     lastMetadataPull:
                                         event.output.metadataVersion?.lastSync,
+                                    ...deriveValidIds(event.output.program),
                                 })),
                             },
                             {
@@ -1041,6 +1102,7 @@ export const syncMachine = setup({
                                 actions: assign(({ event }) => ({
                                     lastMetadataPull:
                                         event.output.metadataVersion?.lastSync,
+                                    ...deriveValidIds(event.output.program),
                                 })),
                             },
                         ],
@@ -1088,7 +1150,9 @@ export const syncMachine = setup({
                         }),
                         onDone: {
                             actions: assign(({ event }) => ({
-                                lastMetadataPull: event.output?.lastSync,
+                                lastMetadataPull:
+                                    event.output?.version?.lastSync,
+                                ...deriveValidIds(event.output?.program),
                             })),
                             target: "waiting",
                         },
@@ -1155,6 +1219,9 @@ export const syncMachine = setup({
                                 enrollmentsCollection:
                                     context.enrollmentsCollection,
                                 eventsCollection: context.eventsCollection,
+                                validAttributeIds: context.validAttributeIds,
+                                validDataElementsByStage:
+                                    context.validDataElementsByStage,
                             };
                         },
                         onDone: {
@@ -1182,6 +1249,9 @@ export const syncMachine = setup({
                             enrollmentsCollection:
                                 context.enrollmentsCollection,
                             eventsCollection: context.eventsCollection,
+                            validAttributeIds: context.validAttributeIds,
+                            validDataElementsByStage:
+                                context.validDataElementsByStage,
                         }),
                         onDone: {
                             target: "updateLastDataPush",
