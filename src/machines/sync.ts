@@ -258,6 +258,49 @@ const syncReportToLocal = async ({
     };
 };
 
+const syncDeleteToLocal = async ({
+    deletedEvents,
+    engine,
+    eventsCollection,
+}: {
+    deletedEvents: FlattenedEvent[];
+    engine: ReturnType<typeof useDataEngine>;
+    eventsCollection: ReturnType<typeof createEventCollection>;
+}): Promise<{ succeeded: number; failed: number }> => {
+    if (deletedEvents.length === 0) return { succeeded: 0, failed: 0 };
+
+    const response = (await engine.mutate({
+        resource: "tracker",
+        type: "create",
+        data: { events: deletedEvents.map((e) => ({ event: e.event })) },
+        params: {
+            async: false,
+            importStrategy: "DELETE",
+            atomicMode: "OBJECT",
+        },
+    })) as unknown as Dhis2Report;
+
+    const succeededUids = new Set(
+        response.bundleReport.typeReportMap.EVENT.objectReports.map(
+            (r) => r.uid,
+        ),
+    );
+    const failedUids = new Map(
+        response.validationReport.errorReports.map((r) => [r.uid, r.message]),
+    );
+
+    for (const uid of succeededUids) {
+        const tx = eventsCollection.delete(uid);
+        await tx.isPersisted.promise;
+        await db.indicatorEvaluations.where("eventId").equals(uid).delete();
+    }
+
+    return {
+        succeeded: succeededUids.size,
+        failed: failedUids.size,
+    };
+};
+
 export type SyncEvent =
     | {
           type: "SYNC_ENTITIES";
