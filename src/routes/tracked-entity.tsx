@@ -43,7 +43,7 @@ import {
     FlattenedEvent,
     FlattenedTrackedEntity,
 } from "../schemas";
-import { cancelDataModal, createEmptyEvent } from "../utils/utils";
+import { cancelDataModal, createEmptyEvent, deleteEventWithChildren } from "../utils/utils";
 import { RootRoute } from "./__root";
 
 export const TrackedEntityRoute = createRoute({
@@ -249,19 +249,27 @@ function TrackedEntityComponent() {
                             okText="Delete"
                             okType="danger"
                             onConfirm={async () => {
-                                if (record.syncStatus === "draft") {
-                                    const tx = eventsCollection.delete(
-                                        record.event,
+                                try {
+                                    const { markedDeleted } =
+                                        await deleteEventWithChildren(
+                                            record.event,
+                                            {
+                                                eventsCollection,
+                                                trackedEntitiesCollection,
+                                                enrollmentsCollection,
+                                            },
+                                        );
+                                    if (markedDeleted.length > 0) {
+                                        syncActor.send({
+                                            type: "SYNC_ENTITIES",
+                                            entities: markedDeleted,
+                                        });
+                                    }
+                                } catch (error) {
+                                    console.error(
+                                        "Failed to delete event:",
+                                        error,
                                     );
-                                    await tx.isPersisted.promise;
-                                } else {
-                                    const tx = eventsCollection.update(
-                                        record.event,
-                                        (draft) => {
-                                            draft.syncStatus = "deleted";
-                                        },
-                                    );
-                                    await tx.isPersisted.promise;
                                 }
                             }}
                         >
