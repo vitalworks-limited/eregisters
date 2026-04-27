@@ -1,7 +1,6 @@
 import { createActorContext } from "@xstate/react";
 import { FormInstance } from "antd";
 import { assertEvent, assign, fromPromise, setup } from "xstate";
-import { createTrackedEntityCollection } from "../collections";
 import {
     FlattenedTrackedEntity,
     ProgramRule,
@@ -14,6 +13,7 @@ import {
     programRuleResultsEqual,
 } from "../utils/utils";
 import { applyRuleResultsToForm, FormEvent } from "./common";
+import { trackedEntitiesCollection } from "../collections";
 
 export const trackedEntityFormMachine = setup({
     types: {
@@ -30,9 +30,6 @@ export const trackedEntityFormMachine = setup({
             form: FormInstance;
             persistenceError: string | null;
             previousAssignments: Record<string, any>;
-            trackedEntitiesCollection: ReturnType<
-                typeof createTrackedEntityCollection
-            >;
         },
         input: {} as {
             programRules: ProgramRule[];
@@ -41,9 +38,6 @@ export const trackedEntityFormMachine = setup({
             validDataElements: Set<string>;
             program: string;
             form: FormInstance;
-            trackedEntitiesCollection: ReturnType<
-                typeof createTrackedEntityCollection
-            >;
         },
     },
     actions: {
@@ -97,14 +91,11 @@ export const trackedEntityFormMachine = setup({
     actors: {
         persist: fromPromise(
             async ({
-                input: { data, formData, trackedEntitiesCollection },
+                input: { data, formData },
             }: {
                 input: {
                     data: FlattenedTrackedEntity;
                     formData: Record<string, any>;
-                    trackedEntitiesCollection: ReturnType<
-                        typeof createTrackedEntityCollection
-                    >;
                 };
             }) => {
                 await trackedEntitiesCollection.utils.insertLocally({
@@ -128,7 +119,6 @@ export const trackedEntityFormMachine = setup({
             program,
             programRules,
             form,
-            trackedEntitiesCollection,
         },
     }) => {
         return {
@@ -168,8 +158,6 @@ export const trackedEntityFormMachine = setup({
                 input: ({ context }) => ({
                     formData: context.formData,
                     data: context.trackedEntity,
-                    trackedEntitiesCollection:
-                        context.trackedEntitiesCollection,
                 }),
                 onDone: "editing",
                 onError: {

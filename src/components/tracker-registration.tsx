@@ -1,8 +1,8 @@
 import { Card, Flex, Form, FormInstance, Row } from "antd";
 import dayjs from "dayjs";
 import React, { useEffect } from "react";
+import { useMetadata } from "../hooks/useMetadata";
 import { TrackedEntityContext } from "../machines";
-import { RootRoute } from "../routes/__root";
 import { FlattenedTrackedEntity } from "../schemas";
 import { buildCurrentAttributes, spans } from "../utils/utils";
 import { DataElementField } from "./data-element-field";
@@ -16,7 +16,7 @@ export interface TrackerRegistrationProps {
 export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
     form,
 }) => {
-    const { program } = RootRoute.useLoaderData();
+    const { program } = useMetadata();
     const allAttributes = buildCurrentAttributes(program);
     const ruleResult = TrackedEntityContext.useSelector(
         (a) => a.context.ruleResult,

@@ -26,11 +26,15 @@ import {
     createEmptyEnrollment,
     createEmptyTrackedEntity,
 } from "../utils/utils";
-import { RootRoute } from "./__root";
 import { TrackedEntitiesRoute } from "./tracked-entities";
 import { DataModal } from "../components/data-modal";
 import { TrackedEntityContext } from "../machines";
 import { SyncContext } from "../machines/sync";
+import { useMetadata } from "../hooks/useMetadata";
+import {
+    enrollmentsCollection,
+    trackedEntitiesCollection,
+} from "../collections";
 
 const { Text } = Typography;
 export const TrackedEntitiesIndexRoute = createRoute({
@@ -41,19 +45,14 @@ export const TrackedEntitiesIndexRoute = createRoute({
 
 function TrackedEntitiesSearch() {
     const {
-        program,
         trackedEntityAttributes,
         organisations,
         programRules,
         programRuleVariables,
+        program,
         orgUnit: { id },
-    } = RootRoute.useLoaderData();
+    } = useMetadata();
     const syncActor = SyncContext.useActorRef();
-    const { enrollmentsCollection, trackedEntitiesCollection } =
-        SyncContext.useSelector((a) => ({
-            enrollmentsCollection: a.context.enrollmentsCollection,
-            trackedEntitiesCollection: a.context.trackedEntitiesCollection,
-        }));
     const navigate = TrackedEntitiesIndexRoute.useNavigate();
     const mainStageDataElements = useMemo(
         () =>
@@ -340,7 +339,6 @@ function TrackedEntitiesSearch() {
                                 trackedEntity: trackedEntity!,
                                 validDataElements: mainStageDataElements,
                                 form,
-                                trackedEntitiesCollection,
                             },
                         }}
                     >

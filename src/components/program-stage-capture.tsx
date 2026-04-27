@@ -18,19 +18,29 @@ import {
 } from "antd";
 import dayjs from "dayjs";
 import React, { useMemo } from "react";
+import { useMetadata } from "../hooks/useMetadata";
 import { useModalState } from "../hooks/useModalState";
 import { EventContext } from "../machines";
 import { SyncContext } from "../machines/sync";
-import { RootRoute } from "../routes/__root";
 import {
     FlattenedEnrollment,
     FlattenedEvent,
     FlattenedTrackedEntity,
     ProgramStage,
 } from "../schemas";
-import { cancelDataModal, createEmptyEvent, deleteEventWithChildren } from "../utils/utils";
+import {
+    cancelDataModal,
+    createEmptyEvent,
+    deleteEventWithChildren,
+} from "../utils/utils";
 import { DataModal } from "./data-modal";
 import ProgramStageForm from "./program-stage-form";
+
+import {
+    enrollmentsCollection,
+    trackedEntitiesCollection,
+    eventsCollection,
+} from "../collections";
 
 const { Text } = Typography;
 
@@ -52,17 +62,8 @@ export const ProgramStageCapture: React.FC<{
     const { data, isOpen, isNew, openModal, closeModal } =
         useModalState<FlattenedEvent>();
     const { dataElements, optionSets, programRuleVariables, programRules } =
-        RootRoute.useLoaderData();
+        useMetadata();
     const syncActor = SyncContext.useActorRef();
-    const {
-        eventsCollection,
-        trackedEntitiesCollection,
-        enrollmentsCollection,
-    } = SyncContext.useSelector((a) => ({
-        eventsCollection: a.context.eventsCollection,
-        trackedEntitiesCollection: a.context.trackedEntitiesCollection,
-        enrollmentsCollection: a.context.enrollmentsCollection,
-    }));
 
     const mainStageDataElements = useMemo(
         () =>
@@ -152,14 +153,7 @@ export const ProgramStageCapture: React.FC<{
                         onConfirm={async () => {
                             try {
                                 const { markedDeleted } =
-                                    await deleteEventWithChildren(
-                                        record.event,
-                                        {
-                                            eventsCollection,
-                                            trackedEntitiesCollection,
-                                            enrollmentsCollection,
-                                        },
-                                    );
+                                    await deleteEventWithChildren(record.event);
                                 if (markedDeleted.length > 0) {
                                     syncActor.send({
                                         type: "SYNC_ENTITIES",
@@ -258,13 +252,7 @@ export const ProgramStageCapture: React.FC<{
                 open={isOpen}
                 data={data}
                 onClose={closeModal}
-                onCancel={() =>
-                    cancelDataModal(data!, {
-                        eventsCollection,
-                        trackedEntitiesCollection,
-                        enrollmentsCollection,
-                    })
-                }
+                onCancel={() => cancelDataModal(data!)}
                 enrollment={enrollment}
                 onSave={async ({ values, addAnother }) => {
                     if (values && data) {
@@ -304,7 +292,6 @@ export const ProgramStageCapture: React.FC<{
                                         validDataElements:
                                             mainStageDataElements,
                                         form,
-                                        eventsCollection,
                                     },
                                 }}
                             >

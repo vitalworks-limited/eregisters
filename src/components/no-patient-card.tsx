@@ -2,9 +2,10 @@ import { PlusOutlined } from "@ant-design/icons";
 import { Button, Card, Form, Grid, Space, Typography } from "antd";
 import React, { useMemo } from "react";
 
+import { useMetadata } from "../hooks/useMetadata";
 import { useModalState } from "../hooks/useModalState";
 import { TrackedEntityContext } from "../machines";
-import { RootRoute } from "../routes/__root";
+import { SyncContext } from "../machines/sync";
 import { TrackedEntitiesRoute } from "../routes/tracked-entities";
 import { FlattenedTrackedEntity } from "../schemas";
 import {
@@ -14,7 +15,12 @@ import {
 } from "../utils/utils";
 import { DataModal } from "./data-modal";
 import { TrackerRegistration } from "./tracker-registration";
-import { SyncContext } from "../machines/sync";
+
+import {
+    enrollmentsCollection,
+    trackedEntitiesCollection,
+    eventsCollection,
+} from "../collections";
 
 const { Title, Text } = Typography;
 const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
@@ -25,14 +31,8 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
         programRuleVariables,
         program,
         programRules,
-    } = RootRoute.useLoaderData();
+    } = useMetadata();
     const syncActor = SyncContext.useActorRef();
-    const { enrollmentsCollection, trackedEntitiesCollection, eventsCollection } =
-        SyncContext.useSelector((a) => ({
-            enrollmentsCollection: a.context.enrollmentsCollection,
-            trackedEntitiesCollection: a.context.trackedEntitiesCollection,
-            eventsCollection: a.context.eventsCollection,
-        }));
 
     const mainStageDataElements = useMemo(
         () =>
@@ -119,13 +119,7 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
                 open={isOpen}
                 data={trackedEntity}
                 onClose={closeModal}
-                onCancel={() =>
-                    cancelDataModal(trackedEntity!, {
-                        eventsCollection,
-                        trackedEntitiesCollection,
-                        enrollmentsCollection,
-                    })
-                }
+                onCancel={() => cancelDataModal(trackedEntity!)}
                 enrollment={enrollment}
                 onSave={async ({ values, addAnother }) => {
                     if (values && trackedEntity && enrollment) {
@@ -217,7 +211,6 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
                                     trackedEntity: trackedEntity!,
                                     validDataElements: mainStageDataElements,
                                     form,
-                                    trackedEntitiesCollection,
                                 },
                             }}
                         >

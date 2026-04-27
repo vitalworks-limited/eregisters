@@ -25,8 +25,6 @@ export const router = createRouter({
     history: createHashHistory(),
     context: {
         syncActor: undefined!,
-        user: undefined!,
-        ou: undefined!,
     },
     defaultPreload: "intent",
     defaultPreloadStaleTime: 0,
