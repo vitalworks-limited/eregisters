@@ -1,13 +1,12 @@
+import { FormInstance } from "antd";
 import React from "react";
+import { useMetadata } from "../hooks/useMetadata";
 import { EventContext, eventFormMachine } from "../machines";
-import { RootRoute } from "../routes/__root";
 import {
     FlattenedEnrollment,
     FlattenedEvent,
     FlattenedTrackedEntity,
 } from "../schemas";
-import { FormInstance } from "antd";
-import { SyncContext } from "../machines/sync";
 
 export default function MainStage({
     programStageId,
@@ -26,12 +25,7 @@ export default function MainStage({
     children: React.ReactNode;
     form: FormInstance;
 }) {
-    const { programRuleVariables, programRules, program } =
-        RootRoute.useLoaderData();
-
-    const eventsCollection = SyncContext.useSelector(
-        (a) => a.context.eventsCollection,
-    );
+    const { programRuleVariables, programRules, program } = useMetadata();
 
     return (
         <EventContext.Provider
@@ -46,7 +40,6 @@ export default function MainStage({
                     trackedEntity,
                     enrollment,
                     validDataElements,
-                    eventsCollection,
                     form,
                 },
             }}

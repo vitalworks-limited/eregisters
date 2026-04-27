@@ -193,19 +193,16 @@ export const DataElementField = React.memo<{
         ) {
             const handleRadioChange = useCallback(
                 (e: any) => {
-                    const value = e.target.value;
-                    onFieldChange(dataElement.id, value);
+                    onFieldChange(dataElement.id, e.target.value);
                 },
                 [dataElement.id, onFieldChange],
             );
 
             const handleRadioClick = useCallback(
-                (code: string) => (e: any) => {
-                    // Allow clicking selected radio to deselect it
+                (code: string) => () => {
                     const currentValue = form.getFieldValue(dataElement.id);
                     if (currentValue === code) {
-                        e.preventDefault();
-                        e.stopPropagation();
+                        form.setFieldValue(dataElement.id, undefined);
                         onFieldChange(dataElement.id, undefined);
                     }
                 },

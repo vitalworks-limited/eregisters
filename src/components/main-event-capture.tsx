@@ -13,8 +13,14 @@ import {
 import dayjs from "dayjs";
 import { orderBy } from "lodash";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { EventContext, SyncContext, TrackedEntityContext } from "../machines";
-import { RootRoute } from "../routes/__root";
+import {
+    enrollmentsCollection,
+    trackedEntitiesCollection,
+    eventsCollection,
+} from "../collections";
+import { useMetadata } from "../hooks/useMetadata";
+import { useModalState } from "../hooks/useModalState";
+import { EventContext, TrackedEntityContext } from "../machines";
 import {
     FlattenedEnrollment,
     FlattenedEvent,
@@ -31,10 +37,9 @@ import {
 } from "../utils/utils";
 import { DataElementField } from "./data-element-field";
 import { DataElementRenderer } from "./data-element-renderer";
+import { DataModal } from "./data-modal";
 import { ProgramStageCapture } from "./program-stage-capture";
 import RelationshipEvent from "./relationship-event";
-import { useModalState } from "../hooks/useModalState";
-import { DataModal } from "./data-modal";
 import { TrackerRegistration } from "./tracker-registration";
 
 const stages: Map<string, number> = new Map([
@@ -154,15 +159,6 @@ export default function MainEventCapture({
     enrollment: FlattenedEnrollment;
 }) {
     const {
-        enrollmentsCollection,
-        trackedEntitiesCollection,
-        eventsCollection,
-    } = SyncContext.useSelector((a) => ({
-        enrollmentsCollection: a.context.enrollmentsCollection,
-        trackedEntitiesCollection: a.context.trackedEntitiesCollection,
-        eventsCollection: a.context.eventsCollection,
-    }));
-    const {
         data: childData,
         isOpen: childIsOpen,
         enrollment: childEnrollment,
@@ -170,7 +166,7 @@ export default function MainEventCapture({
         closeModal: closeChildModal,
     } = useModalState<FlattenedTrackedEntity>();
     const { program, optionSets, programRuleVariables, programRules } =
-        RootRoute.useLoaderData();
+        useMetadata();
     const [activeKey, setActiveKey] = useState<string>(
         "K2nxbE9ubSs-bnV62fxQmoE",
     );
@@ -517,13 +513,7 @@ export default function MainEventCapture({
                 open={childIsOpen}
                 data={childData}
                 onClose={closeChildModal}
-                onCancel={() =>
-                    cancelDataModal(childData!, {
-                        eventsCollection,
-                        trackedEntitiesCollection,
-                        enrollmentsCollection,
-                    })
-                }
+                onCancel={() => cancelDataModal(childData!)}
                 hasAddAnother={true}
                 enrollment={childEnrollment}
                 onSave={async ({ values, addAnother }) => {
@@ -587,7 +577,6 @@ export default function MainEventCapture({
                                         validDataElements:
                                             mainStageDataElements,
                                         form,
-                                        trackedEntitiesCollection,
                                     },
                                 }}
                             >

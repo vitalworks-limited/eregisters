@@ -6,7 +6,7 @@ import {
     fromPromise,
     setup,
 } from "xstate";
-import { createEnrollmentCollection } from "../collections";
+import { enrollmentsCollection } from "../collections";
 import { FlattenedEnrollment, FlattenedTrackedEntity } from "../schemas";
 
 import { FormEvent } from "./common";
@@ -15,9 +15,6 @@ export const enrollmentFormMachine = setup({
     types: {
         events: {} as FormEvent,
         context: {} as {
-            enrollmentsCollection: ReturnType<
-                typeof createEnrollmentCollection
-            >;
             enrollment: FlattenedEnrollment;
             trackedEntity: FlattenedTrackedEntity;
             formData: Record<string, any>;
@@ -26,9 +23,6 @@ export const enrollmentFormMachine = setup({
         input: {} as {
             trackedEntity: FlattenedTrackedEntity;
             enrollment: FlattenedEnrollment;
-            enrollmentsCollection: ReturnType<
-                typeof createEnrollmentCollection
-            >;
         },
     },
     actions: {
@@ -42,12 +36,10 @@ export const enrollmentFormMachine = setup({
             },
         }),
         persistInBackground: enqueueActions(({ context, enqueue }) => {
-            const { trackedEntity, enrollment, enrollmentsCollection } =
-                context;
+            const { trackedEntity, enrollment } = context;
             enqueue.spawnChild("persist", {
                 input: {
                     formData: trackedEntity.attributes,
-                    enrollmentsCollection,
                     data: enrollment,
                 },
             });
@@ -56,14 +48,11 @@ export const enrollmentFormMachine = setup({
     actors: {
         persist: fromPromise(
             async ({
-                input: { data, formData, enrollmentsCollection },
+                input: { data, formData },
             }: {
                 input: {
                     data: FlattenedEnrollment;
                     formData: Record<string, any>;
-                    enrollmentsCollection: ReturnType<
-                        typeof createEnrollmentCollection
-                    >;
                 };
             }) => {
                 await enrollmentsCollection.utils.insertLocally({
@@ -76,15 +65,12 @@ export const enrollmentFormMachine = setup({
 }).createMachine({
     id: "enrollment-form",
     initial: "idle",
-    context: ({
-        input: { enrollment, trackedEntity, enrollmentsCollection },
-    }) => {
+    context: ({ input: { enrollment, trackedEntity } }) => {
         return {
             formData: {},
             errors: {},
             enrollment,
             trackedEntity,
-            enrollmentsCollection,
         };
     },
     states: {
@@ -122,7 +108,6 @@ export const enrollmentFormMachine = setup({
                 input: ({ context }) => ({
                     formData: context.formData,
                     data: context.enrollment,
-                    enrollmentsCollection: context.enrollmentsCollection,
                 }),
                 onDone: "valid",
                 onError: {

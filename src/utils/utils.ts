@@ -1,7 +1,7 @@
 import { FormItemProps, TableProps } from "antd";
 import { Table as DexieTable } from "dexie";
 import dayjs from "dayjs";
-import { isEmpty } from "lodash";
+import { groupBy, isEmpty } from "lodash";
 import {
     Enrollment,
     Event,
@@ -19,9 +19,12 @@ import {
 } from "../schemas";
 import { generateUid } from "./id";
 import { zScoreBMIFA, zScoreHFA, zScoreWFA, zScoreWFH } from "./who-zscore";
-import { createEnrollmentCollection } from "../collections/enrollments";
-import { createEventCollection } from "../collections/events";
-import { createTrackedEntityCollection } from "../collections/tracked-entities";
+
+import {
+    trackedEntitiesCollection,
+    enrollmentsCollection,
+    eventsCollection,
+} from "../collections";
 import { db } from "../db";
 
 const GRID_TOTAL = 24;
@@ -594,14 +597,6 @@ export function executeProgramRules({
                             if (typeof val === "boolean") return String(val);
                             // For strings, escape and quote
                             const stringVal = String(val);
-                            // if (log) {
-                            // 		console.log(
-                            // 				"Variable value for",
-                            // 				varName,
-                            // 				"is",
-                            // 				stringVal,
-                            // 		);
-                            // }
                             const escaped = stringVal
                                 .replace(/\\/g, "\\\\")
                                 .replace(/'/g, "\\'");
@@ -711,12 +706,6 @@ export function executeProgramRules({
         }
 
         if (programStage === undefined) {
-            // console.log(
-            //     `Evaluating Rule: ${rule.name} (Program: ${rule.program?.id}, Stage: ${rule.programStage?.id})`,
-            // );
-
-            // Filter rules based on context (registration vs event)
-            // Registration context: only apply rules without a programStage
             if (rule.programStage) {
                 continue;
             }
@@ -729,18 +718,11 @@ export function executeProgramRules({
             rule.condition,
             rule.id === "aMBmnUCxRce",
         );
-
-        // if (rule.id === "aMBmnUCxRce") {
-        //     console.log(
-        //         `📋 Rule "${rule.name}": condition="${rule.condition}" → ${isTrue ? "✅ TRUE" : "❌ FALSE"}`,
-        //     );
-        // }
         if (!isTrue) {
             continue;
         }
 
         for (const action of rule.programRuleActions) {
-            // Determine target type and ID based on action
             const isDataElement = !!action.dataElement;
             const isAttribute = !!action.trackedEntityAttribute;
             const targetId =
@@ -761,28 +743,21 @@ export function executeProgramRules({
             switch (action.programRuleActionType) {
                 case "ASSIGN":
                     if (targetId && action.data) {
-                        // console.log(
-                        //     `  📝 ASSIGN: ${targetId} = ${action.data}`,
-                        // );
                         const evaluatedValue = evaluateExpression(action.data);
-                        // console.log("➡️  Evaluated Value:", evaluatedValue);
                         result.assignments[targetId] = evaluatedValue;
                     }
                     break;
 
                 case "HIDEFIELD":
                     if (targetId) {
-                        // console.log(`  🙈 HIDEFIELD: ${targetId}`);
                         if (!result.hiddenFields.includes(targetId)) {
                             result.hiddenFields.push(targetId);
-                            // result.assignments[targetId] = "";
                         }
                     }
                     break;
 
                 case "SHOWFIELD":
                     if (targetId) {
-                        // console.log(`  👁️  SHOWFIELD: ${targetId}`);
                         if (!result.shownFields.includes(targetId)) {
                             result.shownFields.push(targetId);
                         }
@@ -1207,20 +1182,13 @@ export function buildCurrentAttributes(program: Program) {
 export async function deleteRecursiveDraftSubtree(
     eventId: string | undefined,
     trackedEntityId: string | undefined,
-    collections: {
-        eventsCollection: ReturnType<typeof createEventCollection>;
-        trackedEntitiesCollection: ReturnType<
-            typeof createTrackedEntityCollection
-        >;
-        enrollmentsCollection: ReturnType<typeof createEnrollmentCollection>;
-    },
 ): Promise<void> {
     const eventsTable: DexieTable<FlattenedEvent, string> =
-        collections.eventsCollection.utils.getTable();
+        eventsCollection.utils.getTable();
     const tETable: DexieTable<FlattenedTrackedEntity, string> =
-        collections.trackedEntitiesCollection.utils.getTable();
+        trackedEntitiesCollection.utils.getTable();
     const enrollmentsTable: DexieTable<FlattenedEnrollment, string> =
-        collections.enrollmentsCollection.utils.getTable();
+        enrollmentsCollection.utils.getTable();
 
     if (eventId) {
         const childEvents = await eventsTable
@@ -1229,12 +1197,8 @@ export async function deleteRecursiveDraftSubtree(
             )
             .toArray();
         for (const child of childEvents) {
-            await deleteRecursiveDraftSubtree(
-                child.event,
-                undefined,
-                collections,
-            );
-            const tx = collections.eventsCollection.delete(child.event);
+            await deleteRecursiveDraftSubtree(child.event, undefined);
+            const tx = eventsCollection.delete(child.event);
             await tx.isPersisted.promise;
         }
     }
@@ -1254,9 +1218,7 @@ export async function deleteRecursiveDraftSubtree(
                 .equals(childTE.trackedEntity)
                 .toArray();
             for (const enrollment of childEnrollments) {
-                const tx = collections.enrollmentsCollection.delete(
-                    enrollment.enrollment,
-                );
+                const tx = enrollmentsCollection.delete(enrollment.enrollment);
                 await tx.isPersisted.promise;
             }
             // Delete events for this child TE (recurse into their children first)
@@ -1268,23 +1230,13 @@ export async function deleteRecursiveDraftSubtree(
                 )
                 .toArray();
             for (const event of childEvents) {
-                await deleteRecursiveDraftSubtree(
-                    event.event,
-                    undefined,
-                    collections,
-                );
-                const tx = collections.eventsCollection.delete(event.event);
+                await deleteRecursiveDraftSubtree(event.event, undefined);
+                const tx = eventsCollection.delete(event.event);
                 await tx.isPersisted.promise;
             }
             // Recurse into child TE's own children, then delete the child TE
-            await deleteRecursiveDraftSubtree(
-                undefined,
-                childTE.trackedEntity,
-                collections,
-            );
-            const tx = collections.trackedEntitiesCollection.delete(
-                childTE.trackedEntity,
-            );
+            await deleteRecursiveDraftSubtree(undefined, childTE.trackedEntity);
+            const tx = trackedEntitiesCollection.delete(childTE.trackedEntity);
             await tx.isPersisted.promise;
         }
     }
@@ -1298,20 +1250,13 @@ export async function deleteRecursiveDraftSubtree(
  */
 export async function deleteEventWithChildren(
     eventId: string,
-    collections: {
-        eventsCollection: ReturnType<typeof createEventCollection>;
-        trackedEntitiesCollection: ReturnType<
-            typeof createTrackedEntityCollection
-        >;
-        enrollmentsCollection: ReturnType<typeof createEnrollmentCollection>;
-    },
 ): Promise<{ markedDeleted: FlattenedEvent[] }> {
     const eventsTable: DexieTable<FlattenedEvent, string> =
-        collections.eventsCollection.utils.getTable();
+        eventsCollection.utils.getTable();
     const teTable: DexieTable<FlattenedTrackedEntity, string> =
-        collections.trackedEntitiesCollection.utils.getTable();
+        trackedEntitiesCollection.utils.getTable();
     const enrollmentsTable: DexieTable<FlattenedEnrollment, string> =
-        collections.enrollmentsCollection.utils.getTable();
+        enrollmentsCollection.utils.getTable();
 
     const markedDeleted: FlattenedEvent[] = [];
 
@@ -1352,12 +1297,12 @@ export async function deleteEventWithChildren(
                     enrollment.syncStatus === "draft" ||
                     enrollment.syncStatus === "pending"
                 ) {
-                    const tx = collections.enrollmentsCollection.delete(
+                    const tx = enrollmentsCollection.delete(
                         enrollment.enrollment,
                     );
                     await tx.isPersisted.promise;
                 } else {
-                    const tx = collections.enrollmentsCollection.update(
+                    const tx = enrollmentsCollection.update(
                         enrollment.enrollment,
                         (d) => {
                             d.syncStatus = "deleted";
@@ -1371,12 +1316,12 @@ export async function deleteEventWithChildren(
                 childTE.syncStatus === "draft" ||
                 childTE.syncStatus === "pending"
             ) {
-                const tx = collections.trackedEntitiesCollection.delete(
+                const tx = trackedEntitiesCollection.delete(
                     childTE.trackedEntity,
                 );
                 await tx.isPersisted.promise;
             } else {
-                const tx = collections.trackedEntitiesCollection.update(
+                const tx = trackedEntitiesCollection.update(
                     childTE.trackedEntity,
                     (d) => {
                         d.syncStatus = "deleted";
@@ -1387,23 +1332,17 @@ export async function deleteEventWithChildren(
         }
 
         // 3. Now handle this event itself (after its children are processed)
-        if (
-            event.syncStatus === "draft" ||
-            event.syncStatus === "pending"
-        ) {
-            const tx = collections.eventsCollection.delete(event.event);
+        if (event.syncStatus === "draft" || event.syncStatus === "pending") {
+            const tx = eventsCollection.delete(event.event);
             await tx.isPersisted.promise;
             await db.indicatorEvaluations
                 .where("eventId")
                 .equals(event.event)
                 .delete();
         } else {
-            const tx = collections.eventsCollection.update(
-                event.event,
-                (d) => {
-                    d.syncStatus = "deleted";
-                },
-            );
+            const tx = eventsCollection.update(event.event, (d) => {
+                d.syncStatus = "deleted";
+            });
             await tx.isPersisted.promise;
             markedDeleted.push({ ...event, syncStatus: "deleted" });
         }
@@ -1429,52 +1368,105 @@ export async function deleteEventWithChildren(
  */
 export async function cancelDataModal(
     data: FlattenedEvent | FlattenedTrackedEntity,
-    collections: {
-        eventsCollection: ReturnType<typeof createEventCollection>;
-        trackedEntitiesCollection: ReturnType<
-            typeof createTrackedEntityCollection
-        >;
-        enrollmentsCollection: ReturnType<typeof createEnrollmentCollection>;
-    },
 ): Promise<void> {
     if ("event" in data) {
         // FlattenedEvent branch
         if (data.syncStatus === "draft") {
-            const tx = collections.eventsCollection.delete(data.event);
+            const tx = eventsCollection.delete(data.event);
             await tx.isPersisted.promise;
         } else {
-            await collections.eventsCollection.utils.insertLocally(data);
+            await eventsCollection.utils.insertLocally(data);
         }
-        await deleteRecursiveDraftSubtree(data.event, undefined, collections);
+        await deleteRecursiveDraftSubtree(data.event, undefined);
     } else if ("trackedEntityType" in data) {
         // FlattenedTrackedEntity branch
         if (data.syncStatus === "draft") {
-            const tx = collections.trackedEntitiesCollection.delete(
-                data.trackedEntity,
-            );
+            const tx = trackedEntitiesCollection.delete(data.trackedEntity);
             await tx.isPersisted.promise;
             // Delete the linked enrollment (guard: enrollment may not exist)
-            const enrollmentsTable =
-                collections.enrollmentsCollection.utils.getTable();
+            const enrollmentsTable = enrollmentsCollection.utils.getTable();
             const enrollment = await enrollmentsTable
                 .where("trackedEntity")
                 .equals(data.trackedEntity)
                 .first();
             if (enrollment) {
-                const etx = collections.enrollmentsCollection.delete(
-                    enrollment.enrollment,
-                );
+                const etx = enrollmentsCollection.delete(enrollment.enrollment);
                 await etx.isPersisted.promise;
             }
         } else {
-            await collections.trackedEntitiesCollection.utils.insertLocally(
-                data,
-            );
+            await trackedEntitiesCollection.utils.insertLocally(data);
         }
-        await deleteRecursiveDraftSubtree(
-            undefined,
-            data.trackedEntity,
-            collections,
-        );
+        await deleteRecursiveDraftSubtree(undefined, data.trackedEntity);
     }
 }
+
+export const queryInfo = async (user: string, id: string) => {
+    const dataElements = await db.dataElements.toArray();
+    const trackedEntityAttributes = await db.trackedEntityAttributes.toArray();
+    const programRules = await db.programRules.toArray();
+    const programRuleVariables = await db.programRuleVariables.toArray();
+    const optionGroups = await db.optionGroups.toArray();
+    const optionSets = await db.optionSets.toArray();
+    const [program] = await db.programs.toArray();
+    const [orgUnit] = await db.organisationUnits.where({ id, user }).toArray();
+    return {
+        dataElements: new Map(dataElements.map((de) => [de.id, de])),
+        trackedEntityAttributes: new Map(
+            trackedEntityAttributes.map((ta) => [ta.id, ta]),
+        ),
+        programRules,
+        programRuleVariables,
+        optionGroups: new Map(
+            Object.entries(groupBy(optionGroups, "optionGroup")),
+        ),
+        optionSets: new Map(Object.entries(groupBy(optionSets, "optionSet"))),
+        program,
+        programOrgUnits: new Set(
+            program?.organisationUnits.map(({ id }) => id),
+        ),
+        organisations: new Map(
+            program?.organisationUnits.map((ou) => [ou.id, ou.name]),
+        ),
+        orgUnit,
+    };
+};
+
+export const checkInfo = async (user: string, id: string) => {
+    try {
+        const queries = await Promise.all([
+            db.dataElements.count(),
+            db.trackedEntityAttributes.count(),
+            db.programRules.count(),
+            db.programRuleVariables.count(),
+            db.optionGroups.count(),
+            db.optionSets.count(),
+            db.programs.count(),
+            db.organisationUnits.where({ user, id }).count(),
+        ]);
+
+        const hasEmptyTables = queries.some((a) => a === 0);
+        const [metadataVersion] = await db.metadataVersions
+            .where({ id: "metadata-version" })
+            .toArray();
+
+        const [syncStatus] = await db.syncState
+            .where({ id: "current" })
+            .toArray();
+        const wasIndexedDBDeleted = !metadataVersion?.lastSync;
+        const [program] = await db.programs.toArray();
+        return {
+            needsSyncing: hasEmptyTables || wasIndexedDBDeleted,
+            metadataVersion,
+            syncStatus,
+            program,
+        };
+    } catch (error) {
+        await db.delete();
+        await db.open();
+        return {
+            needsSyncing: true,
+            metadataVersion: undefined,
+            program: undefined,
+        };
+    }
+};

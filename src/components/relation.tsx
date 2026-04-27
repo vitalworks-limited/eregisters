@@ -1,8 +1,9 @@
 import { and, eq, not, useLiveSuspenseQuery } from "@tanstack/react-db";
 import { Form } from "antd";
 import React, { useMemo } from "react";
-import { EventContext, SyncContext } from "../machines";
-import { RootRoute } from "../routes/__root";
+import { enrollmentsCollection, eventsCollection } from "../collections";
+import { useMetadata } from "../hooks/useMetadata";
+import { EventContext } from "../machines";
 import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
 import BasicForm from "./basic-form";
 
@@ -15,14 +16,7 @@ export default function Relation({
     mainEvent: FlattenedEvent;
     trackedEntity: FlattenedTrackedEntity;
 }) {
-    const { program, programRuleVariables, programRules } =
-        RootRoute.useLoaderData();
-    const { eventsCollection, enrollmentsCollection } = SyncContext.useSelector(
-        (a) => ({
-            eventsCollection: a.context.eventsCollection,
-            enrollmentsCollection: a.context.enrollmentsCollection,
-        }),
-    );
+    const { program, programRuleVariables, programRules } = useMetadata();
 
     const [form] = Form.useForm();
     const [stage] = program.programStages.filter(
@@ -79,7 +73,6 @@ export default function Relation({
                     trackedEntity,
                     validDataElements: mainStageDataElements,
                     form,
-                    eventsCollection,
                 },
             }}
         >

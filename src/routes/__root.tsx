@@ -22,55 +22,26 @@ import {
 } from "antd";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { groupBy } from "lodash";
 import React, { useState } from "react";
 
 import { eq, useLiveSuspenseQuery } from "@tanstack/react-db";
+import { waitFor } from "xstate";
 import { Spinner } from "../components/spinner";
-import { db } from "../db";
+import { useMetadata } from "../hooks/useMetadata";
 import { SyncContext } from "../machines/sync";
+import {
+    trackedEntitiesCollection,
+    enrollmentsCollection,
+    eventsCollection,
+} from "../collections";
 
 dayjs.extend(relativeTime);
 
 const { Header } = Layout;
 const { Title, Text } = Typography;
 
-const queryInfo = async (user: string, id: string) => {
-    const dataElements = await db.dataElements.toArray();
-    const trackedEntityAttributes = await db.trackedEntityAttributes.toArray();
-    const programRules = await db.programRules.toArray();
-    const programRuleVariables = await db.programRuleVariables.toArray();
-    const optionGroups = await db.optionGroups.toArray();
-    const optionSets = await db.optionSets.toArray();
-    const [program] = await db.programs.toArray();
-    const orgUnit = await db.organisationUnits.get({ id, user });
-    if (orgUnit === undefined) throw new Error("No user with orgUnit found");
-    return {
-        dataElements: new Map(dataElements.map((de) => [de.id, de])),
-        trackedEntityAttributes: new Map(
-            trackedEntityAttributes.map((ta) => [ta.id, ta]),
-        ),
-        programRules,
-        programRuleVariables,
-        optionGroups: new Map(
-            Object.entries(groupBy(optionGroups, "optionGroup")),
-        ),
-        optionSets: new Map(Object.entries(groupBy(optionSets, "optionSet"))),
-        program,
-        programOrgUnits: new Set(
-            program?.organisationUnits.map(({ id }) => id),
-        ),
-        organisations: new Map(
-            program?.organisationUnits.map((ou) => [ou.id, ou.name]),
-        ),
-        orgUnit,
-    };
-};
-
 export const RootRoute = createRootRouteWithContext<{
     syncActor: ReturnType<typeof SyncContext.useActorRef>;
-    user: string;
-    ou: string;
 }>()({
     component: LayoutWithDrafts,
     pendingComponent: () => (
@@ -78,15 +49,10 @@ export const RootRoute = createRootRouteWithContext<{
             component={<Typography.Text>Loading Metadata</Typography.Text>}
         />
     ),
-    loader: async ({ context: { user, ou } }) => {
-        try {
-            let data = await queryInfo(user, ou);
-            return data;
-        } catch (error) {
-            await db.delete();
-            await db.open();
-            return await queryInfo(user, ou);
-        }
+    loader: async ({ context: { syncActor } }) => {
+        await waitFor(syncActor, (snapshot) => {
+            return snapshot.matches({ metadataSync: "waiting" });
+        });
     },
 });
 
@@ -138,8 +104,8 @@ function SyncButton({
 }
 
 function LayoutWithDrafts() {
-    const { orgUnit } = RootRoute.useLoaderData();
     const syncActor = SyncContext.useActorRef();
+    const { orgUnit } = useMetadata();
     const syncingMetadata = SyncContext.useSelector((snapshot) => {
         const isManualRefresh =
             (snapshot.matches({ metadataSync: "syncing" }) ||
@@ -147,6 +113,7 @@ function LayoutWithDrafts() {
             snapshot.context.lastMetadataPull !== undefined;
         return isManualRefresh;
     });
+
     const syncingData = SyncContext.useSelector((a) =>
         a.matches({ dataPull: "syncing" }),
     );
@@ -159,15 +126,6 @@ function LayoutWithDrafts() {
     const lastMetadataPull = SyncContext.useSelector(
         (a) => a.context.lastMetadataPull,
     );
-    const {
-        trackedEntitiesCollection,
-        enrollmentsCollection,
-        eventsCollection,
-    } = SyncContext.useSelector((a) => ({
-        trackedEntitiesCollection: a.context.trackedEntitiesCollection,
-        enrollmentsCollection: a.context.enrollmentsCollection,
-        eventsCollection: a.context.eventsCollection,
-    }));
     const { data: pendingTrackedEntities } = useLiveSuspenseQuery((q) =>
         q
             .from({ trackedEntities: trackedEntitiesCollection })
@@ -188,7 +146,7 @@ function LayoutWithDrafts() {
     );
     const screens = Grid.useBreakpoint();
     const isMobile = !screens.lg;
-		const isLarge = !screens.xl
+    const isLarge = !screens.xl;
     const [drawerOpen, setDrawerOpen] = useState(false);
 
     const navItems = (vertical: boolean) => (

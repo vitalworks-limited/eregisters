@@ -5,7 +5,11 @@ import { FlattenedEvent, FlattenedTrackedEntity } from "../schemas";
 import { createEmptyEvent } from "../utils/utils";
 import Relation from "./relation";
 
-import { SyncContext } from "../machines";
+import {
+    enrollmentsCollection,
+    eventsCollection,
+    trackedEntitiesCollection,
+} from "../collections";
 
 const getChildLabel = (to: FlattenedTrackedEntity["attributes"]): string => {
     const firstName = to["KSq9EyZ8ZFi"];
@@ -23,16 +27,6 @@ export default function RelationshipEvent({
     trackedEntity: FlattenedTrackedEntity;
     mainEvent: FlattenedEvent;
 }) {
-    const {
-        enrollmentsCollection,
-        trackedEntitiesCollection,
-        eventsCollection,
-    } = SyncContext.useSelector((a) => ({
-        enrollmentsCollection: a.context.enrollmentsCollection,
-        trackedEntitiesCollection: a.context.trackedEntitiesCollection,
-        eventsCollection: a.context.eventsCollection,
-    }));
-
     const [activeKey, setActiveKey] = useState<string>("");
 
     const { data: children } = useLiveSuspenseQuery((q) =>
@@ -104,39 +98,41 @@ export default function RelationshipEvent({
             <Tabs
                 type="editable-card"
                 hideAdd
-                styles={{
-                    // root: {
-                    //     background: "#fff",
-                    //     borderRadius: 12,
-                    //     padding: 8,
-                    // },
-                    // header: {
-                    //     marginBottom: 8,
-                    //     background: "#f5f5f5",
-                    //     borderRadius: 10,
-                    //     padding: 6,
-                    // },
-                    // item: {
-                    //     padding: "12px 18px",
-                    //     fontSize: 15,
-                    //     fontWeight: 600,
-                    //     borderRadius: 8,
-                    // },
-                    // indicator: {
-                    //     height: 3,
-                    //     borderRadius: 999,
-                    // },
-                    // content: {
-                    //     padding: 12,
-                    //     background: "#fff",
-                    //     borderRadius: 10,
-                    //     border: "1px solid #f0f0f0",
-                    // },
-                }}
+                styles={
+                    {
+                        // root: {
+                        //     background: "#fff",
+                        //     borderRadius: 12,
+                        //     padding: 8,
+                        // },
+                        // header: {
+                        //     marginBottom: 8,
+                        //     background: "#f5f5f5",
+                        //     borderRadius: 10,
+                        //     padding: 6,
+                        // },
+                        // item: {
+                        //     padding: "12px 18px",
+                        //     fontSize: 15,
+                        //     fontWeight: 600,
+                        //     borderRadius: 8,
+                        // },
+                        // indicator: {
+                        //     height: 3,
+                        //     borderRadius: 999,
+                        // },
+                        // content: {
+                        //     padding: 12,
+                        //     background: "#fff",
+                        //     borderRadius: 10,
+                        //     border: "1px solid #f0f0f0",
+                        // },
+                    }
+                }
                 items={children.map((trackedEntity) => {
                     return {
                         key: trackedEntity.trackedEntity,
-												closeIcon:trackedEntity.syncStatus === "draft",
+                        closeIcon: trackedEntity.syncStatus === "draft",
                         label: (
                             <Flex vertical>
                                 <Typography.Text>
@@ -161,7 +157,6 @@ export default function RelationshipEvent({
                 onChange={onChange}
                 accessKey={activeKey}
                 activeKey={activeKey}
-								
             />
         </Flex>
     );

@@ -19,7 +19,11 @@ import { ClientSchema } from "../schemas";
 import { RootRoute } from "./__root";
 
 import dayjs from "dayjs";
-import { SyncContext } from "../machines";
+import {
+    enrollmentsCollection,
+    trackedEntitiesCollection,
+} from "../collections";
+import { useMetadata } from "../hooks/useMetadata";
 
 const { Content } = Layout;
 const { Title } = Typography;
@@ -36,12 +40,7 @@ function TrackedEntities() {
         trackedEntityAttributes,
         optionSets,
         orgUnit: { id },
-    } = RootRoute.useLoaderData();
-    const { enrollmentsCollection, trackedEntitiesCollection } =
-        SyncContext.useSelector((a) => ({
-            enrollmentsCollection: a.context.enrollmentsCollection,
-            trackedEntitiesCollection: a.context.trackedEntitiesCollection,
-        }));
+    } = useMetadata();
 
     const [form] = Form.useForm();
 

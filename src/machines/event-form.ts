@@ -1,7 +1,7 @@
 import { createActorContext } from "@xstate/react";
 import { FormInstance } from "antd";
 import { assertEvent, assign, fromPromise, setup } from "xstate";
-import { createEventCollection } from "../collections";
+import { eventsCollection } from "../collections";
 import {
     FlattenedEnrollment,
     FlattenedEvent,
@@ -36,7 +36,6 @@ export const eventFormMachine = setup({
             form: FormInstance;
             persistenceError: string | null;
             previousAssignments: Record<string, any>;
-            eventsCollection: ReturnType<typeof createEventCollection>;
         },
         input: {} as {
             programRules: ProgramRule[];
@@ -48,7 +47,6 @@ export const eventFormMachine = setup({
             validDataElements: Set<string>;
             program: string;
             form: FormInstance;
-            eventsCollection: ReturnType<typeof createEventCollection>;
         },
     },
     actions: {
@@ -106,12 +104,11 @@ export const eventFormMachine = setup({
     actors: {
         persist: fromPromise(
             async ({
-                input: { event, formData, eventsCollection },
+                input: { event, formData },
             }: {
                 input: {
                     event: FlattenedEvent;
                     formData: Record<string, any>;
-                    eventsCollection: ReturnType<typeof createEventCollection>;
                 };
             }) => {
                 await eventsCollection.utils.insertLocally({
@@ -138,7 +135,6 @@ export const eventFormMachine = setup({
             programStage,
             program,
             form,
-            eventsCollection,
         },
     }) => {
         return {
@@ -156,7 +152,6 @@ export const eventFormMachine = setup({
             ruleResult: createEmptyProgramRuleResult(),
             persistenceError: null,
             previousAssignments: {},
-            eventsCollection,
         };
     },
     states: {
@@ -181,7 +176,6 @@ export const eventFormMachine = setup({
                 input: ({ context }) => ({
                     formData: context.form.getFieldsValue(),
                     event: context.event,
-                    eventsCollection: context.eventsCollection,
                 }),
                 onDone: "editing",
                 onError: {

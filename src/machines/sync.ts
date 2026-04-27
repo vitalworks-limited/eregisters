@@ -20,9 +20,9 @@ import type { useDataEngine } from "@dhis2/app-runtime";
 import { createActorContext } from "@xstate/react";
 import { Table } from "dexie";
 import {
-    createEnrollmentCollection,
-    createEventCollection,
-    createTrackedEntityCollection,
+    enrollmentsCollection,
+    trackedEntitiesCollection,
+    eventsCollection,
 } from "../collections";
 import { db, MetadataVersion } from "../db";
 import {
@@ -40,10 +40,13 @@ import {
     evaluateProgramIndicatorsForEvents,
 } from "../utils/indicator-utils";
 import {
+    checkInfo,
     flattenEnrollment,
     flattenEvent,
     flattenTrackedEntity,
+    queryInfo,
 } from "../utils/utils";
+import { MessageInstance } from "antd/es/message/interface";
 
 function deriveValidIds(program: Program | undefined): {
     validAttributeIds: Set<string>;
@@ -89,6 +92,7 @@ type Resource =
 
 export interface SyncContext {
     error: Error | null;
+    info: string | undefined;
     engine: ReturnType<typeof useDataEngine>;
     lastDataPull: string | undefined;
     lastDataPush: string | undefined;
@@ -96,21 +100,17 @@ export interface SyncContext {
     skipLastMetadataPull: boolean;
     resources: Resource[];
     interval: number;
-    enrollmentsCollection: ReturnType<typeof createEnrollmentCollection>;
-    eventsCollection: ReturnType<typeof createEventCollection>;
-    trackedEntitiesCollection: ReturnType<typeof createTrackedEntityCollection>;
     user: string;
     orgUnit: string;
     skipLastDataPull: boolean;
     validAttributeIds: Set<string>;
     validDataElementsByStage: Map<string, Set<string>>;
+    message: MessageInstance;
+    metadata: Partial<Awaited<ReturnType<typeof queryInfo>>>;
 }
 
 const syncReportToLocal = async ({
     entities,
-    enrollmentsCollection,
-    eventsCollection,
-    trackedEntitiesCollection,
     engine,
     validAttributeIds,
     validDataElementsByStage,
@@ -118,9 +118,6 @@ const syncReportToLocal = async ({
     entities: Array<
         FlattenedTrackedEntity | FlattenedEnrollment | FlattenedEvent
     >;
-    enrollmentsCollection: ReturnType<typeof createEnrollmentCollection>;
-    eventsCollection: ReturnType<typeof createEventCollection>;
-    trackedEntitiesCollection: ReturnType<typeof createTrackedEntityCollection>;
     engine: ReturnType<typeof useDataEngine>;
     validAttributeIds: Set<string>;
     validDataElementsByStage: Map<string, Set<string>>;
@@ -261,11 +258,9 @@ const syncReportToLocal = async ({
 const syncDeleteToLocal = async ({
     deletedEvents,
     engine,
-    eventsCollection,
 }: {
     deletedEvents: FlattenedEvent[];
     engine: ReturnType<typeof useDataEngine>;
-    eventsCollection: ReturnType<typeof createEventCollection>;
 }): Promise<{ succeeded: number; failed: number }> => {
     if (deletedEvents.length === 0) return { succeeded: 0, failed: 0 };
 
@@ -331,28 +326,24 @@ export const syncMachine = setup({
         events: {} as SyncEvent,
         input: {} as {
             engine: ReturnType<typeof useDataEngine>;
-            enrollmentsCollection: ReturnType<
-                typeof createEnrollmentCollection
-            >;
-            eventsCollection: ReturnType<typeof createEventCollection>;
-            trackedEntitiesCollection: ReturnType<
-                typeof createTrackedEntityCollection
-            >;
             initialLastMetadataPull?: string;
             initialLastDataPull?: string;
             initialLastDataPush?: string;
             user: string;
             orgUnit: string;
+            message: MessageInstance;
         },
     },
 
     actions: {
-        markAsSuccessful: () => {
-            console.log("✅ Sync successful");
-        },
+        markAsSuccessful: () => {},
 
-        notifySuccess: ({ context }) => {},
-        notifyFailure: ({ context }) => {},
+        notifySuccess: ({ context }) => {
+            context.message.success(context.info);
+        },
+        notifyFailure: ({ context }) => {
+            context.message.error(context.error?.message);
+        },
         resetLastDataPull: assign({
             lastDataPull: undefined,
         }),
@@ -363,7 +354,6 @@ export const syncMachine = setup({
 
         logDirectSync: ({ event }) => {
             assertEvent(event, "SYNC_ENTITIES");
-            console.log("Attempting direct sync:", event.entities);
         },
 
         persistSyncState: ({ context }) => {
@@ -380,42 +370,18 @@ export const syncMachine = setup({
         },
     },
     actors: {
-        checkIndexDD: fromPromise(
-            async ({ input }: { input: { user: string } }) => {
-                try {
-                    const queries = await Promise.all([
-                        db.dataElements.count(),
-                        db.trackedEntityAttributes.count(),
-                        db.programRules.count(),
-                        db.programRuleVariables.count(),
-                        db.optionGroups.count(),
-                        db.optionSets.count(),
-                        db.programs.count(),
-                        db.organisationUnits
-                            .where({ user: input.user })
-                            .count(),
-                    ]);
-                    const hasEmptyTables = queries.some((a) => a === 0);
-                    const metadataVersion =
-                        await db.metadataVersions.get("metadata-version");
-                    const wasIndexedDBDeleted = !metadataVersion?.lastSync;
-                    const [program] = await db.programs.toArray();
-                    return {
-                        needsSyncing: hasEmptyTables || wasIndexedDBDeleted,
-                        metadataVersion: metadataVersion,
-                        program,
-                    };
-                } catch (error) {
-                    await db.delete();
-                    await db.open();
-                    return {
-                        needsSyncing: true,
-                        metadataVersion: undefined,
-                        program: undefined,
-                    };
-                }
-            },
-        ),
+        checkIndexDB: fromPromise<
+            Awaited<ReturnType<typeof checkInfo>>,
+            { user: string; id: string }
+        >(async ({ input: { user, id } }) => {
+            return checkInfo(user, id);
+        }),
+        queryIndexDB: fromPromise<
+            Awaited<ReturnType<typeof queryInfo>>,
+            { user: string; id: string }
+        >(async ({ input: { id, user } }) => {
+            return queryInfo(user, id);
+        }),
         pullData: fromPromise<
             void,
             {
@@ -423,13 +389,7 @@ export const syncMachine = setup({
                 orgUnit: string;
                 lastDataPull: string | undefined;
                 engine: ReturnType<typeof useDataEngine>;
-                enrollmentsCollection: ReturnType<
-                    typeof createEnrollmentCollection
-                >;
-                eventsCollection: ReturnType<typeof createEventCollection>;
-                trackedEntitiesCollection: ReturnType<
-                    typeof createTrackedEntityCollection
-                >;
+
                 skipLastDataPull: boolean;
             }
         >(
@@ -439,9 +399,6 @@ export const syncMachine = setup({
                     orgUnit,
                     program,
                     engine,
-                    enrollmentsCollection,
-                    eventsCollection,
-                    trackedEntitiesCollection,
                     skipLastDataPull,
                 },
             }) => {
@@ -450,7 +407,7 @@ export const syncMachine = setup({
                 let hasMoreData = true;
 
                 while (hasMoreData) {
-                    const params: Record<string, any> = {
+                    let params: Record<string, any> = {
                         program,
                         orgUnits: orgUnit,
                         ouMode: "SELECTED",
@@ -458,10 +415,11 @@ export const syncMachine = setup({
                         page: currentPage,
                         pageSize: pageSize,
                     };
-
                     if (lastDataPull && !skipLastDataPull) {
-                        params.updatedAfter = lastDataPull;
+                        params = { ...params, lastDataPull };
                     }
+
+                    console.log(JSON.stringify(params, null, 2));
 
                     const response = (await engine.query({
                         trackedEntities: {
@@ -566,7 +524,10 @@ export const syncMachine = setup({
             },
         ),
         pullResource: fromPromise<
-            { version: MetadataVersion | undefined; program: Program | undefined },
+            {
+                version: MetadataVersion | undefined;
+                program: Program | undefined;
+            },
             {
                 resources: Resource[];
                 engine: ReturnType<typeof useDataEngine>;
@@ -839,28 +800,7 @@ export const syncMachine = setup({
             return { version, program };
         }),
         deleteAllMetadata: fromPromise(async () => {}),
-        deleteAllData: fromPromise<
-            void,
-            {
-                enrollmentsCollection: ReturnType<
-                    typeof createEnrollmentCollection
-                >;
-                eventsCollection: ReturnType<typeof createEventCollection>;
-                trackedEntitiesCollection: ReturnType<
-                    typeof createTrackedEntityCollection
-                >;
-            }
-        >(
-            async ({
-                input: {
-                    enrollmentsCollection,
-                    eventsCollection,
-                    trackedEntitiesCollection,
-                },
-            }) => {
-                // enrollmentsCollection.utils.deleteLocally();
-            },
-        ),
+        deleteAllData: fromPromise<void>(async () => {}),
 
         uploadEntities: fromPromise(
             async ({
@@ -873,13 +813,7 @@ export const syncMachine = setup({
                         | FlattenedEvent
                     >;
                     engine: ReturnType<typeof useDataEngine>;
-                    trackedEntitiesCollection: ReturnType<
-                        typeof createTrackedEntityCollection
-                    >;
-                    enrollmentsCollection: ReturnType<
-                        typeof createEnrollmentCollection
-                    >;
-                    eventsCollection: ReturnType<typeof createEventCollection>;
+
                     validAttributeIds: Set<string>;
                     validDataElementsByStage: Map<string, Set<string>>;
                 };
@@ -887,9 +821,7 @@ export const syncMachine = setup({
                 const {
                     entities,
                     engine,
-                    trackedEntitiesCollection,
-                    enrollmentsCollection,
-                    eventsCollection,
+
                     validAttributeIds,
                     validDataElementsByStage,
                 } = input;
@@ -909,9 +841,6 @@ export const syncMachine = setup({
 
                 if (toUpsert.length > 0) {
                     const upsertResult = await syncReportToLocal({
-                        enrollmentsCollection,
-                        eventsCollection,
-                        trackedEntitiesCollection,
                         entities: toUpsert,
                         engine,
                         validAttributeIds,
@@ -928,13 +857,16 @@ export const syncMachine = setup({
                     const deleteResult = await syncDeleteToLocal({
                         deletedEvents: toDelete,
                         engine,
-                        eventsCollection,
                     });
                     result = {
                         processed: result.processed + toDelete.length,
                         succeeded: result.succeeded + deleteResult.succeeded,
                         failed: result.failed + deleteResult.failed,
                     };
+                }
+
+                if (result.failed > 0) {
+                    throw new Error("Syncing to DHIS2 has failed");
                 }
 
                 return result;
@@ -946,25 +878,12 @@ export const syncMachine = setup({
             }: {
                 input: {
                     engine: ReturnType<typeof useDataEngine>;
-                    trackedEntitiesCollection: ReturnType<
-                        typeof createTrackedEntityCollection
-                    >;
-                    enrollmentsCollection: ReturnType<
-                        typeof createEnrollmentCollection
-                    >;
-                    eventsCollection: ReturnType<typeof createEventCollection>;
                     validAttributeIds: Set<string>;
                     validDataElementsByStage: Map<string, Set<string>>;
                 };
             }) => {
-                const {
-                    engine,
-                    trackedEntitiesCollection,
-                    enrollmentsCollection,
-                    eventsCollection,
-                    validAttributeIds,
-                    validDataElementsByStage,
-                } = input;
+                const { engine, validAttributeIds, validDataElementsByStage } =
+                    input;
 
                 const teTable: Table<FlattenedTrackedEntity, string> =
                     trackedEntitiesCollection.utils.getTable();
@@ -990,9 +909,6 @@ export const syncMachine = setup({
                     .toArray();
 
                 const upsertResult = await syncReportToLocal({
-                    enrollmentsCollection,
-                    trackedEntitiesCollection,
-                    eventsCollection,
                     entities: [
                         ...pendingTEs,
                         ...pendingEnrollments,
@@ -1006,7 +922,6 @@ export const syncMachine = setup({
                 const deleteResult = await syncDeleteToLocal({
                     deletedEvents,
                     engine,
-                    eventsCollection,
                 });
 
                 return {
@@ -1016,79 +931,60 @@ export const syncMachine = setup({
                 };
             },
         ),
-        evaluateAllIndicators: fromPromise<
-            void,
-            {
-                eventsCollection: ReturnType<typeof createEventCollection>;
-                trackedEntitiesCollection: ReturnType<
-                    typeof createTrackedEntityCollection
-                >;
+        evaluateAllIndicators: fromPromise<void>(async () => {
+            const indicators = await db.programIndicators.toArray();
+
+            if (indicators.length === 0) {
+                return;
             }
-        >(
-            async ({
-                input: { eventsCollection, trackedEntitiesCollection },
-            }) => {
-                const indicators = await db.programIndicators.toArray();
+            const eventTable: Table<FlattenedEvent, string> =
+                eventsCollection.utils.getTable();
+            const events = await eventTable
+                .filter(
+                    (e) =>
+                        e.syncStatus === "synced" || e.syncStatus === "pending",
+                )
+                .toArray();
 
-                if (indicators.length === 0) {
-                    console.log("No program indicators found");
-                    return;
-                }
-                const eventTable: Table<FlattenedEvent, string> =
-                    eventsCollection.utils.getTable();
-                const events = await eventTable
-                    .filter(
-                        (e) =>
-                            e.syncStatus === "synced" ||
-                            e.syncStatus === "pending",
-                    )
-                    .toArray();
+            if (events.length === 0) {
+                return;
+            }
+            const trackedEntitiesMap = new Map<
+                string,
+                FlattenedTrackedEntity
+            >();
+            const uniqueTeIds = [
+                ...new Set(events.map((e) => e.trackedEntity)),
+            ];
+            const teTable = trackedEntitiesCollection.utils.getTable();
 
-                if (events.length === 0) {
-                    console.log("No events to evaluate");
-                    return;
-                }
-                const trackedEntitiesMap = new Map<
-                    string,
-                    FlattenedTrackedEntity
-                >();
-                const uniqueTeIds = [
-                    ...new Set(events.map((e) => e.trackedEntity)),
-                ];
-                const teTable = trackedEntitiesCollection.utils.getTable();
-
-                for (const teId of uniqueTeIds) {
-                    const te = await teTable.get(teId);
-                    if (te) {
-                        for (const event of events.filter(
-                            (e) => e.trackedEntity === teId,
-                        )) {
-                            trackedEntitiesMap.set(event.event, te);
-                        }
+            for (const teId of uniqueTeIds) {
+                const te = await teTable.get(teId);
+                if (te) {
+                    for (const event of events.filter(
+                        (e) => e.trackedEntity === teId,
+                    )) {
+                        trackedEntitiesMap.set(event.event, te);
                     }
                 }
-                const results = evaluateProgramIndicatorsForEvents(
-                    events,
-                    indicators,
-                    trackedEntitiesMap,
-                );
-                const evaluations = Array.from(results.entries()).map(
-                    ([eventId, indicatorResults]) => ({
-                        id: eventId,
-                        eventId: eventId,
-                        results: indicatorResults,
-                        updatedAt: new Date().toISOString(),
-                        version: 1,
-                    }),
-                );
+            }
+            const results = evaluateProgramIndicatorsForEvents(
+                events,
+                indicators,
+                trackedEntitiesMap,
+            );
+            const evaluations = Array.from(results.entries()).map(
+                ([eventId, indicatorResults]) => ({
+                    id: eventId,
+                    eventId: eventId,
+                    results: indicatorResults,
+                    updatedAt: new Date().toISOString(),
+                    version: 1,
+                }),
+            );
 
-                await db.indicatorEvaluations.bulkPut(evaluations);
-
-                console.log(
-                    `✅ Evaluated ${evaluations.length} events for program indicators`,
-                );
-            },
-        ),
+            await db.indicatorEvaluations.bulkPut(evaluations);
+        }),
         evaluateChangedIndicators: fromPromise<
             void,
             {
@@ -1099,7 +995,6 @@ export const syncMachine = setup({
             const indicators = await db.programIndicators.toArray();
 
             if (indicators.length === 0) {
-                console.log("No program indicators found");
                 return;
             }
             const indicatorResults = evaluateProgramIndicatorsForEvent(
@@ -1114,28 +1009,12 @@ export const syncMachine = setup({
                 updatedAt: new Date().toISOString(),
                 version: 1,
             });
-
-            console.log(
-                `✅ Evaluated event ${event.event} for ${Object.keys(indicatorResults).length} passing indicators`,
-            );
         }),
     },
 }).createMachine({
     id: "sync",
     type: "parallel",
-    context: ({
-        input: {
-            engine,
-            enrollmentsCollection,
-            eventsCollection,
-            trackedEntitiesCollection,
-            initialLastMetadataPull,
-            initialLastDataPull,
-            initialLastDataPush,
-            user,
-            orgUnit,
-        },
-    }) => {
+    context: ({ input: { engine, user, orgUnit, message } }) => {
         return {
             engine,
             error: null,
@@ -1156,15 +1035,18 @@ export const syncMachine = setup({
             enrollmentsCollection,
             eventsCollection,
             trackedEntitiesCollection,
-            lastDataPull: initialLastDataPull,
-            lastDataPush: initialLastDataPush,
-            lastMetadataPull: initialLastMetadataPull,
+            lastDataPull: undefined,
+            lastDataPush: undefined,
+            lastMetadataPull: undefined,
             skipLastMetadataPull: true,
             user,
             orgUnit,
             skipLastDataPull: true,
             validAttributeIds: new Set<string>(),
             validDataElementsByStage: new Map<string, Set<string>>(),
+            message,
+            info: undefined,
+            metadata: {},
         };
     },
     states: {
@@ -1174,28 +1056,47 @@ export const syncMachine = setup({
             states: {
                 idle: {
                     invoke: {
-                        src: "checkIndexDD",
-                        input: ({ context }) => ({
-                            user: context.user,
-                        }),
+                        src: "checkIndexDB",
+                        input: ({ context }) => {
+                            return {
+                                user: context.user,
+                                id: context.orgUnit,
+                            };
+                        },
                         onDone: [
                             {
-                                target: "fullRefresh",
-                                guard: ({ event }) => event.output.needsSyncing,
-                                actions: assign(({ event }) => ({
-                                    skipLastMetadataPull: false,
-                                    lastMetadataPull:
-                                        event.output.metadataVersion?.lastSync,
-                                    ...deriveValidIds(event.output.program),
-                                })),
+                                target: "queryingIndexDB",
+                                guard: ({ event }) => {
+                                    return !event.output.needsSyncing;
+                                },
+                                actions: assign(({ event }) => {
+                                    return {
+                                        lastMetadataPull:
+                                            event.output.metadataVersion
+                                                ?.lastSync,
+                                        lastDataPull:
+                                            event.output.syncStatus?.lastPullAt,
+                                        lastDataPush:
+                                            event.output.syncStatus?.lastPushAt,
+                                        ...deriveValidIds(event.output.program),
+                                    };
+                                }),
                             },
                             {
-                                target: "waiting",
-                                actions: assign(({ event }) => ({
-                                    lastMetadataPull:
-                                        event.output.metadataVersion?.lastSync,
-                                    ...deriveValidIds(event.output.program),
-                                })),
+                                target: "fullRefresh",
+                                guard: ({ event }) => {
+                                    return event.output.needsSyncing;
+                                },
+
+                                actions: assign(({ event }) => {
+                                    return {
+                                        skipLastMetadataPull: false,
+                                        lastMetadataPull:
+                                            event.output.metadataVersion
+                                                ?.lastSync,
+                                        ...deriveValidIds(event.output.program),
+                                    };
+                                }),
                             },
                         ],
 
@@ -1216,6 +1117,27 @@ export const syncMachine = setup({
                         },
                     },
                 },
+                queryingIndexDB: {
+                    invoke: {
+                        src: "queryIndexDB",
+                        input: ({ context }) => {
+                            return {
+                                user: context.user,
+                                id: context.orgUnit,
+                            };
+                        },
+                        onDone: {
+                            target: "waiting",
+                            actions: assign(({ event }) => {
+                                return {
+                                    metadata: event.output,
+                                    ...deriveValidIds(event.output.program),
+                                };
+                            }),
+                        },
+                        onError: "failure",
+                    },
+                },
                 fullRefresh: {
                     invoke: {
                         src: "deleteAllMetadata",
@@ -1234,19 +1156,21 @@ export const syncMachine = setup({
                                 lastMetadataPull,
                                 skipLastMetadataPull,
                             },
-                        }) => ({
-                            resources,
-                            engine,
-                            lastMetadataPull,
-                            skipLastMetadataPull,
-                        }),
+                        }) => {
+                            return {
+                                resources,
+                                engine,
+                                lastMetadataPull,
+                                skipLastMetadataPull,
+                            };
+                        },
+
                         onDone: {
                             actions: assign(({ event }) => ({
                                 lastMetadataPull:
                                     event.output?.version?.lastSync,
-                                ...deriveValidIds(event.output?.program),
                             })),
-                            target: "waiting",
+                            target: "queryingIndexDB",
                         },
 
                         onError: "failure",
@@ -1306,11 +1230,6 @@ export const syncMachine = setup({
                             return {
                                 entities: event.entities,
                                 engine: context.engine,
-                                trackedEntitiesCollection:
-                                    context.trackedEntitiesCollection,
-                                enrollmentsCollection:
-                                    context.enrollmentsCollection,
-                                eventsCollection: context.eventsCollection,
                                 validAttributeIds: context.validAttributeIds,
                                 validDataElementsByStage:
                                     context.validDataElementsByStage,
@@ -1318,13 +1237,17 @@ export const syncMachine = setup({
                         },
                         onDone: {
                             target: "updateLastDataPush",
+                            actions: ({ context }) => {
+                                context.message.success(
+                                    "Syncing to DHIS2 successful",
+                                );
+                            },
                         },
                         onError: {
                             target: "idle",
-                            actions: ({ event }) => {
-                                console.log(
-                                    "Direct sync failed, will retry in batch:",
-                                    event.error,
+                            actions: ({ event, context }) => {
+                                context.message.success(
+                                    `Direct sync failed ${event.error}, will retry in batch`,
                                 );
                             },
                         },
@@ -1336,11 +1259,6 @@ export const syncMachine = setup({
                         src: "processBatchSync",
                         input: ({ context }) => ({
                             engine: context.engine,
-                            trackedEntitiesCollection:
-                                context.trackedEntitiesCollection,
-                            enrollmentsCollection:
-                                context.enrollmentsCollection,
-                            eventsCollection: context.eventsCollection,
                             validAttributeIds: context.validAttributeIds,
                             validDataElementsByStage:
                                 context.validDataElementsByStage,
@@ -1383,26 +1301,12 @@ export const syncMachine = setup({
 
                         FULL_DATA_SYNC: {
                             target: "fullRefresh",
-                            actions: assign({
-                                lastDataPull: () => undefined,
-                            }),
                         },
                     },
                 },
                 fullRefresh: {
                     invoke: {
                         src: "deleteAllData",
-                        input: ({
-                            context: {
-                                enrollmentsCollection,
-                                eventsCollection,
-                                trackedEntitiesCollection,
-                            },
-                        }) => ({
-                            enrollmentsCollection,
-                            eventsCollection,
-                            trackedEntitiesCollection,
-                        }),
                         onDone: {
                             actions: assign({ skipLastDataPull: false }),
                             target: "syncing",
@@ -1418,9 +1322,6 @@ export const syncMachine = setup({
                             context: {
                                 engine,
                                 lastDataPull,
-                                enrollmentsCollection,
-                                eventsCollection,
-                                trackedEntitiesCollection,
                                 orgUnit,
                                 skipLastDataPull,
                             },
@@ -1463,9 +1364,6 @@ export const syncMachine = setup({
                         },
                         FULL_DATA_SYNC: {
                             target: "fullRefresh",
-                            actions: assign({
-                                lastDataPull: () => undefined,
-                            }),
                         },
                     },
                 },
@@ -1499,15 +1397,6 @@ export const syncMachine = setup({
                 fullEvaluation: {
                     invoke: {
                         src: "evaluateAllIndicators",
-                        input: ({
-                            context: {
-                                eventsCollection,
-                                trackedEntitiesCollection,
-                            },
-                        }) => ({
-                            eventsCollection,
-                            trackedEntitiesCollection,
-                        }),
                         onDone: "idle",
                         onError: "failure",
                     },

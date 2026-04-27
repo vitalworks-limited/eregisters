@@ -28,13 +28,20 @@ import {
 } from "antd";
 import dayjs from "dayjs";
 import { Table as DexieTable } from "dexie";
+import { isEmpty } from "lodash";
 import React, { useMemo } from "react";
 import { z } from "zod";
+import {
+    enrollmentsCollection,
+    eventsCollection,
+    trackedEntitiesCollection,
+} from "../collections";
 import { DataModal } from "../components/data-modal";
 import MainEventCapture from "../components/main-event-capture";
 import { Spinner } from "../components/spinner";
 import { SyncStatusComp } from "../components/sync-status-comp";
 import { TrackerRegistration } from "../components/tracker-registration";
+import { useMetadata } from "../hooks/useMetadata";
 import { useModalState } from "../hooks/useModalState";
 import { EventContext, TrackedEntityContext } from "../machines";
 import { SyncContext } from "../machines/sync";
@@ -43,7 +50,11 @@ import {
     FlattenedEvent,
     FlattenedTrackedEntity,
 } from "../schemas";
-import { cancelDataModal, createEmptyEvent, deleteEventWithChildren } from "../utils/utils";
+import {
+    cancelDataModal,
+    createEmptyEvent,
+    deleteEventWithChildren,
+} from "../utils/utils";
 import { RootRoute } from "./__root";
 
 export const TrackedEntityRoute = createRoute({
@@ -73,16 +84,6 @@ function renderTags(text: string | string[] | undefined, color: string) {
 }
 
 function TrackedEntityComponent() {
-    const {
-        enrollmentsCollection,
-        trackedEntitiesCollection,
-        eventsCollection,
-    } = SyncContext.useSelector((a) => ({
-        enrollmentsCollection: a.context.enrollmentsCollection,
-        trackedEntitiesCollection: a.context.trackedEntitiesCollection,
-        eventsCollection: a.context.eventsCollection,
-    }));
-
     const syncActor = SyncContext.useActorRef();
     const { data, isOpen, isNew, openModal, closeModal } =
         useModalState<FlattenedEvent>();
@@ -95,15 +96,17 @@ function TrackedEntityComponent() {
     } = useModalState<FlattenedTrackedEntity>();
     const {
         trackedEntityAttributes,
-        orgUnit: { id },
+        orgUnit,
         program,
         programRuleVariables,
         programRules,
-    } = RootRoute.useLoaderData();
+    } = useMetadata();
     const { trackedEntity: tei } = TrackedEntityRoute.useParams();
     const navigate = TrackedEntityRoute.useNavigate();
     const attributes = Array.from(trackedEntityAttributes.values());
-    const mainStage = program.programStages.find((s) => s.id === "K2nxbE9ubSs");
+    const mainStage = program?.programStages.find(
+        (s) => s.id === "K2nxbE9ubSs",
+    );
     const mainStageDataElements = useMemo(
         () =>
             new Set(
@@ -127,7 +130,7 @@ function TrackedEntityComponent() {
                     and(
                         eq(events.trackedEntity, tei),
                         eq(events.programStage, "K2nxbE9ubSs"),
-                        eq(events.orgUnit, id),
+                        eq(events.orgUnit, orgUnit?.id),
                         not(eq(events.syncStatus, "deleted")),
                     ),
                 )
@@ -143,7 +146,7 @@ function TrackedEntityComponent() {
                 .where(({ events }) =>
                     and(
                         eq(events.event, data?.event),
-                        eq(events.orgUnit, id),
+                        eq(events.orgUnit, orgUnit?.id),
                         not(eq(events.syncStatus, "deleted")),
                     ),
                 )
@@ -159,7 +162,7 @@ function TrackedEntityComponent() {
                 .where(({ enrollments }) =>
                     and(
                         eq(enrollments.trackedEntity, tei),
-                        eq(enrollments.orgUnit, id),
+                        eq(enrollments.orgUnit, orgUnit?.id),
                     ),
                 )
                 .findOne(),
@@ -173,7 +176,7 @@ function TrackedEntityComponent() {
                 .where(({ trackedEntity }) =>
                     and(
                         eq(trackedEntity.trackedEntity, tei),
-                        eq(trackedEntity.orgUnit, id),
+                        eq(trackedEntity.orgUnit, orgUnit?.id),
                     ),
                 )
                 .findOne(),
@@ -258,11 +261,6 @@ function TrackedEntityComponent() {
                                     const { markedDeleted } =
                                         await deleteEventWithChildren(
                                             record.event,
-                                            {
-                                                eventsCollection,
-                                                trackedEntitiesCollection,
-                                                enrollmentsCollection,
-                                            },
                                         );
                                     if (markedDeleted.length > 0) {
                                         syncActor.send({
@@ -291,11 +289,16 @@ function TrackedEntityComponent() {
     const items: DescriptionsProps["items"] = Object.entries({
         ...enrollment.attributes,
         ...trackedEntity.attributes,
-    }).map(([key, value]) => ({
-        key,
-        label: keys.get(key) || key,
-        children: <Text>{String(value)}</Text>,
-    }));
+    }).flatMap(([key, value]) => {
+        if (isEmpty(value)) {
+            return [];
+        }
+        return {
+            key,
+            label: keys.get(key) || key,
+            children: <Text>{String(value)}</Text>,
+        };
+    });
 
     const handleCreate = async () => {
         const newEvent = createEmptyEvent({
@@ -457,13 +460,7 @@ function TrackedEntityComponent() {
                 onClose={() => {
                     closeModal();
                 }}
-                onCancel={() =>
-                    cancelDataModal(data!, {
-                        eventsCollection,
-                        trackedEntitiesCollection,
-                        enrollmentsCollection,
-                    })
-                }
+                onCancel={() => cancelDataModal(data!)}
                 enrollment={enrollment}
                 onSave={async ({ values }) => {
                     if (values && data && enrollment) {
@@ -597,7 +594,6 @@ function TrackedEntityComponent() {
                                         validDataElements:
                                             mainStageDataElements,
                                         form,
-                                        eventsCollection,
                                     },
                                 }}
                             >
@@ -625,13 +621,7 @@ function TrackedEntityComponent() {
                 open={trackedEntityIsOpen}
                 data={trackedEntityData}
                 onClose={closeTrackedEntityModal}
-                onCancel={() =>
-                    cancelDataModal(trackedEntityData!, {
-                        eventsCollection,
-                        trackedEntitiesCollection,
-                        enrollmentsCollection,
-                    })
-                }
+                onCancel={() => cancelDataModal(trackedEntityData!)}
                 enrollment={enrollment}
                 onSave={async ({ values }) => {
                     if (trackedEntityData && values) {
@@ -697,7 +687,6 @@ function TrackedEntityComponent() {
                                 trackedEntity: trackedEntityData!,
                                 validDataElements: mainStageDataElements,
                                 form,
-                                trackedEntitiesCollection,
                             },
                         }}
                     >
