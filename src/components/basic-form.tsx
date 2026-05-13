@@ -44,7 +44,7 @@ export default function BasicForm({
             <Typography.Title level={4} style={{ marginBottom: 16 }}>
                 {section}
             </Typography.Title>
-            <Row gutter={[16, 0]}>
+            <Row gutter={[16, 16]}>
                 {triageSection?.dataElements.map((dataElement) => (
                     <DataElementRenderer
                         key={dataElement.id}
@@ -57,7 +57,7 @@ export default function BasicForm({
                     />
                 ))}
             </Row>
-            <Row gutter={[16, 0]}>
+            <Row gutter={[16, 16]}>
                 {currentSection.dataElements.map((dataElement) => (
                     <DataElementRenderer
                         key={dataElement.id}

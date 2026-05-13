@@ -126,7 +126,7 @@ export const DataElementRenderer = React.memo(
                 sm={calculateColSpan(sectionLength, 24)}
                 md={calculateColSpan(sectionLength, 24)}
                 lg={calculateColSpan(sectionLength, 12)}
-                xl={xl ?? calculateColSpan(sectionLength, 6)}
+                xl={xl ?? calculateColSpan(sectionLength, 8)}
                 onFieldChange={onFieldChange}
                 disabledDate={(date) => {
                     if (allowFutureDate) return date.isBefore(dayjs(), "day");

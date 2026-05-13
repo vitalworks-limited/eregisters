@@ -27,9 +27,7 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
         ...a.context.trackedEntity.attributes,
         ...a.context.formData,
     }));
-
-    // Re-apply form values after mount to handle the case where Ant Design's
-    // preserve={false} cleanup clears values set during machine initialization
+		
     useEffect(() => {
         form.setFieldsValue(initialFormData);
     }, []);
@@ -65,7 +63,7 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
                 style={{ borderRadius: 0 }}
                 size="small"
             >
-                <Row gutter={[16, 0]}>
+                <Row gutter={[16, 16]}>
                     <DataElementField
                         dataElement={{
                             code: "enrolledAt",
@@ -114,7 +112,7 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
                             style={{ borderRadius: 0 }}
                             size="small"
                         >
-                            <Row gutter={[16, 0]}>
+                            <Row gutter={[16, 16]}>
                                 {tei.map(({ id }) => (
                                     <DataElementRenderer
                                         key={id}

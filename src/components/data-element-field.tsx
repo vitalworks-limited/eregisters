@@ -9,6 +9,7 @@ import {
     InputNumber,
     Radio,
     Select,
+    Typography,
 } from "antd";
 import React, { useCallback } from "react";
 import {
@@ -26,9 +27,15 @@ import VillageSelect from "./village-select";
 
 // Fields auto-populated by VillageSelect cascade — must not be manually edited
 const VILLAGE_CASCADED_FIELDS = new Set([
-    "XjgpfkoxffK", "lpAaZa1cKCB", "sOBCVNIm1kX", // District
-    "PKuyTiVCR89", "lqbqW3iYmKl", "qbxJxuZCyKu", // Subcounty
-    "W87HAtUHJjB", "BiergDUeQra", "SjvgaRn8m7Y",  // Parish
+    "XjgpfkoxffK",
+    "lpAaZa1cKCB",
+    "sOBCVNIm1kX", // District
+    "PKuyTiVCR89",
+    "lqbqW3iYmKl",
+    "qbxJxuZCyKu", // Subcounty
+    "W87HAtUHJjB",
+    "BiergDUeQra",
+    "SjvgaRn8m7Y", // Parish
 ]);
 
 export const DataElementField = React.memo<{
@@ -72,7 +79,8 @@ export const DataElementField = React.memo<{
         disabled = false,
     }) => {
         if (hidden) return null;
-        const isDisabled = disabled || VILLAGE_CASCADED_FIELDS.has(dataElement.id);
+        const isDisabled =
+            disabled || VILLAGE_CASCADED_FIELDS.has(dataElement.id);
         const filterOption = useCallback((input: string, option: any) => {
             if (!option) return false;
             return (
@@ -441,13 +449,20 @@ export const DataElementField = React.memo<{
                     ]}
                     getValueProps={createGetValueProps(dataElement.valueType)}
                     normalize={createNormalize(dataElement.valueType)}
-                    extra={warnings.map((w) => w.content)}
                     help={
-                        errors.length > 0
-                            ? errors.map((e) => e.content).join(", ")
+                        [...errors, ...warnings].length > 0
+                            ? [...errors, ...warnings]
+                                  .map((e) => e.content)
+                                  .join(", ")
                             : undefined
                     }
-                    validateStatus={errors.length > 0 ? "error" : undefined}
+                    validateStatus={
+                        errors.length > 0
+                            ? "error"
+                            : warnings.length > 0
+                              ? "warning"
+                              : undefined
+                    }
                     hasFeedback={errors.length > 0 || warnings.length > 0}
                     style={{ padding: 0, margin: 0 }}
                 >

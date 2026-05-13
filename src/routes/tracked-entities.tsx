@@ -56,17 +56,17 @@ function TrackedEntities() {
                 ),
         [id],
     );
-    const { data: enrollments } = useLiveSuspenseQuery((q) =>
-        q
-            .from({ enrollments: enrollmentsCollection })
-            .where(({ enrollments }) =>
-                and(
-                    eq(enrollments.enrolledAt, dayjs().format("YYYY-MM-DD")),
-                    not(eq(enrollments.syncStatus, "draft")),
-                    eq(enrollments.orgUnit, id),
-                ),
-            ),
-    );
+    // const { data: enrollments } = useLiveSuspenseQuery((q) =>
+    //     q
+    //         .from({ enrollments: enrollmentsCollection })
+    //         .where(({ enrollments }) => {
+    //             return and(
+    //                 // eq(String(enrollments.enrolledAt).slice(0, 10), dayjs().format("YYYY-MM-DD")),
+    //                 not(eq(enrollments.syncStatus, "draft")),
+    //                 eq(enrollments.orgUnit, id),
+    //             );
+    //         }),
+    // );
     const navigate = TrackedEntitiesRoute.useNavigate();
     const { search } = TrackedEntitiesRoute.useSearch();
 
@@ -108,7 +108,13 @@ function TrackedEntities() {
             <Card variant="borderless" style={{ flex: 1 }}>
                 <Statistic
                     title="Registered Today"
-                    value={enrollments.length}
+                    value={
+                        total.filter(
+                            (te) =>
+                                dayjs(te.createdAt).format("YYYY-MM-DD") ===
+                                dayjs().format("YYYY-MM-DD"),
+                        ).length
+                    }
                     prefix={<CalendarOutlined />}
                     styles={{
                         content: { color: "#52c41a" },
@@ -124,7 +130,7 @@ function TrackedEntities() {
                 padding: "16px",
             }}
         >
-            <Row gutter={[8, 8]}>
+            <Row gutter={[16, 16]}>
                 {isMobile && <Col span={24}>{statsSection}</Col>}
                 <Col xs={24} lg={8}>
                     <Card
@@ -143,7 +149,7 @@ function TrackedEntities() {
                             style={{ margin: 0, padding: 0 }}
                             initialValues={search}
                         >
-                            <Row gutter={[0, 0]}>
+                            <Row gutter={[16, 16]}>
                                 {program?.programTrackedEntityAttributes.flatMap(
                                     ({
                                         trackedEntityAttribute: { id },

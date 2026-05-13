@@ -284,11 +284,11 @@ const syncDeleteToLocal = async ({
         response.validationReport.errorReports.map((r) => [r.uid, r.message]),
     );
 
-    for (const uid of succeededUids) {
-        const tx = eventsCollection.delete(uid);
-        await tx.isPersisted.promise;
-        await db.indicatorEvaluations.where("eventId").equals(uid).delete();
-    }
+    // for (const uid of succeededUids) {
+    //     const tx = eventsCollection.delete(uid);
+    //     await tx.isPersisted.promise;
+    //     await db.indicatorEvaluations.where("eventId").equals(uid).delete();
+    // }
 
     return {
         succeeded: succeededUids.size,
@@ -419,8 +419,6 @@ export const syncMachine = setup({
                         params = { ...params, lastDataPull };
                     }
 
-                    console.log(JSON.stringify(params, null, 2));
-
                     const response = (await engine.query({
                         trackedEntities: {
                             resource: "tracker/trackedEntities",
@@ -488,35 +486,35 @@ export const syncMachine = setup({
                     );
 
                     // Evaluate indicators for pulled events inline
-                    if (mergedEvents.length > 0) {
-                        const indicators = await db.programIndicators.toArray();
-                        if (indicators.length > 0) {
-                            const teMap = new Map(
-                                mergedTrackedEntities.map((te) => [
-                                    te.trackedEntity,
-                                    te,
-                                ]),
-                            );
-                            for (const event of mergedEvents) {
-                                const te = teMap.get(event.trackedEntity);
-                                if (te) {
-                                    const results =
-                                        evaluateProgramIndicatorsForEvent(
-                                            event,
-                                            indicators,
-                                            te,
-                                        );
-                                    await db.indicatorEvaluations.put({
-                                        id: event.event,
-                                        eventId: event.event,
-                                        results,
-                                        updatedAt: new Date().toISOString(),
-                                        version: 1,
-                                    });
-                                }
-                            }
-                        }
-                    }
+                    // if (mergedEvents.length > 0) {
+                    //     const indicators = await db.programIndicators.toArray();
+                    //     if (indicators.length > 0) {
+                    //         const teMap = new Map(
+                    //             mergedTrackedEntities.map((te) => [
+                    //                 te.trackedEntity,
+                    //                 te,
+                    //             ]),
+                    //         );
+                    //         for (const event of mergedEvents) {
+                    //             const te = teMap.get(event.trackedEntity);
+                    //             if (te) {
+                    //                 const results =
+                    //                     evaluateProgramIndicatorsForEvent(
+                    //                         event,
+                    //                         indicators,
+                    //                         te,
+                    //                     );
+                    //                 await db.indicatorEvaluations.put({
+                    //                     id: event.event,
+                    //                     eventId: event.event,
+                    //                     results,
+                    //                     updatedAt: new Date().toISOString(),
+                    //                     version: 1,
+                    //                 });
+                    //             }
+                    //         }
+                    //     }
+                    // }
 
                     hasMoreData = instances.length === pageSize;
                     currentPage++;
@@ -931,85 +929,85 @@ export const syncMachine = setup({
                 };
             },
         ),
-        evaluateAllIndicators: fromPromise<void>(async () => {
-            const indicators = await db.programIndicators.toArray();
+        // evaluateAllIndicators: fromPromise<void>(async () => {
+        //     const indicators = await db.programIndicators.toArray();
 
-            if (indicators.length === 0) {
-                return;
-            }
-            const eventTable: Table<FlattenedEvent, string> =
-                eventsCollection.utils.getTable();
-            const events = await eventTable
-                .filter(
-                    (e) =>
-                        e.syncStatus === "synced" || e.syncStatus === "pending",
-                )
-                .toArray();
+        //     if (indicators.length === 0) {
+        //         return;
+        //     }
+        //     const eventTable: Table<FlattenedEvent, string> =
+        //         eventsCollection.utils.getTable();
+        //     const events = await eventTable
+        //         .filter(
+        //             (e) =>
+        //                 e.syncStatus === "synced" || e.syncStatus === "pending",
+        //         )
+        //         .toArray();
 
-            if (events.length === 0) {
-                return;
-            }
-            const trackedEntitiesMap = new Map<
-                string,
-                FlattenedTrackedEntity
-            >();
-            const uniqueTeIds = [
-                ...new Set(events.map((e) => e.trackedEntity)),
-            ];
-            const teTable = trackedEntitiesCollection.utils.getTable();
+        //     if (events.length === 0) {
+        //         return;
+        //     }
+        //     const trackedEntitiesMap = new Map<
+        //         string,
+        //         FlattenedTrackedEntity
+        //     >();
+        //     const uniqueTeIds = [
+        //         ...new Set(events.map((e) => e.trackedEntity)),
+        //     ];
+        //     const teTable = trackedEntitiesCollection.utils.getTable();
 
-            for (const teId of uniqueTeIds) {
-                const te = await teTable.get(teId);
-                if (te) {
-                    for (const event of events.filter(
-                        (e) => e.trackedEntity === teId,
-                    )) {
-                        trackedEntitiesMap.set(event.event, te);
-                    }
-                }
-            }
-            const results = evaluateProgramIndicatorsForEvents(
-                events,
-                indicators,
-                trackedEntitiesMap,
-            );
-            const evaluations = Array.from(results.entries()).map(
-                ([eventId, indicatorResults]) => ({
-                    id: eventId,
-                    eventId: eventId,
-                    results: indicatorResults,
-                    updatedAt: new Date().toISOString(),
-                    version: 1,
-                }),
-            );
+        //     for (const teId of uniqueTeIds) {
+        //         const te = await teTable.get(teId);
+        //         if (te) {
+        //             for (const event of events.filter(
+        //                 (e) => e.trackedEntity === teId,
+        //             )) {
+        //                 trackedEntitiesMap.set(event.event, te);
+        //             }
+        //         }
+        //     }
+        //     const results = evaluateProgramIndicatorsForEvents(
+        //         events,
+        //         indicators,
+        //         trackedEntitiesMap,
+        //     );
+        //     const evaluations = Array.from(results.entries()).map(
+        //         ([eventId, indicatorResults]) => ({
+        //             id: eventId,
+        //             eventId: eventId,
+        //             results: indicatorResults,
+        //             updatedAt: new Date().toISOString(),
+        //             version: 1,
+        //         }),
+        //     );
 
-            await db.indicatorEvaluations.bulkPut(evaluations);
-        }),
-        evaluateChangedIndicators: fromPromise<
-            void,
-            {
-                event: FlattenedEvent;
-                trackedEntity: FlattenedTrackedEntity;
-            }
-        >(async ({ input: { event, trackedEntity } }) => {
-            const indicators = await db.programIndicators.toArray();
+        //     await db.indicatorEvaluations.bulkPut(evaluations);
+        // }),
+        // evaluateChangedIndicators: fromPromise<
+        //     void,
+        //     {
+        //         event: FlattenedEvent;
+        //         trackedEntity: FlattenedTrackedEntity;
+        //     }
+        // >(async ({ input: { event, trackedEntity } }) => {
+        //     const indicators = await db.programIndicators.toArray();
 
-            if (indicators.length === 0) {
-                return;
-            }
-            const indicatorResults = evaluateProgramIndicatorsForEvent(
-                event,
-                indicators,
-                trackedEntity,
-            );
-            await db.indicatorEvaluations.put({
-                id: event.event,
-                eventId: event.event,
-                results: indicatorResults,
-                updatedAt: new Date().toISOString(),
-                version: 1,
-            });
-        }),
+        //     if (indicators.length === 0) {
+        //         return;
+        //     }
+        //     const indicatorResults = evaluateProgramIndicatorsForEvent(
+        //         event,
+        //         indicators,
+        //         trackedEntity,
+        //     );
+        //     await db.indicatorEvaluations.put({
+        //         id: event.event,
+        //         eventId: event.event,
+        //         results: indicatorResults,
+        //         updatedAt: new Date().toISOString(),
+        //         version: 1,
+        //     });
+        // }),
     },
 }).createMachine({
     id: "sync",
@@ -1370,45 +1368,45 @@ export const syncMachine = setup({
                 failure: {},
             },
         },
-        indicatorEvaluation: {
-            initial: "idle",
-            id: "indicatorEvaluation",
-            states: {
-                idle: {
-                    on: {
-                        EVALUATE_INDICATORS: "evaluating",
-                        FULL_INDICATOR_SYNC: "fullEvaluation",
-                    },
-                },
-                evaluating: {
-                    invoke: {
-                        src: "evaluateChangedIndicators",
-                        input: ({ event }) => {
-                            assertEvent(event, "EVALUATE_INDICATORS");
-                            return {
-                                event: event.event,
-                                trackedEntity: event.trackedEntity,
-                            };
-                        },
-                        onDone: "idle",
-                        onError: "failure",
-                    },
-                },
-                fullEvaluation: {
-                    invoke: {
-                        src: "evaluateAllIndicators",
-                        onDone: "idle",
-                        onError: "failure",
-                    },
-                },
-                failure: {
-                    on: {
-                        EVALUATE_INDICATORS: "evaluating",
-                        FULL_INDICATOR_SYNC: "fullEvaluation",
-                    },
-                },
-            },
-        },
+        // indicatorEvaluation: {
+        //     initial: "idle",
+        //     id: "indicatorEvaluation",
+        //     states: {
+        //         idle: {
+        //             on: {
+        //                 EVALUATE_INDICATORS: "evaluating",
+        //                 FULL_INDICATOR_SYNC: "fullEvaluation",
+        //             },
+        //         },
+        //         evaluating: {
+        //             invoke: {
+        //                 src: "evaluateChangedIndicators",
+        //                 input: ({ event }) => {
+        //                     assertEvent(event, "EVALUATE_INDICATORS");
+        //                     return {
+        //                         event: event.event,
+        //                         trackedEntity: event.trackedEntity,
+        //                     };
+        //                 },
+        //                 onDone: "idle",
+        //                 onError: "failure",
+        //             },
+        //         },
+        //         fullEvaluation: {
+        //             invoke: {
+        //                 src: "evaluateAllIndicators",
+        //                 onDone: "idle",
+        //                 onError: "failure",
+        //             },
+        //         },
+        //         failure: {
+        //             on: {
+        //                 EVALUATE_INDICATORS: "evaluating",
+        //                 FULL_INDICATOR_SYNC: "fullEvaluation",
+        //             },
+        //         },
+        //     },
+        // },
     },
 });
 

@@ -9,6 +9,7 @@ import {
     Row,
     Select,
     Tabs,
+    Typography,
 } from "antd";
 import dayjs from "dayjs";
 import { orderBy } from "lodash";
@@ -338,7 +339,7 @@ export default function MainEventCapture({
                             label: section.displayName || section.name,
                             children: (
                                 <Card>
-                                    <Row gutter={[16, 0]}>
+                                    <Row gutter={[16, 32]}>
                                         {section.dataElements.flatMap(
                                             (dataElement) => {
                                                 if (
@@ -399,7 +400,7 @@ export default function MainEventCapture({
     return (
         <Flex vertical gap={10} style={{ width: "100%" }}>
             <Card size="small" styles={{ body: { padding: 10, margin: 0 } }}>
-                <Row gutter={[16, 0]}>
+                <Row gutter={[16, 16]}>
                     <DataElementField
                         dataElement={{
                             code: "occurredAt",

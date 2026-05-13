@@ -10,7 +10,6 @@ import { router } from "./router";
 
 const Main = () => {
     const syncActor = SyncContext.useActorRef();
-
     return <RouterProvider router={router} context={{ syncActor }} />;
 };
 
@@ -66,8 +65,11 @@ const MyApp: FC = () => {
                     },
                     Card: {},
                     Tabs: {
-                        cardGutter: 5,
+                        // cardGutter: 5,
                     },
+										Form:{
+											size:43
+										}
                 },
                 token: {
                     fontSize: 16,

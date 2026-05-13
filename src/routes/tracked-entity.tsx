@@ -192,6 +192,7 @@ function TrackedEntityComponent() {
 
     const firstName = String(trackedEntity.attributes?.["KSq9EyZ8ZFi"] ?? "");
     const surname = String(trackedEntity.attributes?.["TWPNbc9O2nK"] ?? "");
+		const sex = String(trackedEntity.attributes?.["bqliZKdUGMX"] ?? "");
     const dob = trackedEntity.attributes?.["Y3DE5CZWySr"];
     const age = dob ? dayjs().diff(dayjs(String(dob)), "year") : null;
 
@@ -418,6 +419,8 @@ function TrackedEntityComponent() {
                         {firstName} {surname}
                     </Title>
                     {age !== null && <Tag color="blue">{age} yrs</Tag>}
+										<Tag color="purple">{sex}</Tag>
+										
                     <SyncStatusComp syncStatus={trackedEntity.syncStatus} />
                 </Flex>
             </Flex>

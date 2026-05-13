@@ -98,37 +98,6 @@ export default function RelationshipEvent({
             <Tabs
                 type="editable-card"
                 hideAdd
-                styles={
-                    {
-                        // root: {
-                        //     background: "#fff",
-                        //     borderRadius: 12,
-                        //     padding: 8,
-                        // },
-                        // header: {
-                        //     marginBottom: 8,
-                        //     background: "#f5f5f5",
-                        //     borderRadius: 10,
-                        //     padding: 6,
-                        // },
-                        // item: {
-                        //     padding: "12px 18px",
-                        //     fontSize: 15,
-                        //     fontWeight: 600,
-                        //     borderRadius: 8,
-                        // },
-                        // indicator: {
-                        //     height: 3,
-                        //     borderRadius: 999,
-                        // },
-                        // content: {
-                        //     padding: 12,
-                        //     background: "#fff",
-                        //     borderRadius: 10,
-                        //     border: "1px solid #f0f0f0",
-                        // },
-                    }
-                }
                 items={children.map((trackedEntity) => {
                     return {
                         key: trackedEntity.trackedEntity,
