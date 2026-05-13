@@ -2,7 +2,6 @@ import { FormInstance } from "antd";
 import dayjs from "dayjs";
 import { orderBy } from "lodash";
 import React from "react";
-import { RootRoute } from "../routes/__root";
 import { ProgramRuleResult } from "../schemas";
 import { buildCurrentDataElements, calculateColSpan } from "../utils/utils";
 import { DataElementField } from "./data-element-field";
