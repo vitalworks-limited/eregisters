@@ -1454,6 +1454,14 @@ export const checkInfo = async (user: string, id: string) => {
             .toArray();
         const wasIndexedDBDeleted = !metadataVersion?.lastSync;
         const [program] = await db.programs.toArray();
+
+        const result = {
+            needsSyncing: hasEmptyTables || wasIndexedDBDeleted,
+            metadataVersion,
+            syncStatus,
+            program,
+        };
+				console.log(result)
         return {
             needsSyncing: hasEmptyTables || wasIndexedDBDeleted,
             metadataVersion,
@@ -1470,3 +1478,14 @@ export const checkInfo = async (user: string, id: string) => {
         };
     }
 };
+
+export function redirectByAuthorities(authorities: string[], baseUrl: string) {
+    // if (authorities.includes("ALL") ) {
+    //     window.location.href = `${baseUrl}/apps/eRegisters-Monitoring-Dashboard`;
+    //     return;
+    // }
+    // if (!authorities.includes("M_eregisters")) {
+    //     window.location.href = `${baseUrl}/apps/dashboard`;
+    // 		return
+    // }
+}

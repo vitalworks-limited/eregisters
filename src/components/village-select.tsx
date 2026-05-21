@@ -1,7 +1,7 @@
 import { FormInstance, Select } from "antd";
 import React from "react";
 import { Village } from "../schemas";
-import villages from "../villages.json";
+// import villages from "../villages.json";
 
 interface WatchField {
     fieldId: string | string[];
@@ -31,7 +31,14 @@ export default function VillageSelect({
     onFieldChange,
     fieldId,
 }: VillageSelectProps) {
-    const currentVillages = villages as Village[];
+    const [currentVillages, setCurrentVillages] = React.useState<Village[]>([]);
+
+    React.useEffect(() => {
+        fetch("./data/villages.min.json")
+            .then((res) => res.json())
+            .then(setCurrentVillages);
+    }, []);
+    // const currentVillages = villages as Village[];
 
     const handleVillageChange = async (selectedValue: string) => {
         onChange?.(selectedValue);
@@ -89,7 +96,7 @@ export default function VillageSelect({
                             form.setFieldValue(f, selectedValue);
                         }
                     }
-										
+
                     if (fieldId) {
                         onFieldChange?.(fieldId, selectedValue);
                     }

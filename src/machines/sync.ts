@@ -7,6 +7,7 @@ import {
     FlattenedEnrollment,
     FlattenedEvent,
     FlattenedTrackedEntity,
+    Metadata,
     OrgUnit,
     Program,
     ProgramIndicator,
@@ -16,15 +17,16 @@ import {
     TrackedEntityAttribute,
 } from "../schemas";
 
-import type { useDataEngine } from "@dhis2/app-runtime";
+import type { useCurrentUserInfo, useDataEngine } from "@dhis2/app-runtime";
 import { createActorContext } from "@xstate/react";
+import { MessageInstance } from "antd/es/message/interface";
 import { Table } from "dexie";
 import {
     enrollmentsCollection,
-    trackedEntitiesCollection,
     eventsCollection,
+    trackedEntitiesCollection,
 } from "../collections";
-import { db, MetadataVersion } from "../db";
+import { db } from "../db";
 import {
     mergeBulkEnrollments,
     mergeBulkEvents,
@@ -36,17 +38,21 @@ import {
     transformTrackedEntity,
 } from "../db/transformers";
 import {
-    evaluateProgramIndicatorsForEvent,
-    evaluateProgramIndicatorsForEvents,
-} from "../utils/indicator-utils";
-import {
     checkInfo,
     flattenEnrollment,
     flattenEvent,
     flattenTrackedEntity,
     queryInfo,
 } from "../utils/utils";
-import { MessageInstance } from "antd/es/message/interface";
+import {
+    DataPullMode,
+    DataPushMode,
+    MetadataSyncMode,
+    shouldContinueDataPull,
+    shouldRecordDataPush,
+    shouldUseLastDataPull,
+    shouldUseLastUpdatedFilter,
+} from "./sync-metadata-mode";
 
 function deriveValidIds(program: Program | undefined): {
     validAttributeIds: Set<string>;
@@ -97,16 +103,19 @@ export interface SyncContext {
     lastDataPull: string | undefined;
     lastDataPush: string | undefined;
     lastMetadataPull: string | undefined;
-    skipLastMetadataPull: boolean;
+    metadataSyncMode: MetadataSyncMode;
+    dataPullMode: DataPullMode;
+    dataPushMode: DataPushMode;
     resources: Resource[];
     interval: number;
     user: string;
     orgUnit: string;
-    skipLastDataPull: boolean;
     validAttributeIds: Set<string>;
     validDataElementsByStage: Map<string, Set<string>>;
     message: MessageInstance;
     metadata: Partial<Awaited<ReturnType<typeof queryInfo>>>;
+    userInfo: ReturnType<typeof useCurrentUserInfo>;
+    rawMetadata: Metadata;
 }
 
 const syncReportToLocal = async ({
@@ -283,13 +292,6 @@ const syncDeleteToLocal = async ({
     const failedUids = new Map(
         response.validationReport.errorReports.map((r) => [r.uid, r.message]),
     );
-
-    // for (const uid of succeededUids) {
-    //     const tx = eventsCollection.delete(uid);
-    //     await tx.isPersisted.promise;
-    //     await db.indicatorEvaluations.where("eventId").equals(uid).delete();
-    // }
-
     return {
         succeeded: succeededUids.size,
         failed: failedUids.size,
@@ -332,6 +334,7 @@ export const syncMachine = setup({
             user: string;
             orgUnit: string;
             message: MessageInstance;
+            userInfo: ReturnType<typeof useCurrentUserInfo>;
         },
     },
 
@@ -389,18 +392,11 @@ export const syncMachine = setup({
                 orgUnit: string;
                 lastDataPull: string | undefined;
                 engine: ReturnType<typeof useDataEngine>;
-
-                skipLastDataPull: boolean;
+                dataPullMode: DataPullMode;
             }
         >(
             async ({
-                input: {
-                    lastDataPull,
-                    orgUnit,
-                    program,
-                    engine,
-                    skipLastDataPull,
-                },
+                input: { lastDataPull, orgUnit, program, engine, dataPullMode },
             }) => {
                 let currentPage = 1;
                 const pageSize = 100;
@@ -415,8 +411,8 @@ export const syncMachine = setup({
                         page: currentPage,
                         pageSize: pageSize,
                     };
-                    if (lastDataPull && !skipLastDataPull) {
-                        params = { ...params, lastDataPull };
+                    if (shouldUseLastDataPull(dataPullMode, lastDataPull)) {
+                        params = { ...params, updatedAfter: lastDataPull };
                     }
 
                     const response = (await engine.query({
@@ -425,9 +421,20 @@ export const syncMachine = setup({
                             params,
                         },
                     })) as {
-                        trackedEntities: { trackedEntities: TrackedEntity[] };
+                        trackedEntities: {
+                            pager?: {
+                                page?: number;
+                                pageSize?: number;
+                                pageCount?: number;
+                                nextPage?: string;
+                                total?: number;
+                            };
+                            trackedEntities: TrackedEntity[];
+                        };
                     };
-                    const instances = response.trackedEntities.trackedEntities;
+                    const { trackedEntities: instances } =
+                        response.trackedEntities;
+                    const pager = response.trackedEntities.pager;
 
                     const serverTrackedEntities =
                         instances.map(flattenTrackedEntity);
@@ -516,29 +523,54 @@ export const syncMachine = setup({
                     //     }
                     // }
 
-                    hasMoreData = instances.length === pageSize;
+                    hasMoreData = shouldContinueDataPull({
+                        receivedCount: instances.length,
+                        pageSize,
+                        pager,
+                    });
                     currentPage++;
                 }
             },
         ),
+        saveMetadata: fromPromise<void, Metadata>(async ({ input }) => {
+            await db.organisationUnits.bulkPut(input.organisationUnits);
+            await db.programs.bulkPut(input.programs);
+            await db.dataElements.bulkPut(input.dataElements);
+            await db.programIndicators.bulkPut(input.programIndicators);
+            await db.trackedEntityAttributes.bulkPut(
+                input.trackedEntityAttributes,
+            );
+            await db.programRules.bulkPut(input.programRules);
+            await db.programRuleVariables.bulkPut(input.programRuleVariables);
+            await db.optionSets.bulkPut(input.optionSets);
+            await db.optionGroups.bulkPut(input.optionGroups);
+
+            await db.metadataVersions.bulkPut(input.metadataVersion);
+        }),
         pullResource: fromPromise<
-            {
-                version: MetadataVersion | undefined;
-                program: Program | undefined;
-            },
+            Metadata,
             {
                 resources: Resource[];
                 engine: ReturnType<typeof useDataEngine>;
                 lastMetadataPull: string | undefined;
-                skipLastMetadataPull: boolean;
+                metadataSyncMode: MetadataSyncMode;
             }
         >(async ({ input }) => {
-            const {
-                resources,
-                engine,
-                lastMetadataPull,
-                skipLastMetadataPull,
-            } = input;
+            const { resources, engine, lastMetadataPull, metadataSyncMode } =
+                input;
+
+            const results: Metadata = {
+                dataElements: [],
+                optionGroups: [],
+                optionSets: [],
+                organisationUnits: [],
+                programs: [],
+                programIndicators: [],
+                programRules: [],
+                programRuleVariables: [],
+                trackedEntityAttributes: [],
+                metadataVersion: [],
+            };
             for (const resource of resources) {
                 switch (resource) {
                     case "me":
@@ -555,11 +587,12 @@ export const syncMachine = setup({
                                 id: string;
                             };
                         };
-                        await db.organisationUnits.bulkPut(
-                            me.organisationUnits.map((ou) => ({
+
+                        results.organisationUnits = me.organisationUnits.map(
+                            (ou) => ({
                                 ...ou,
                                 user: me.id,
-                            })),
+                            }),
                         );
                         break;
 
@@ -573,7 +606,7 @@ export const syncMachine = setup({
                                 },
                             },
                         })) as { program: Program };
-                        await db.programs.put(program);
+                        results.programs = [program];
                         break;
 
                     case "dataElements":
@@ -581,10 +614,18 @@ export const syncMachine = setup({
                             fields: "id,name,code,valueType,formName,optionSetValue,optionSet[id]",
                             paging: false,
                         };
-                        if (lastMetadataPull && !skipLastMetadataPull) {
+
+                        if (
+                            shouldUseLastUpdatedFilter(
+                                metadataSyncMode,
+                                lastMetadataPull,
+                            )
+                        ) {
                             dataElementsParams.filter = `lastUpdated:gt:${lastMetadataPull}`;
                         }
-                        const { dataElements } = (await engine.query({
+                        const {
+                            dataElements: { dataElements },
+                        } = (await engine.query({
                             dataElements: {
                                 resource: "dataElements",
                                 params: dataElementsParams,
@@ -595,19 +636,24 @@ export const syncMachine = setup({
                             };
                         };
 
-                        await db.dataElements.bulkPut(
-                            dataElements.dataElements,
-                        );
+                        results.dataElements = dataElements;
                         break;
                     case "programIndicators":
                         const programIndicatorsParams: any = {
                             fields: "id,name,filter,program,aggregationType,expression",
                             paging: false,
                         };
-                        if (lastMetadataPull && !skipLastMetadataPull) {
+                        if (
+                            shouldUseLastUpdatedFilter(
+                                metadataSyncMode,
+                                lastMetadataPull,
+                            )
+                        ) {
                             programIndicatorsParams.filter = `lastUpdated:gt:${lastMetadataPull}`;
                         }
-                        const { programIndicators } = (await engine.query({
+                        const {
+                            programIndicators: { programIndicators },
+                        } = (await engine.query({
                             programIndicators: {
                                 resource: "programIndicators",
                                 params: programIndicatorsParams,
@@ -618,9 +664,8 @@ export const syncMachine = setup({
                             };
                         };
 
-                        await db.programIndicators.bulkPut(
-                            programIndicators.programIndicators,
-                        );
+                        results.programIndicators = programIndicators;
+
                         break;
 
                     case "attributes":
@@ -628,37 +673,50 @@ export const syncMachine = setup({
                             fields: "id,name,code,unique,generated,pattern,confidential,valueType,optionSetValue,displayFormName,formName,optionSet[id]",
                             paging: false,
                         };
-                        if (lastMetadataPull && !skipLastMetadataPull) {
+                        if (
+                            shouldUseLastUpdatedFilter(
+                                metadataSyncMode,
+                                lastMetadataPull,
+                            )
+                        ) {
                             attributesParams.filter = `lastUpdated:gt:${lastMetadataPull}`;
                         }
-                        const { trackedEntityAttributes } = (await engine.query(
-                            {
-                                trackedEntityAttributes: {
-                                    resource: "trackedEntityAttributes",
-                                    params: attributesParams,
-                                },
+                        const {
+                            trackedEntityAttributes: {
+                                trackedEntityAttributes,
                             },
-                        )) as {
+                        } = (await engine.query({
+                            trackedEntityAttributes: {
+                                resource: "trackedEntityAttributes",
+                                params: attributesParams,
+                            },
+                        })) as {
                             trackedEntityAttributes: {
                                 trackedEntityAttributes: TrackedEntityAttribute[];
                             };
                         };
 
-                        await db.trackedEntityAttributes.bulkPut(
-                            trackedEntityAttributes.trackedEntityAttributes,
-                        );
+                        results.trackedEntityAttributes =
+                            trackedEntityAttributes;
                         break;
 
                     case "programRules":
                         const programRulesFilters = [
                             "program.id:eq:ueBhWkWll5v",
                         ];
-                        if (lastMetadataPull && !skipLastMetadataPull) {
+                        if (
+                            shouldUseLastUpdatedFilter(
+                                metadataSyncMode,
+                                lastMetadataPull,
+                            )
+                        ) {
                             programRulesFilters.push(
                                 `lastUpdated:gt:${lastMetadataPull}`,
                             );
                         }
-                        const { programRules } = (await engine.query({
+                        const {
+                            programRules: { programRules },
+                        } = (await engine.query({
                             programRules: {
                                 resource: `programRules.json`,
                                 params: {
@@ -673,21 +731,27 @@ export const syncMachine = setup({
                             };
                         };
 
-                        await db.programRules.bulkPut(
-                            programRules.programRules,
-                        );
+                        results.programRules = programRules;
+
                         break;
 
                     case "programRuleVariables":
                         const programRuleVariablesFilters = [
                             "program.id:eq:ueBhWkWll5v",
                         ];
-                        if (lastMetadataPull && !skipLastMetadataPull) {
+                        if (
+                            shouldUseLastUpdatedFilter(
+                                metadataSyncMode,
+                                lastMetadataPull,
+                            )
+                        ) {
                             programRuleVariablesFilters.push(
                                 `lastUpdated:gt:${lastMetadataPull}`,
                             );
                         }
-                        const { programRuleVariables } = (await engine.query({
+                        const {
+                            programRuleVariables: { programRuleVariables },
+                        } = (await engine.query({
                             programRuleVariables: {
                                 resource: `programRuleVariables.json`,
                                 params: {
@@ -701,9 +765,8 @@ export const syncMachine = setup({
                                 programRuleVariables: ProgramRuleVariable[];
                             };
                         };
-                        await db.programRuleVariables.bulkPut(
-                            programRuleVariables.programRuleVariables,
-                        );
+
+                        results.programRuleVariables = programRuleVariables;
                         break;
 
                     case "optionSets":
@@ -711,7 +774,12 @@ export const syncMachine = setup({
                             fields: "id,options[id,name,code,sortOrder]",
                             paging: false,
                         };
-                        if (lastMetadataPull && !skipLastMetadataPull) {
+                        if (
+                            shouldUseLastUpdatedFilter(
+                                metadataSyncMode,
+                                lastMetadataPull,
+                            )
+                        ) {
                             optionSetsParams.filter = `lastUpdated:gt:${lastMetadataPull}`;
                         }
                         const { optionSets } = (await engine.query({
@@ -727,19 +795,20 @@ export const syncMachine = setup({
                                         id: string;
                                         name: string;
                                         code: string;
+                                        sortOrder: number;
                                     }[];
                                 }[];
                             };
                         };
 
                         const flattenedOptionSets =
-                            optionSets.optionSets.flatMap((os: any) =>
-                                os.options.map((o: any) => ({
+                            optionSets.optionSets.flatMap((os) =>
+                                os.options.map((o) => ({
                                     ...o,
                                     optionSet: os.id,
                                 })),
                             );
-                        await db.optionSets.bulkPut(flattenedOptionSets);
+                        results.optionSets = flattenedOptionSets;
                         break;
 
                     case "optionGroups":
@@ -747,7 +816,12 @@ export const syncMachine = setup({
                             fields: "id,options[id,name,code,sortOrder]",
                             paging: false,
                         };
-                        if (lastMetadataPull && !skipLastMetadataPull) {
+                        if (
+                            shouldUseLastUpdatedFilter(
+                                metadataSyncMode,
+                                lastMetadataPull,
+                            )
+                        ) {
                             optionGroupsParams.filter = `lastUpdated:gt:${lastMetadataPull}`;
                         }
                         const { optionGroups } = (await engine.query({
@@ -763,19 +837,20 @@ export const syncMachine = setup({
                                         id: string;
                                         name: string;
                                         code: string;
+                                        sortOrder: number;
                                     }[];
                                 }>;
                             };
                         };
 
                         const flattenedOptionGroups =
-                            optionGroups.optionGroups.flatMap((og: any) =>
-                                og.options.map((o: any) => ({
+                            optionGroups.optionGroups.flatMap((og) =>
+                                og.options.map((o) => ({
                                     ...o,
                                     optionGroup: og.id,
                                 })),
                             );
-                        await db.optionGroups.bulkPut(flattenedOptionGroups);
+                        results.optionGroups = flattenedOptionGroups;
                         break;
                 }
 
@@ -790,16 +865,26 @@ export const syncMachine = setup({
                 }
                 version.versions[resource] = currentTimestamp;
                 version.lastSync = currentTimestamp;
-                await db.metadataVersions.put(version);
+                results.metadataVersion = [version];
             }
 
-            const version = await db.metadataVersions.get("metadata-version");
-            const [program] = await db.programs.toArray();
-            return { version, program };
-        }),
-        deleteAllMetadata: fromPromise(async () => {}),
-        deleteAllData: fromPromise<void>(async () => {}),
+            // console.log(results);
 
+            return results;
+        }),
+        deleteAllMetadata: fromPromise(async () => {
+            await db.organisationUnits.clear();
+            await db.programs.clear();
+            await db.dataElements.clear();
+            await db.programIndicators.clear();
+            await db.trackedEntityAttributes.clear();
+            await db.programRules.clear();
+            await db.programRuleVariables.clear();
+            await db.optionSets.clear();
+            await db.optionGroups.clear();
+            await db.metadataVersions.clear();
+        }),
+        deleteAllData: fromPromise<void>(async () => {}),
         uploadEntities: fromPromise(
             async ({
                 input,
@@ -906,21 +991,40 @@ export const syncMachine = setup({
                     .filter((e) => e.syncStatus === "deleted")
                     .toArray();
 
-                const upsertResult = await syncReportToLocal({
-                    entities: [
-                        ...pendingTEs,
-                        ...pendingEnrollments,
-                        ...pendingEvents,
-                    ],
-                    engine,
-                    validAttributeIds,
-                    validDataElementsByStage,
-                });
+                if (
+                    pendingTEs.length === 0 &&
+                    pendingEnrollments.length === 0 &&
+                    pendingEvents.length === 0 &&
+                    deletedEvents.length === 0
+                ) {
+                    return { processed: 0, succeeded: 0, failed: 0 };
+                }
 
-                const deleteResult = await syncDeleteToLocal({
-                    deletedEvents,
-                    engine,
-                });
+                let upsertResult = { processed: 0, succeeded: 0, failed: 0 };
+                if (
+                    pendingTEs.length > 0 ||
+                    pendingEnrollments.length > 0 ||
+                    pendingEvents.length > 0
+                ) {
+                    upsertResult = await syncReportToLocal({
+                        entities: [
+                            ...pendingTEs,
+                            ...pendingEnrollments,
+                            ...pendingEvents,
+                        ],
+                        engine,
+                        validAttributeIds,
+                        validDataElementsByStage,
+                    });
+                }
+
+                let deleteResult = { succeeded: 0, failed: 0 };
+                if (deletedEvents.length > 0) {
+                    deleteResult = await syncDeleteToLocal({
+                        deletedEvents,
+                        engine,
+                    });
+                }
 
                 return {
                     processed: upsertResult.processed + deletedEvents.length,
@@ -1010,9 +1114,10 @@ export const syncMachine = setup({
         // }),
     },
 }).createMachine({
+    /** @xstate-layout N4IgpgJg5mDOIC5SwJ4DsDGA6AtmALgIYSFEDK62AlhADZgDEEA9mmFlWgG7MDW7qTLgLFShCkJr0EnHhlJVWAbQAMAXVVrEoAA7NYVfIrTaQAD0QBmAEwBGLCoAsANgAcrlbduXbAVl+WjgA0ICiItiq+jg6WAJwqAOy2Cc6+7gC+6SGC2HhEJOSUHHSMLGwc3HwCRXmihZIlMpXyRsrqSrZaSCB6Bq0m3RYI1q6WWAmxqd7x1nYJrsGh4bau1uNuNrbxo76Z2TUiBeJFUoxgAE7nzOdYOrSkAGbXOFg5wvliEtSNsswtxppNKZeoZjKYhpsHC53J5vH4AoswghRq4sL55t44o50a5bHsQG9akcvsV6AwyAAVACCACUKQB9ACyAFFqQARKnU+lkACaADkAMJA7og-rgxAJMZRXxeFQqWKWZzWRzykJI2wq6LeVKOWIRWzOTz4wmHT4nEoMABiAFUADK2pmsqkcrm8wXC3T6UGscUISwJLDWVIqDwTZwJXWqpYIPwTcZ2Gx6lRK2LWY0HD71bCwQhcThQRmmohMVjsX78V4ZurHIQ5vNoAtFwhNOQKNoadTAr1iwbhVzOLUq5ypGWWVyxSZq8KOLZYVPjw16xz99NCIlmoQARwArhcUPmAJJoCBgMxsgBCJfK5eqa6bJJ3e8Px9PF5bfzbaEBnZF3bBvZjftB2TEdvHHSdo2SawxiSVwEgSaxYQWFZV1ye8ikfc59wbI8TzPS8LiuG47keZ5KzvTMa2wTDsKgXDX3Pd9-nbD0ej-H0ANmBJfDnZNrAnBUokcCMpxjGcA0cEZJnlDUVyyAkq2JIoT3oIwG0LSirzLSoKxNSiSRUgh8w06smM-b8uk9Pp-1AIYNRGLANWTfwXFiXFHERadLB4zxZliFx7N8FRLFQ95qwMsBVOMpsGEI65bnufAnnOF49PC5TIqM9SmzM-oLK7ayONs6cHKckdXPczzAPHKE3DcqZhLxeS0qU2tKHzLSKh4XTFI3bN2obXKAXaH8rO9AZioQeJYkDXFuPReZfGVBJRLhVFEI8nxJjmSZQvXLNyIwDqym07rbzQ-SihyfMhpYzoCvG313HsJx3GxJUuOE1aZRmraEIWBJImTELmt6g7robWLLnikikrIlq+sOm7fmYr8RsstjCom8xEFWX7HH9cNdQQiMVsgxCeIjYT0RnKIvDTUGKPSoQAHdCFBSHKVpBkWXZTkqW5fkhVGzHHoAgcVHGXFlSW5dlwHVaB2iRqQw8ILrHRXZGYu5nsDZjmoCtO0HV551+cF90RdFGycb9Pw5zSHxcU8Anh0VjysEajaB0CRw9vQ1n2bUw2zFgIh8HYQgHgj84AApDTlFQAEoGARg79eD1jraK23IScNwPC8Hx-ECVaCeiby-A8SwVGg8dQta74yTdAV6WZPkKQPTvmTILP2OxoZEMloLE4NHwh6W0SNcBrA4KCmvnECGW-e1rBG9JRgAAVrTIAAJekXSpPusd9Ie0UTzxF9sCfrCnhesH9dX4lp+CV-2IR19OBhQ-DyPo4uWONdE4pzeJ-Eox8xaTTPiPOUY9r5ykntGWYaRZ7cVrtLSYLgG6IwgFQc4YAMD4C+AwCBPZJrDmcLPfOAkAjcVcL4Ke6I1iP2CsmEm8Etbv2wOvbcdxmDEHzGyPBBD8CdRvIdNeiNeG0H4bghsQj8GENumjDsGNs4D2WIkRyctDQRH8kGMmSJlR2HPkGSwlcogTmwQdaRsjBHCMIVDIiCVSIpQkTwvhAj5EOPwMo-Kv4T7i38p7R+cJF6+FiOiKeKoeJpAicOZc1gOEgy4ZIg6AAjUgGAAAWxCTpdSqO4xGmT8A5K+H49GD0yG2woVQ1yE5aFxKnkGewLCRjX0wc4axVEsAlLKZQJxMNErJVSspYpWTcmUAqaoqpNtB5ynPqPK+N8p4Gh4vxZw8QIiBEiE1VJHiChgFtIQMObIxCb23LAbJJCrb919PAmadg4LcWgvZWIU9861XiJEeYIZfBdNXkcC5tBaAb3JNSOkB9zYt1IXM8IqY5yphWLEQG44FhBm+i9C+iF+KKhed04FoKv42ntFC10QtYU5zsgiicTyUUhjcpJZw0SxgfTiBMOw6sIwEu3CCsFP9SB-xjvHC+ICxlEEJRvSlGiYw0qReOVFjKMVIOCdfaCbkky6lGDyvlDxeW0BpGAB4+CrliJ0udNJhBJV6pBYa41cBsnTOlb6JU0RgrxAjIqccQUGHRi2oGGBgRvJhhSQpD+5z9VYBtQao1JrrlxWIsM+G4qrWRujXauNTrbmBPIcqGIHrXbesiFPJI4wYEazrqkUNoCI18ohobfJ4ia0SsjfWrNai7kAQiEGB+Mo0hJPgp4fsoklqomHBqReE4fCpABfs2toL62DMTa40Z4aW11oGlAdtsyqXhFrpQixqx4KAxWMy6My57AGgnTXaWgRZ1hu4fOrAvDDnHNOfOm5Hac22z0WsGcKoFjCU1L6pEw4eI2FxMXRCY43A6tBRnDqXNIWHwtsLL9kCf1yrpYq9FZ6kRRDGIkSD8o4LeVg4Cp9CHIYkodChmF2aMPUrWLS5FOGmWiUCPYNlE5VjGIVHBrAVGQ5h0FVgKOwqE5yjFWu1NfKhPOq7Vh1jDLcOiV1LEjEQDuKSU1pkeSaBmAnngN0HIO6ZUAFoUGSl1FsaDGsZKiXM3mi+tmBJjn7NWsGVEzO+nMxEcYgQ9SpmCvZvUoluIvU01iHEeyH1hTAfQHzAEEKrRrr9a+Mplz0OSf7S6tZczRUoklyaBphKOXs95bE-FoJVWmDxSSC5a4IRHLl3WWAaLPjwheYrtsKaogCEmSUOpatxGY1JQ0SSgwl1a+vQywcTJHB63ZU9jk57LTcHXQxJVogpD8gTMc3aZuI3rUtxAM4xiKm8v6DVF6FaQUkjtpUyRX42f8kd9OQd8ynYQIvAMgN1PevcGkPD4QUhSjxv8lE813s9IeOzWg258HfeWjNaEHgmX+A1GXa+Dh5jSWPQ1t+cXG7I9q5E-r9S0gzkmMkbpJJTjfZS0gyIqICYorSMFf50E6fKR8V8b7BMeL0KiHQyMkpXCMLK3PVhrD0SeZkySWxXioAKJEd99wqJxzJh02slU7ykGSUlk4A0kTJgymnjzoQfTJmYAFyYtBcphwISCqmKqsxFSoK5cuKmsXm09JfYKt9+Azktqud97wtcQkvM2Sid6zSe1tKSAify96-eEtJ6JRensBKhkTs4LwRO0+RoZwExjiBgm6ieaGeCowRIG61O7lFSKvcCfTbGh1AuvAOCI1sGcIWaYceCmiOIzkfqKh9gJk7pfqlDEA45TwOJFwRGHeemqeoJ38QWPEOIAmA8RyDyH2TtBw8rB4ovEYipZgDiVJnrRMWgHDg877lNkqhOM9vtGKIax-oR419iJIre8OiOYAJ+9CWA5+owH01+H+SIwkzGBeSozy-YkwCQem6QQAA */
     id: "sync",
     type: "parallel",
-    context: ({ input: { engine, user, orgUnit, message } }) => {
+    context: ({ input: { engine, user, orgUnit, message, userInfo } }) => {
         return {
             engine,
             error: null,
@@ -1026,7 +1131,6 @@ export const syncMachine = setup({
                 "attributes",
                 "programRuleVariables",
                 "programRules",
-                "programIndicators",
             ],
 
             interval: 5000,
@@ -1036,15 +1140,29 @@ export const syncMachine = setup({
             lastDataPull: undefined,
             lastDataPush: undefined,
             lastMetadataPull: undefined,
-            skipLastMetadataPull: true,
+            metadataSyncMode: "full",
+            dataPullMode: "incremental",
+            dataPushMode: "batch",
             user,
             orgUnit,
-            skipLastDataPull: true,
             validAttributeIds: new Set<string>(),
             validDataElementsByStage: new Map<string, Set<string>>(),
             message,
             info: undefined,
             metadata: {},
+            userInfo,
+            rawMetadata: {
+                dataElements: [],
+                optionGroups: [],
+                optionSets: [],
+                organisationUnits: [],
+                programs: [],
+                programIndicators: [],
+                programRules: [],
+                programRuleVariables: [],
+                trackedEntityAttributes: [],
+                metadataVersion: [],
+            },
         };
     },
     states: {
@@ -1081,14 +1199,14 @@ export const syncMachine = setup({
                                 }),
                             },
                             {
-                                target: "fullRefresh",
+                                target: "syncing",
                                 guard: ({ event }) => {
                                     return event.output.needsSyncing;
                                 },
 
                                 actions: assign(({ event }) => {
                                     return {
-                                        skipLastMetadataPull: false,
+                                        metadataSyncMode: "full",
                                         lastMetadataPull:
                                             event.output.metadataVersion
                                                 ?.lastSync,
@@ -1104,14 +1222,25 @@ export const syncMachine = setup({
                         START_METADATA_SYNC: {
                             target: "syncing",
                             actions: assign({
-                                skipLastMetadataPull: () => true,
+                                metadataSyncMode: () => "incremental",
                             }),
                         },
                         FULL_METADATA_SYNC: {
-                            target: "fullRefresh",
+                            target: "syncing",
                             actions: assign({
-                                skipLastMetadataPull: () => false,
+                                metadataSyncMode: () => "full",
                             }),
+                        },
+                    },
+                },
+                savingMetadata: {
+                    invoke: {
+                        src: "saveMetadata",
+                        input: ({ context: { rawMetadata } }) => {
+                            return rawMetadata;
+                        },
+                        onDone: {
+                            target: "queryingIndexDB",
                         },
                     },
                 },
@@ -1136,10 +1265,10 @@ export const syncMachine = setup({
                         onError: "failure",
                     },
                 },
-                fullRefresh: {
+                deletingMetadata: {
                     invoke: {
                         src: "deleteAllMetadata",
-                        onDone: "syncing",
+                        onDone: "savingMetadata",
                         onError: "failure",
                     },
                 },
@@ -1152,44 +1281,70 @@ export const syncMachine = setup({
                                 engine,
                                 resources,
                                 lastMetadataPull,
-                                skipLastMetadataPull,
+                                metadataSyncMode,
                             },
                         }) => {
                             return {
                                 resources,
                                 engine,
                                 lastMetadataPull,
-                                skipLastMetadataPull,
+                                metadataSyncMode,
                             };
                         },
 
-                        onDone: {
-                            actions: assign(({ event }) => ({
-                                lastMetadataPull:
-                                    event.output?.version?.lastSync,
-                            })),
-                            target: "queryingIndexDB",
-                        },
+                        onDone: [
+                            {
+                                guard: ({ context: { metadataSyncMode } }) => {
+                                    return metadataSyncMode === "incremental";
+                                },
+
+                                actions: assign(({ event }) => ({
+                                    lastMetadataPull:
+                                        event.output.metadataVersion[0]
+                                            .lastSync,
+                                    rawMetadata: event.output,
+                                })),
+                                target: "savingMetadata",
+                            },
+                            {
+                                guard: ({ context: { metadataSyncMode } }) => {
+                                    return metadataSyncMode === "full";
+                                },
+
+                                actions: assign(({ event }) => ({
+                                    lastMetadataPull:
+                                        event.output.metadataVersion[0]
+                                            .lastSync,
+                                    rawMetadata: event.output,
+                                })),
+                                target: "deletingMetadata",
+                            },
+                        ],
 
                         onError: "failure",
                     },
                 },
                 waiting: {
                     after: {
-                        60000: "syncing",
+                        60000: {
+                            target: "syncing",
+                            actions: assign({
+                                metadataSyncMode: () => "incremental",
+                            }),
+                        },
                     },
                     on: {
                         START_METADATA_SYNC: {
                             target: "syncing",
                             actions: assign({
-                                skipLastMetadataPull: () => true,
+                                metadataSyncMode: () => "incremental",
                             }),
                         },
 
                         FULL_METADATA_SYNC: {
-                            target: "fullRefresh",
+                            target: "syncing",
                             actions: assign({
-                                skipLastMetadataPull: () => true,
+                                metadataSyncMode: () => "full",
                             }),
                         },
                     },
@@ -1206,13 +1361,24 @@ export const syncMachine = setup({
                     on: {
                         SYNC_ENTITIES: {
                             target: "directSync",
+                            actions: assign({
+                                dataPushMode: () => "direct",
+                            }),
                         },
                         PUSH_DATA: {
                             target: "batchSync",
+                            actions: assign({
+                                dataPushMode: () => "batch",
+                            }),
                         },
                     },
                     after: {
-                        30000: { target: "batchSync" },
+                        30000: {
+                            target: "batchSync",
+                            actions: assign({
+                                dataPushMode: () => "batch",
+                            }),
+                        },
                     },
                 },
                 directSync: {
@@ -1261,9 +1427,16 @@ export const syncMachine = setup({
                             validDataElementsByStage:
                                 context.validDataElementsByStage,
                         }),
-                        onDone: {
-                            target: "updateLastDataPush",
-                        },
+                        onDone: [
+                            {
+                                guard: ({ event }) =>
+                                    shouldRecordDataPush(event.output),
+                                target: "updateLastDataPush",
+                            },
+                            {
+                                target: "idle",
+                            },
+                        ],
                         onError: {
                             target: "idle",
                             actions: ({ event }) => {
@@ -1295,10 +1468,16 @@ export const syncMachine = setup({
                     on: {
                         START_DATA_SYNC: {
                             target: "syncing",
+                            actions: assign({
+                                dataPullMode: () => "incremental",
+                            }),
                         },
 
                         FULL_DATA_SYNC: {
                             target: "fullRefresh",
+                            actions: assign({
+                                dataPullMode: () => "full",
+                            }),
                         },
                     },
                 },
@@ -1306,7 +1485,6 @@ export const syncMachine = setup({
                     invoke: {
                         src: "deleteAllData",
                         onDone: {
-                            actions: assign({ skipLastDataPull: false }),
                             target: "syncing",
                         },
                         onError: "failure",
@@ -1321,7 +1499,7 @@ export const syncMachine = setup({
                                 engine,
                                 lastDataPull,
                                 orgUnit,
-                                skipLastDataPull,
+                                dataPullMode,
                             },
                         }) => ({
                             engine,
@@ -1331,7 +1509,7 @@ export const syncMachine = setup({
                             orgUnit,
                             program: "ueBhWkWll5v",
                             trackedEntitiesCollection,
-                            skipLastDataPull,
+                            dataPullMode,
                         }),
 
                         onDone: {
@@ -1345,7 +1523,7 @@ export const syncMachine = setup({
                     entry: [
                         assign({
                             lastDataPull: () => new Date().toISOString(),
-                            skipLastDataPull: true,
+                            dataPullMode: () => "incremental",
                         }),
                         "persistSyncState",
                     ],
@@ -1354,14 +1532,25 @@ export const syncMachine = setup({
 
                 waiting: {
                     after: {
-                        60000: "syncing",
+                        60000: {
+                            target: "syncing",
+                            actions: assign({
+                                dataPullMode: () => "incremental",
+                            }),
+                        },
                     },
                     on: {
                         START_DATA_SYNC: {
                             target: "syncing",
+                            actions: assign({
+                                dataPullMode: () => "incremental",
+                            }),
                         },
                         FULL_DATA_SYNC: {
                             target: "fullRefresh",
+                            actions: assign({
+                                dataPullMode: () => "full",
+                            }),
                         },
                     },
                 },

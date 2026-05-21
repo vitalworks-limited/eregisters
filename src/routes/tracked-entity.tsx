@@ -192,7 +192,7 @@ function TrackedEntityComponent() {
 
     const firstName = String(trackedEntity.attributes?.["KSq9EyZ8ZFi"] ?? "");
     const surname = String(trackedEntity.attributes?.["TWPNbc9O2nK"] ?? "");
-		const sex = String(trackedEntity.attributes?.["bqliZKdUGMX"] ?? "");
+    const sex = String(trackedEntity.attributes?.["bqliZKdUGMX"] ?? "");
     const dob = trackedEntity.attributes?.["Y3DE5CZWySr"];
     const age = dob ? dayjs().diff(dayjs(String(dob)), "year") : null;
 
@@ -209,12 +209,14 @@ function TrackedEntityComponent() {
                 dataIndex: ["dataValues", "mrKZWf2WMIC"],
                 key: "services",
                 render: (text) => renderTags(text, "blue"),
+                width: "300px",
             },
             {
                 title: "Immunization",
                 dataIndex: ["dataValues", "ZuYU54N4pjS"],
                 key: "immunization",
                 render: (text) => renderTags(text, "green"),
+                width: "300px",
             },
             {
                 title: "Referral",
@@ -419,8 +421,8 @@ function TrackedEntityComponent() {
                         {firstName} {surname}
                     </Title>
                     {age !== null && <Tag color="blue">{age} yrs</Tag>}
-										<Tag color="purple">{sex}</Tag>
-										
+                    <Tag color="purple">{sex}</Tag>
+
                     <SyncStatusComp syncStatus={trackedEntity.syncStatus} />
                 </Flex>
             </Flex>
@@ -483,6 +485,38 @@ function TrackedEntityComponent() {
                         const allRelatedEvents = await eventTable
                             .filter((a) => a.parentEvent === data.event)
                             .toArray();
+
+                        // const allMainEvents = await eventTable
+                        //     .filter(
+                        //         (a) =>
+                        //             a.trackedEntity === tei &&
+                        //             a.programStage === "K2nxbE9ubSs" &&
+                        //             a.orgUnit === enrollment.orgUnit &&
+                        //             a.syncStatus !== "deleted" &&
+                        //             // a.dataValues["zxJ9SDZtKUS"] <= 1,
+                        //             a.dataValues["occurredAt"] <
+                        //                 values["occurredAt"],
+                        //     )
+                        //     .toArray();
+
+                        // const currentVaccinations = values["ZuYU54N4pjS"] ?? "";
+
+												// console.log(currentVaccinations)
+
+                        // const evs = [
+                        //     ...allMainEvents
+                        //         .flatMap(
+                        //             (a) => a.dataValues["ZuYU54N4pjS"] ?? [],
+                        //         )
+                        //         .join(",")
+                        //         .split(","),
+
+                        //     ...(currentVaccinations
+                        //         ? currentVaccinations.split(",")
+                        //         : []),
+                        // ];
+
+                        // console.log(evs);
 
                         const relatedEvents = allRelatedEvents.filter(
                             (a) => a.syncStatus !== "synced",

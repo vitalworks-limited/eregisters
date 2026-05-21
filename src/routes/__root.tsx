@@ -30,6 +30,11 @@ import { Spinner } from "../components/spinner";
 import { useMetadata } from "../hooks/useMetadata";
 import { SyncContext } from "../machines/sync";
 import {
+    isDataPullLoading,
+    isDataPushLoading,
+    isMetadataSyncLoading,
+} from "../machines/sync-metadata-mode";
+import {
     trackedEntitiesCollection,
     enrollmentsCollection,
     eventsCollection,
@@ -107,19 +112,27 @@ function LayoutWithDrafts() {
     const syncActor = SyncContext.useActorRef();
     const { orgUnit } = useMetadata();
     const syncingMetadata = SyncContext.useSelector((snapshot) => {
-        const isManualRefresh =
-            (snapshot.matches({ metadataSync: "syncing" }) ||
-                snapshot.matches({ metadataSync: "fullRefresh" })) &&
-            snapshot.context.lastMetadataPull !== undefined;
-        return isManualRefresh;
+        return isMetadataSyncLoading(
+            snapshot.matches({ metadataSync: "syncing" }) ||
+                snapshot.matches({ metadataSync: "deletingMetadata" }) ||
+                snapshot.matches({ metadataSync: "savingMetadata" }),
+            snapshot.context.lastMetadataPull,
+        );
     });
 
-    const syncingData = SyncContext.useSelector((a) =>
-        a.matches({ dataPull: "syncing" }),
+    const syncingData = SyncContext.useSelector((snapshot) =>
+        isDataPullLoading(
+            snapshot.matches({ dataPull: "syncing" }),
+            snapshot.context.lastDataPull,
+        ),
     );
 
-    const pushingData = SyncContext.useSelector((a) =>
-        a.matches({ dataSync: "batchSync" }),
+    const pushingData = SyncContext.useSelector((snapshot) =>
+        isDataPushLoading(
+            snapshot.matches({ dataSync: "directSync" }) ||
+                snapshot.matches({ dataSync: "uploadingDirect" }) ||
+                snapshot.matches({ dataSync: "batchSync" }),
+        ),
     );
     const lastDataPull = SyncContext.useSelector((a) => a.context.lastDataPull);
     const lastDataPush = SyncContext.useSelector((a) => a.context.lastDataPush);

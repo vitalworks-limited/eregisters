@@ -1,4 +1,8 @@
-import { useCurrentUserInfo, useDataEngine } from "@dhis2/app-runtime";
+import {
+    useConfig,
+    useCurrentUserInfo,
+    useDataEngine,
+} from "@dhis2/app-runtime";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { App, ConfigProvider, Typography } from "antd";
@@ -7,6 +11,7 @@ import React, { FC } from "react";
 import { SyncContext } from "./machines/sync";
 import { queryClient } from "./query-client";
 import { router } from "./router";
+import { redirectByAuthorities } from "./utils/utils";
 
 const Main = () => {
     const syncActor = SyncContext.useActorRef();
@@ -18,8 +23,11 @@ const FullApp: FC<{
     orgUnit: string;
 }> = ({ user, orgUnit }) => {
     const engine = useDataEngine();
-
+    const userInfo = useCurrentUserInfo();
+    const { baseUrl } = useConfig();
     const { message } = App.useApp();
+
+    redirectByAuthorities(userInfo?.authorities ?? [], baseUrl);
 
     return (
         <QueryClientProvider client={queryClient}>
@@ -29,7 +37,7 @@ const FullApp: FC<{
                         engine,
                         orgUnit,
                         user,
-
+                        userInfo,
                         message,
                     },
                 }}
@@ -67,9 +75,9 @@ const MyApp: FC = () => {
                     Tabs: {
                         // cardGutter: 5,
                     },
-										Form:{
-											size:43
-										}
+                    Form: {
+                        size: 43,
+                    },
                 },
                 token: {
                     fontSize: 16,

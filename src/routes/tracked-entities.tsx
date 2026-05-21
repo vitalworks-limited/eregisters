@@ -19,10 +19,7 @@ import { ClientSchema } from "../schemas";
 import { RootRoute } from "./__root";
 
 import dayjs from "dayjs";
-import {
-    enrollmentsCollection,
-    trackedEntitiesCollection,
-} from "../collections";
+import { trackedEntitiesCollection } from "../collections";
 import { useMetadata } from "../hooks/useMetadata";
 
 const { Content } = Layout;
@@ -56,17 +53,6 @@ function TrackedEntities() {
                 ),
         [id],
     );
-    // const { data: enrollments } = useLiveSuspenseQuery((q) =>
-    //     q
-    //         .from({ enrollments: enrollmentsCollection })
-    //         .where(({ enrollments }) => {
-    //             return and(
-    //                 // eq(String(enrollments.enrolledAt).slice(0, 10), dayjs().format("YYYY-MM-DD")),
-    //                 not(eq(enrollments.syncStatus, "draft")),
-    //                 eq(enrollments.orgUnit, id),
-    //             );
-    //         }),
-    // );
     const navigate = TrackedEntitiesRoute.useNavigate();
     const { search } = TrackedEntitiesRoute.useSearch();
 

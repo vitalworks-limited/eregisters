@@ -1,6 +1,7 @@
 import { GetProp, TablePaginationConfig, TreeSelectProps } from "antd";
 import { FilterValue } from "antd/es/table/interface";
 import z from "zod";
+import { MetadataVersion } from "./db";
 
 export const UID = z
     .string()
@@ -611,3 +612,28 @@ export interface Village {
     subcounty_name: string;
     District: string;
 }
+
+export type Metadata = {
+    organisationUnits: Node[];
+    programs: Program[];
+    dataElements: DataElement[];
+    programIndicators: ProgramIndicator[];
+    trackedEntityAttributes: TrackedEntityAttribute[];
+    programRules: ProgramRule[];
+    programRuleVariables: ProgramRuleVariable[];
+    optionSets: Array<{
+        optionSet: string;
+        id: string;
+        name: string;
+        code: string;
+        sortOrder: number;
+    }>;
+    optionGroups: Array<{
+        optionGroup: string;
+        id: string;
+        name: string;
+        code: string;
+        sortOrder: number;
+    }>;
+    metadataVersion: MetadataVersion[];
+};
