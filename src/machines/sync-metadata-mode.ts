@@ -38,6 +38,48 @@ export function shouldRecordDataPush({ processed }: { processed: number }) {
     return processed > 0;
 }
 
+export function extractTrackerJobId(response: unknown) {
+    const value = response as {
+        id?: string;
+        location?: string;
+        response?: {
+            id?: string;
+            location?: string;
+        };
+    };
+    const id = value.response?.id ?? value.id;
+    if (id) {
+        return id;
+    }
+
+    const location = value.response?.location ?? value.location;
+    const match = location?.match(/\/tracker\/jobs\/([^/?#]+)/);
+    if (match?.[1]) {
+        return match[1];
+    }
+
+    throw new Error("DHIS2 tracker async response did not include a job id");
+}
+
+export function isTrackerJobComplete(jobLogs: unknown) {
+    const logs = Array.isArray(jobLogs) ? jobLogs : [jobLogs];
+    return logs.some((log) => {
+        const value = log as {
+            completed?: boolean;
+            jobStatus?: string;
+            status?: string;
+            message?: string;
+        };
+        const status = value.status ?? value.jobStatus;
+        return (
+            value.completed === true ||
+            status === "COMPLETED" ||
+            status === "SUCCESS" ||
+            value.message?.toLowerCase().includes("import complete") === true
+        );
+    });
+}
+
 export function shouldContinueDataPull({
     receivedCount,
     pageSize,

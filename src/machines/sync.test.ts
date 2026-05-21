@@ -1,9 +1,11 @@
 /// <reference types="jest" />
 
 import {
+    extractTrackerJobId,
     isDataPullLoading,
     isDataPushLoading,
     isMetadataSyncLoading,
+    isTrackerJobComplete,
     shouldRecordDataPush,
     shouldContinueDataPull,
     shouldUseLastDataPull,
@@ -93,5 +95,48 @@ describe("metadata sync mode", () => {
                 },
             }),
         ).toBe(false);
+    });
+
+    it("extracts async tracker job id from response id", () => {
+        expect(
+            extractTrackerJobId({
+                response: { id: "LkXBUdIgbe3" },
+            }),
+        ).toBe("LkXBUdIgbe3");
+    });
+
+    it("extracts async tracker job id from response location", () => {
+        expect(
+            extractTrackerJobId({
+                response: {
+                    location:
+                        "https://play.dhis2.org/dev/api/tracker/jobs/LkXBUdIgbe3",
+                },
+            }),
+        ).toBe("LkXBUdIgbe3");
+    });
+
+    it("extracts async tracker job id from top-level location", () => {
+        expect(
+            extractTrackerJobId({
+                location:
+                    "https://play.dhis2.org/dev/api/tracker/jobs/LkXBUdIgbe3",
+            }),
+        ).toBe("LkXBUdIgbe3");
+    });
+
+    it("detects completed tracker job logs", () => {
+        expect(
+            isTrackerJobComplete([
+                {
+                    completed: true,
+                    message: "Import complete with status OK",
+                },
+            ]),
+        ).toBe(true);
+    });
+
+    it("detects completed tracker jobs by job status", () => {
+        expect(isTrackerJobComplete({ jobStatus: "COMPLETED" })).toBe(true);
     });
 });

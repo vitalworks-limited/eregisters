@@ -47,6 +47,8 @@ import {
 import {
     DataPullMode,
     DataPushMode,
+    extractTrackerJobId,
+    isTrackerJobComplete,
     MetadataSyncMode,
     shouldContinueDataPull,
     shouldRecordDataPush,
@@ -81,6 +83,78 @@ function deriveValidIds(program: Program | undefined): {
             ]),
         ),
     };
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function isDhis2Reachable(engine: ReturnType<typeof useDataEngine>) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+        return false;
+    }
+
+    try {
+        await engine.query({
+            ping: {
+                resource: "me",
+                params: {
+                    fields: "id",
+                },
+            },
+        });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function submitTrackerImportAndWaitForReport({
+    engine,
+    data,
+    params,
+    pollIntervalMs = 2000,
+    timeoutMs = 120000,
+}: {
+    engine: ReturnType<typeof useDataEngine>;
+    data: any;
+    params: Record<string, any>;
+    pollIntervalMs?: number;
+    timeoutMs?: number;
+}) {
+    const response = await engine.mutate({
+        resource: "tracker",
+        type: "create",
+        data,
+        params: {
+            ...params,
+            async: true,
+        },
+    });
+    const jobId = extractTrackerJobId(response);
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < timeoutMs) {
+        const jobResponse = (await engine.query({
+            job: {
+                resource: `tracker/jobs/${jobId}`,
+            },
+        })) as { job: unknown };
+
+        if (isTrackerJobComplete(jobResponse.job)) {
+            const reportResponse = (await engine.query({
+                report: {
+                    resource: `tracker/jobs/${jobId}/report`,
+                    params: {
+                        reportMode: "FULL",
+                    },
+                },
+            })) as { report: Dhis2Report };
+            return reportResponse.report;
+        }
+
+        await sleep(pollIntervalMs);
+    }
+
+    throw new Error(`Timed out waiting for DHIS2 tracker job ${jobId}`);
 }
 
 type Resource =
@@ -131,6 +205,11 @@ const syncReportToLocal = async ({
     validAttributeIds: Set<string>;
     validDataElementsByStage: Map<string, Set<string>>;
 }) => {
+    const reachable = await isDhis2Reachable(engine);
+    if (!reachable) {
+        return { processed: 0, succeeded: 0, failed: 0 };
+    }
+
     const payload = entities.reduce<{
         trackedEntities: TrackedEntity[];
         enrollments: Enrollment[];
@@ -159,18 +238,16 @@ const syncReportToLocal = async ({
             events: [],
         },
     );
-    const response = (await engine.mutate({
-        resource: "tracker",
-        type: "create",
+    const response = await submitTrackerImportAndWaitForReport({
+        engine,
         data: payload,
         params: {
-            async: false,
             importStrategy: "CREATE_AND_UPDATE",
             atomicMode: "OBJECT",
             skipPatternValidation: "true",
             skipSideEffects: "true",
         },
-    })) as unknown as Dhis2Report;
+    });
     const failedResponses = new Map(
         response.validationReport.errorReports.map((a) => [a.uid, a.message]),
     );
@@ -273,16 +350,19 @@ const syncDeleteToLocal = async ({
 }): Promise<{ succeeded: number; failed: number }> => {
     if (deletedEvents.length === 0) return { succeeded: 0, failed: 0 };
 
-    const response = (await engine.mutate({
-        resource: "tracker",
-        type: "create",
+    const reachable = await isDhis2Reachable(engine);
+    if (!reachable) {
+        return { succeeded: 0, failed: 0 };
+    }
+
+    const response = await submitTrackerImportAndWaitForReport({
+        engine,
         data: { events: deletedEvents.map((e) => ({ event: e.event })) },
         params: {
-            async: false,
             importStrategy: "DELETE",
             atomicMode: "OBJECT",
         },
-    })) as unknown as Dhis2Report;
+    });
 
     const succeededUids = new Set(
         response.bundleReport.typeReportMap.EVENT.objectReports.map(
@@ -867,9 +947,6 @@ export const syncMachine = setup({
                 version.lastSync = currentTimestamp;
                 results.metadataVersion = [version];
             }
-
-            // console.log(results);
-
             return results;
         }),
         deleteAllMetadata: fromPromise(async () => {
@@ -942,7 +1019,10 @@ export const syncMachine = setup({
                         engine,
                     });
                     result = {
-                        processed: result.processed + toDelete.length,
+                        processed:
+                            result.processed +
+                            deleteResult.succeeded +
+                            deleteResult.failed,
                         succeeded: result.succeeded + deleteResult.succeeded,
                         failed: result.failed + deleteResult.failed,
                     };
@@ -1027,7 +1107,10 @@ export const syncMachine = setup({
                 }
 
                 return {
-                    processed: upsertResult.processed + deletedEvents.length,
+                    processed:
+                        upsertResult.processed +
+                        deleteResult.succeeded +
+                        deleteResult.failed,
                     succeeded: upsertResult.succeeded + deleteResult.succeeded,
                     failed: upsertResult.failed + deleteResult.failed,
                 };
@@ -1399,14 +1482,21 @@ export const syncMachine = setup({
                                     context.validDataElementsByStage,
                             };
                         },
-                        onDone: {
-                            target: "updateLastDataPush",
-                            actions: ({ context }) => {
-                                context.message.success(
-                                    "Syncing to DHIS2 successful",
-                                );
+                        onDone: [
+                            {
+                                guard: ({ event }) =>
+                                    shouldRecordDataPush(event.output),
+                                target: "updateLastDataPush",
+                                actions: ({ context }) => {
+                                    context.message.success(
+                                        "Syncing to DHIS2 successful",
+                                    );
+                                },
                             },
-                        },
+                            {
+                                target: "idle",
+                            },
+                        ],
                         onError: {
                             target: "idle",
                             actions: ({ event, context }) => {

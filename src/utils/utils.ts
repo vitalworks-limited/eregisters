@@ -1461,7 +1461,6 @@ export const checkInfo = async (user: string, id: string) => {
             syncStatus,
             program,
         };
-				console.log(result)
         return {
             needsSyncing: hasEmptyTables || wasIndexedDBDeleted,
             metadataVersion,
