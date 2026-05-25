@@ -39,6 +39,8 @@ import {
     enrollmentsCollection,
     eventsCollection,
 } from "../collections";
+import { useConfig } from "@dhis2/app-runtime";
+import { redirectByUnit } from "../utils/utils";
 
 dayjs.extend(relativeTime);
 
@@ -110,6 +112,13 @@ function SyncButton({
 
 function LayoutWithDrafts() {
     const syncActor = SyncContext.useActorRef();
+
+    const { baseUrl } = useConfig();
+    const program = SyncContext.useSelector((a) => a.context.metadata.program);
+    const userOrgUnits = SyncContext.useSelector(
+        (a) => a.context.userInfo?.organisationUnits.map((a) => a.id) ?? [],
+    );
+
     const { orgUnit } = useMetadata();
     const syncingMetadata = SyncContext.useSelector((snapshot) => {
         return isMetadataSyncLoading(
@@ -231,6 +240,12 @@ function LayoutWithDrafts() {
                 Reports
             </Link>
         </Flex>
+    );
+
+    redirectByUnit(
+        userOrgUnits,
+        program?.organisationUnits.map(({ id }) => id) ?? [],
+        baseUrl,
     );
 
     return (

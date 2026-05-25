@@ -1,20 +1,20 @@
 import { assertEvent, assign, fromPromise, setup } from "xstate";
 import {
-    DataElement,
-    Dhis2Report,
-    Enrollment,
-    Event,
-    FlattenedEnrollment,
-    FlattenedEvent,
-    FlattenedTrackedEntity,
-    Metadata,
-    OrgUnit,
-    Program,
-    ProgramIndicator,
-    ProgramRule,
-    ProgramRuleVariable,
-    TrackedEntity,
-    TrackedEntityAttribute,
+	DataElement,
+	Dhis2Report,
+	Enrollment,
+	Event,
+	FlattenedEnrollment,
+	FlattenedEvent,
+	FlattenedTrackedEntity,
+	Metadata,
+	OrgUnit,
+	Program,
+	ProgramIndicator,
+	ProgramRule,
+	ProgramRuleVariable,
+	TrackedEntity,
+	TrackedEntityAttribute,
 } from "../schemas";
 
 import type { useCurrentUserInfo, useDataEngine } from "@dhis2/app-runtime";
@@ -22,38 +22,36 @@ import { createActorContext } from "@xstate/react";
 import { MessageInstance } from "antd/es/message/interface";
 import { Table } from "dexie";
 import {
-    enrollmentsCollection,
-    eventsCollection,
-    trackedEntitiesCollection,
+	enrollmentsCollection,
+	eventsCollection,
+	trackedEntitiesCollection,
 } from "../collections";
 import { db } from "../db";
 import {
-    mergeBulkEnrollments,
-    mergeBulkEvents,
-    mergeBulkTrackedEntities,
+	mergeBulkEnrollments,
+	mergeBulkEvents,
+	mergeBulkTrackedEntities,
 } from "../db/merge-utils";
 import {
-    transformEnrollment,
-    transformEvent,
-    transformTrackedEntity,
+	transformEnrollment,
+	transformEvent,
+	transformTrackedEntity,
 } from "../db/transformers";
 import {
-    checkInfo,
-    flattenEnrollment,
-    flattenEvent,
-    flattenTrackedEntity,
-    queryInfo,
+	checkInfo,
+	flattenEnrollment,
+	flattenEvent,
+	flattenTrackedEntity,
+	queryInfo,
 } from "../utils/utils";
 import {
-    DataPullMode,
-    DataPushMode,
-    extractTrackerJobId,
-    isTrackerJobComplete,
-    MetadataSyncMode,
-    shouldContinueDataPull,
-    shouldRecordDataPush,
-    shouldUseLastDataPull,
-    shouldUseLastUpdatedFilter,
+	DataPullMode,
+	DataPushMode,
+	MetadataSyncMode,
+	shouldContinueDataPull,
+	shouldRecordDataPush,
+	shouldUseLastDataPull,
+	shouldUseLastUpdatedFilter
 } from "./sync-metadata-mode";
 
 function deriveValidIds(program: Program | undefined): {
@@ -85,8 +83,6 @@ function deriveValidIds(program: Program | undefined): {
     };
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 async function isDhis2Reachable(engine: ReturnType<typeof useDataEngine>) {
     if (typeof navigator !== "undefined" && !navigator.onLine) {
         return false;
@@ -111,50 +107,48 @@ async function submitTrackerImportAndWaitForReport({
     engine,
     data,
     params,
-    pollIntervalMs = 2000,
-    timeoutMs = 120000,
 }: {
     engine: ReturnType<typeof useDataEngine>;
     data: any;
     params: Record<string, any>;
-    pollIntervalMs?: number;
-    timeoutMs?: number;
 }) {
-    const response = await engine.mutate({
+    const response = (await engine.mutate({
         resource: "tracker",
         type: "create",
         data,
         params: {
             ...params,
-            async: true,
+            async: false,
         },
-    });
-    const jobId = extractTrackerJobId(response);
-    const startedAt = Date.now();
+    })) as unknown as Dhis2Report;
 
-    while (Date.now() - startedAt < timeoutMs) {
-        const jobResponse = (await engine.query({
-            job: {
-                resource: `tracker/jobs/${jobId}`,
-            },
-        })) as { job: unknown };
+    return response;
+    // const jobId = extractTrackerJobId(response);
+    // const startedAt = Date.now();
 
-        if (isTrackerJobComplete(jobResponse.job)) {
-            const reportResponse = (await engine.query({
-                report: {
-                    resource: `tracker/jobs/${jobId}/report`,
-                    params: {
-                        reportMode: "FULL",
-                    },
-                },
-            })) as { report: Dhis2Report };
-            return reportResponse.report;
-        }
+    // while (Date.now() - startedAt < timeoutMs) {
+    //     const jobResponse = (await engine.query({
+    //         job: {
+    //             resource: `tracker/jobs/${jobId}`,
+    //         },
+    //     })) as { job: unknown };
 
-        await sleep(pollIntervalMs);
-    }
+    //     if (isTrackerJobComplete(jobResponse.job)) {
+    //         const reportResponse = (await engine.query({
+    //             report: {
+    //                 resource: `tracker/jobs/${jobId}/report`,
+    //                 params: {
+    //                     reportMode: "FULL",
+    //                 },
+    //             },
+    //         })) as { report: Dhis2Report };
+    //         return reportResponse.report;
+    //     }
 
-    throw new Error(`Timed out waiting for DHIS2 tracker job ${jobId}`);
+    //     await sleep(pollIntervalMs);
+    // }
+
+    // throw new Error(`Timed out waiting for DHIS2 tracker job ${jobId}`);
 }
 
 type Resource =
@@ -181,7 +175,6 @@ export interface SyncContext {
     dataPullMode: DataPullMode;
     dataPushMode: DataPushMode;
     resources: Resource[];
-    interval: number;
     user: string;
     orgUnit: string;
     validAttributeIds: Set<string>;
@@ -1196,6 +1189,11 @@ export const syncMachine = setup({
         //     });
         // }),
     },
+    delays: {
+        metadataSyncInterval: 1000 * 60 * 60,
+        dataSyncInterval: 1000 * 60 * 5,
+				dataPullInterval: 1000 * 60 * 2
+    },
 }).createMachine({
     /** @xstate-layout N4IgpgJg5mDOIC5SwJ4DsDGA6AtmALgIYSFEDK62AlhADZgDEEA9mmFlWgG7MDW7qTLgLFShCkJr0EnHhlJVWAbQAMAXVVrEoAA7NYVfIrTaQAD0QBmAEwBGLCoAsANgAcrlbduXbAVl+WjgA0ICiItiq+jg6WAJwqAOy2Cc6+7gC+6SGC2HhEJOSUHHSMLGwc3HwCRXmihZIlMpXyRsrqSrZaSCB6Bq0m3RYI1q6WWAmxqd7x1nYJrsGh4bau1uNuNrbxo76Z2TUiBeJFUoxgAE7nzOdYOrSkAGbXOFg5wvliEtSNsswtxppNKZeoZjKYhpsHC53J5vH4AoswghRq4sL55t44o50a5bHsQG9akcvsV6AwyAAVACCACUKQB9ACyAFFqQARKnU+lkACaADkAMJA7og-rgxAJMZRXxeFQqWKWZzWRzykJI2wq6LeVKOWIRWzOTz4wmHT4nEoMABiAFUADK2pmsqkcrm8wXC3T6UGscUISwJLDWVIqDwTZwJXWqpYIPwTcZ2Gx6lRK2LWY0HD71bCwQhcThQRmmohMVjsX78V4ZurHIQ5vNoAtFwhNOQKNoadTAr1iwbhVzOLUq5ypGWWVyxSZq8KOLZYVPjw16xz99NCIlmoQARwArhcUPmAJJoCBgMxsgBCJfK5eqa6bJJ3e8Px9PF5bfzbaEBnZF3bBvZjftB2TEdvHHSdo2SawxiSVwEgSaxYQWFZV1ye8ikfc59wbI8TzPS8LiuG47keZ5KzvTMa2wTDsKgXDX3Pd9-nbD0ej-H0ANmBJfDnZNrAnBUokcCMpxjGcA0cEZJnlDUVyyAkq2JIoT3oIwG0LSirzLSoKxNSiSRUgh8w06smM-b8uk9Pp-1AIYNRGLANWTfwXFiXFHERadLB4zxZliFx7N8FRLFQ95qwMsBVOMpsGEI65bnufAnnOF49PC5TIqM9SmzM-oLK7ayONs6cHKckdXPczzAPHKE3DcqZhLxeS0qU2tKHzLSKh4XTFI3bN2obXKAXaH8rO9AZioQeJYkDXFuPReZfGVBJRLhVFEI8nxJjmSZQvXLNyIwDqym07rbzQ-SihyfMhpYzoCvG313HsJx3GxJUuOE1aZRmraEIWBJImTELmt6g7robWLLnikikrIlq+sOm7fmYr8RsstjCom8xEFWX7HH9cNdQQiMVsgxCeIjYT0RnKIvDTUGKPSoQAHdCFBSHKVpBkWXZTkqW5fkhVGzHHoAgcVHGXFlSW5dlwHVaB2iRqQw8ILrHRXZGYu5nsDZjmoCtO0HV551+cF90RdFGycb9Pw5zSHxcU8Anh0VjysEajaB0CRw9vQ1n2bUw2zFgIh8HYQgHgj84AApDTlFQAEoGARg79eD1jraK23IScNwPC8Hx-ECVaCeiby-A8SwVGg8dQta74yTdAV6WZPkKQPTvmTILP2OxoZEMloLE4NHwh6W0SNcBrA4KCmvnECGW-e1rBG9JRgAAVrTIAAJekXSpPusd9Ie0UTzxF9sCfrCnhesH9dX4lp+CV-2IR19OBhQ-DyPo4uWONdE4pzeJ-Eox8xaTTPiPOUY9r5ykntGWYaRZ7cVrtLSYLgG6IwgFQc4YAMD4C+AwCBPZJrDmcLPfOAkAjcVcL4Ke6I1iP2CsmEm8Etbv2wOvbcdxmDEHzGyPBBD8CdRvIdNeiNeG0H4bghsQj8GENumjDsGNs4D2WIkRyctDQRH8kGMmSJlR2HPkGSwlcogTmwQdaRsjBHCMIVDIiCVSIpQkTwvhAj5EOPwMo-Kv4T7i38p7R+cJF6+FiOiKeKoeJpAicOZc1gOEgy4ZIg6AAjUgGAAAWxCTpdSqO4xGmT8A5K+H49GD0yG2woVQ1yE5aFxKnkGewLCRjX0wc4axVEsAlLKZQJxMNErJVSspYpWTcmUAqaoqpNtB5ynPqPK+N8p4Gh4vxZw8QIiBEiE1VJHiChgFtIQMObIxCb23LAbJJCrb919PAmadg4LcWgvZWIU9861XiJEeYIZfBdNXkcC5tBaAb3JNSOkB9zYt1IXM8IqY5yphWLEQG44FhBm+i9C+iF+KKhed04FoKv42ntFC10QtYU5zsgiicTyUUhjcpJZw0SxgfTiBMOw6sIwEu3CCsFP9SB-xjvHC+ICxlEEJRvSlGiYw0qReOVFjKMVIOCdfaCbkky6lGDyvlDxeW0BpGAB4+CrliJ0udNJhBJV6pBYa41cBsnTOlb6JU0RgrxAjIqccQUGHRi2oGGBgRvJhhSQpD+5z9VYBtQao1JrrlxWIsM+G4qrWRujXauNTrbmBPIcqGIHrXbesiFPJI4wYEazrqkUNoCI18ohobfJ4ia0SsjfWrNai7kAQiEGB+Mo0hJPgp4fsoklqomHBqReE4fCpABfs2toL62DMTa40Z4aW11oGlAdtsyqXhFrpQixqx4KAxWMy6My57AGgnTXaWgRZ1hu4fOrAvDDnHNOfOm5Hac22z0WsGcKoFjCU1L6pEw4eI2FxMXRCY43A6tBRnDqXNIWHwtsLL9kCf1yrpYq9FZ6kRRDGIkSD8o4LeVg4Cp9CHIYkodChmF2aMPUrWLS5FOGmWiUCPYNlE5VjGIVHBrAVGQ5h0FVgKOwqE5yjFWu1NfKhPOq7Vh1jDLcOiV1LEjEQDuKSU1pkeSaBmAnngN0HIO6ZUAFoUGSl1FsaDGsZKiXM3mi+tmBJjn7NWsGVEzO+nMxEcYgQ9SpmCvZvUoluIvU01iHEeyH1hTAfQHzAEEKrRrr9a+Mplz0OSf7S6tZczRUoklyaBphKOXs95bE-FoJVWmDxSSC5a4IRHLl3WWAaLPjwheYrtsKaogCEmSUOpatxGY1JQ0SSgwl1a+vQywcTJHB63ZU9jk57LTcHXQxJVogpD8gTMc3aZuI3rUtxAM4xiKm8v6DVF6FaQUkjtpUyRX42f8kd9OQd8ynYQIvAMgN1PevcGkPD4QUhSjxv8lE813s9IeOzWg258HfeWjNaEHgmX+A1GXa+Dh5jSWPQ1t+cXG7I9q5E-r9S0gzkmMkbpJJTjfZS0gyIqICYorSMFf50E6fKR8V8b7BMeL0KiHQyMkpXCMLK3PVhrD0SeZkySWxXioAKJEd99wqJxzJh02slU7ykGSUlk4A0kTJgymnjzoQfTJmYAFyYtBcphwISCqmKqsxFSoK5cuKmsXm09JfYKt9+Azktqud97wtcQkvM2Sid6zSe1tKSAify96-eEtJ6JRensBKhkTs4LwRO0+RoZwExjiBgm6ieaGeCowRIG61O7lFSKvcCfTbGh1AuvAOCI1sGcIWaYceCmiOIzkfqKh9gJk7pfqlDEA45TwOJFwRGHeemqeoJ38QWPEOIAmA8RyDyH2TtBw8rB4ovEYipZgDiVJnrRMWgHDg877lNkqhOM9vtGKIax-oR419iJIre8OiOYAJ+9CWA5+owH01+H+SIwkzGBeSozy-YkwCQem6QQAA */
     id: "sync",
@@ -1216,7 +1214,6 @@ export const syncMachine = setup({
                 "programRules",
             ],
 
-            interval: 5000,
             enrollmentsCollection,
             eventsCollection,
             trackedEntitiesCollection,
@@ -1409,7 +1406,7 @@ export const syncMachine = setup({
                 },
                 waiting: {
                     after: {
-                        60000: {
+                        metadataSyncInterval: {
                             target: "syncing",
                             actions: assign({
                                 metadataSyncMode: () => "incremental",
@@ -1456,7 +1453,7 @@ export const syncMachine = setup({
                         },
                     },
                     after: {
-                        30000: {
+                        dataSyncInterval: {
                             target: "batchSync",
                             actions: assign({
                                 dataPushMode: () => "batch",
@@ -1553,7 +1550,7 @@ export const syncMachine = setup({
             states: {
                 idle: {
                     after: {
-                        60000: "syncing",
+                        dataPullInterval: "syncing",
                     },
                     on: {
                         START_DATA_SYNC: {

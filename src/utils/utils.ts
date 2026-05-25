@@ -1,7 +1,7 @@
 import { FormItemProps, TableProps } from "antd";
 import { Table as DexieTable } from "dexie";
 import dayjs from "dayjs";
-import { groupBy, isEmpty } from "lodash";
+import { groupBy, intersection, isEmpty } from "lodash";
 import {
     Enrollment,
     Event,
@@ -1479,12 +1479,20 @@ export const checkInfo = async (user: string, id: string) => {
 };
 
 export function redirectByAuthorities(authorities: string[], baseUrl: string) {
-    // if (authorities.includes("ALL") ) {
-    //     window.location.href = `${baseUrl}/apps/eRegisters-Monitoring-Dashboard`;
-    //     return;
-    // }
-    // if (!authorities.includes("M_eregisters")) {
-    //     window.location.href = `${baseUrl}/apps/dashboard`;
-    // 		return
-    // }
+    if (!authorities.includes("ALL") && !authorities.includes("M_eregisters")) {
+        window.location.href = `${baseUrl}/apps/eRegisters-Monitoring-Dashboard`;
+        return;
+    }
+}
+
+export function redirectByUnit(
+    userUnits: string[],
+    programUnits: string[],
+    baseUrl: string,
+) {
+    const hasAny = intersection(userUnits, programUnits);
+    if (hasAny.length === 0) {
+        window.location.href = `${baseUrl}/apps/eRegisters-Monitoring-Dashboard`;
+        return;
+    }
 }

@@ -11,7 +11,7 @@ import React, { FC } from "react";
 import { SyncContext } from "./machines/sync";
 import { queryClient } from "./query-client";
 import { router } from "./router";
-import { redirectByAuthorities } from "./utils/utils";
+import { redirectByAuthorities, redirectByUnit } from "./utils/utils";
 
 const Main = () => {
     const syncActor = SyncContext.useActorRef();

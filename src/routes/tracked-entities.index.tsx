@@ -3,7 +3,7 @@ import {
     MoreOutlined,
     UserOutlined,
 } from "@ant-design/icons";
-import { eq, ilike, useLiveSuspenseQuery } from "@tanstack/react-db";
+import { and, eq, ilike, not, useLiveSuspenseQuery } from "@tanstack/react-db";
 import { createRoute } from "@tanstack/react-router";
 import {
     Button,
@@ -71,6 +71,15 @@ function TrackedEntitiesSearch() {
         closeModal,
     } = useModalState<FlattenedTrackedEntity>();
     const { search } = TrackedEntitiesRoute.useSearch();
+    const searchInitialAttributes = useMemo(
+        () =>
+            Object.fromEntries(
+                Object.entries(search ?? {}).filter(([, value]) =>
+                    Boolean(value),
+                ),
+            ),
+        [search],
+    );
 
     const { data: currentTrackedEntities = [] } = useLiveSuspenseQuery(
         (q) => {
@@ -94,7 +103,10 @@ function TrackedEntitiesSearch() {
             }
 
             return query.where(({ trackedEntity }) =>
-                eq(trackedEntity.orgUnit, id),
+                and(
+                    eq(trackedEntity.orgUnit, id),
+                    not(eq(trackedEntity.syncStatus, "draft")),
+                ),
             );
         },
         [search],
@@ -203,10 +215,13 @@ function TrackedEntitiesSearch() {
 
     if (
         currentTrackedEntities.length === 0 &&
-        Object.values(search ?? {}).some(Boolean)
+        Object.values(searchInitialAttributes).some(Boolean)
     )
         return (
-            <NoPatientsCard message="No clients found matching your search criteria." />
+            <NoPatientsCard
+                message="No clients found matching your search criteria."
+                initialAttributes={searchInitialAttributes}
+            />
         );
     if (currentTrackedEntities.length === 0)
         return <NoPatientsCard message="" />;

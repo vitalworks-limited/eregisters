@@ -19,11 +19,18 @@ import { TrackerRegistration } from "./tracker-registration";
 import {
     enrollmentsCollection,
     trackedEntitiesCollection,
-    eventsCollection,
 } from "../collections";
 
 const { Title, Text } = Typography;
-const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
+type NoPatientsCardProps = {
+    message: string;
+    initialAttributes?: Record<string, string>;
+};
+
+const NoPatientsCard: React.FC<NoPatientsCardProps> = ({
+    message,
+    initialAttributes = {},
+}) => {
     const screens = Grid.useBreakpoint();
     const isMobile = !screens.lg;
     const {
@@ -54,10 +61,12 @@ const NoPatientsCard: React.FC<{ message: string }> = ({ message }) => {
     const handleCreate = async () => {
         const newPatient: FlattenedTrackedEntity = createEmptyTrackedEntity({
             orgUnit: id,
+            attributes: initialAttributes,
         });
         const newEnrollment = createEmptyEnrollment({
             orgUnit: id,
             trackedEntity: newPatient.trackedEntity,
+            attributes: initialAttributes,
         });
         await trackedEntitiesCollection.utils.insertLocally(newPatient);
         await enrollmentsCollection.utils.insertLocally(newEnrollment);
