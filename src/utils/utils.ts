@@ -1479,10 +1479,10 @@ export const checkInfo = async (user: string, id: string) => {
 };
 
 export function redirectByAuthorities(authorities: string[], baseUrl: string) {
-    if (!authorities.includes("ALL") && !authorities.includes("M_eregisters")) {
-        window.location.href = `${baseUrl}/apps/eRegisters-Monitoring-Dashboard`;
-        return;
-    }
+    // if (!authorities.includes("ALL") && !authorities.includes("M_eregisters")) {
+    //     window.location.href = `${baseUrl}/apps/eRegisters-Monitoring-Dashboard`;
+    //     return;
+    // }
 }
 
 export function redirectByUnit(
@@ -1490,9 +1490,9 @@ export function redirectByUnit(
     programUnits: string[],
     baseUrl: string,
 ) {
-    const hasAny = intersection(userUnits, programUnits);
-    if (hasAny.length === 0) {
-        window.location.href = `${baseUrl}/apps/eRegisters-Monitoring-Dashboard`;
-        return;
-    }
+    // const hasAny = intersection(userUnits, programUnits);
+    // if (hasAny.length === 0) {
+    //     window.location.href = `${baseUrl}/apps/eRegisters-Monitoring-Dashboard`;
+    //     return;
+    // }
 }

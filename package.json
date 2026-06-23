@@ -1,13 +1,13 @@
 {
     "name": "eregisters",
-    "version": "1.1.1",
+    "version": "1.1.2",
     "description": "",
     "license": "BSD-3-Clause",
     "private": true,
     "packageManager": "pnpm@10.13.1",
     "scripts": {
         "build": "d2-app-scripts build",
-        "start": "d2-app-scripts start --proxy https://customization.health.go.ug/eregistry",
+        "start": "d2-app-scripts start --proxy https://eregisters.health.go.ug",
         "test": "d2-app-scripts test",
         "deploy": "d2-app-scripts deploy"
     },

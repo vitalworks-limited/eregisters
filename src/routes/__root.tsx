@@ -236,9 +236,9 @@ function LayoutWithDrafts() {
                     />
                 </Badge>
             </Tooltip>
-            <Link to="/reports" onClick={() => setDrawerOpen(false)}>
+            {/* <Link to="/reports" onClick={() => setDrawerOpen(false)}>
                 Reports
-            </Link>
+            </Link> */}
         </Flex>
     );
 

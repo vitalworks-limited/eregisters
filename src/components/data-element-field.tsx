@@ -9,9 +9,8 @@ import {
     InputNumber,
     Radio,
     Select,
-    Typography,
 } from "antd";
-import React, { useCallback } from "react";
+import React, { CSSProperties, useCallback } from "react";
 import {
     DataElement,
     FlattenedEvent,
@@ -37,6 +36,10 @@ const VILLAGE_CASCADED_FIELDS = new Set([
     "BiergDUeQra",
     "SjvgaRn8m7Y", // Parish
 ]);
+
+const commonCSS: CSSProperties = { width: "100%" };
+const zeroParser = (displayValue: string | undefined) =>
+    Number(displayValue?.replace(/[^0-9]/g, "")) || 0;
 
 export const DataElementField = React.memo<{
     dataElement: DataElement | TrackedEntityAttribute;
@@ -323,12 +326,8 @@ export const DataElementField = React.memo<{
                 <InputNumber
                     disabled={isDisabled}
                     precision={0}
-                    style={{
-                        width: "100%",
-                    }}
-                    parser={(value) =>
-                        Number(value?.replace(/[^0-9-]/g, "")) || 0
-                    }
+                    style={commonCSS}
+                    parser={zeroParser}
                     onBlur={(e) => {
                         onFieldChange(dataElement.id, e.target.value);
                     }}
@@ -340,12 +339,8 @@ export const DataElementField = React.memo<{
                     disabled={isDisabled}
                     precision={0}
                     min={1}
-                    style={{
-                        width: "100%",
-                    }}
-                    parser={(value) =>
-                        Number(value?.replace(/[^0-9]/g, "")) || 0
-                    }
+                    style={commonCSS}
+                    parser={zeroParser}
                     onBlur={(e) => {
                         onFieldChange(dataElement.id, e.target.value);
                     }}
@@ -355,9 +350,7 @@ export const DataElementField = React.memo<{
             element = (
                 <InputNumber
                     disabled={isDisabled}
-                    style={{
-                        width: "100%",
-                    }}
+                    style={commonCSS}
                     min={0}
                     max={1}
                     step={0.01}
@@ -435,9 +428,11 @@ export const DataElementField = React.memo<{
                     label={
                         dataElement.valueType === "BOOLEAN"
                             ? null
-                            : customLabel ||
-                              dataElement.formName ||
-                              dataElement.name
+                            : `${
+                                  customLabel ||
+                                  dataElement.formName ||
+                                  dataElement.name
+                              }`
                     }
                     name={dataElement.id}
                     required={required}

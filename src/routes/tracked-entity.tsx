@@ -501,7 +501,7 @@ function TrackedEntityComponent() {
 
                         // const currentVaccinations = values["ZuYU54N4pjS"] ?? "";
 
-												// console.log(currentVaccinations)
+                        // console.log(currentVaccinations)
 
                         // const evs = [
                         //     ...allMainEvents
@@ -539,22 +539,6 @@ function TrackedEntityComponent() {
                             )
                             .toArray();
 
-                        const labTests = allRelatedEvents
-                            .flatMap((e) => {
-                                const test = e.dataValues["uiTFOkMMwV3"];
-                                const result =
-                                    e.dataValues["TeQOPJ6zH3t"] ??
-                                    e.dataValues["yzmgiNZEUCz"];
-                                if (!test && !result) return [];
-                                return [`${test ?? ""}:${result ?? ""}`];
-                            })
-                            .join(",");
-
-                        const medicines = allRelatedEvents
-                            .map((e) => e.dataValues["ZDN18IlfOGh"])
-                            .filter(Boolean)
-                            .join(",");
-
                         const entities: Array<
                             | FlattenedEvent
                             | FlattenedTrackedEntity
@@ -565,8 +549,6 @@ function TrackedEntityComponent() {
                                 dataValues: {
                                     ...data.dataValues,
                                     ...values,
-                                    yD9PfCqR9KO: labTests,
-                                    EC6EsBLkoGF: medicines,
                                 },
                             },
                             ...relatedEvents,
