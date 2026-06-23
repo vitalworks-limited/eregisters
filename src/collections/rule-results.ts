@@ -2,7 +2,7 @@ import { createCollection } from "@tanstack/db";
 import { dexieCollectionOptions } from "tanstack-dexie-db-collection";
 import { RuleResultSchema } from "../schemas";
 
-export const ruleResultsCollection = createCollection(
+const ruleResultsCollection = createCollection(
     dexieCollectionOptions({
         id: "ruleResults",
         dbName: "MOHRegister_RuleResults",

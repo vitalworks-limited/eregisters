@@ -17,8 +17,7 @@ import {
 } from "../utils/utils";
 
 import { applyRuleResultsToForm, FormEvent } from "./common";
-
-export const eventFormMachine = setup({
+const eventFormMachine = setup({
     types: {
         events: {} as FormEvent,
         context: {} as {

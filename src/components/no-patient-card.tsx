@@ -5,7 +5,6 @@ import React, { useMemo } from "react";
 import { useMetadata } from "../hooks/useMetadata";
 import { useModalState } from "../hooks/useModalState";
 import { TrackedEntityContext } from "../machines";
-import { SyncContext } from "../machines/sync";
 import { TrackedEntitiesRoute } from "../routes/tracked-entities";
 import { FlattenedTrackedEntity } from "../schemas";
 import {
@@ -39,8 +38,6 @@ const NoPatientsCard: React.FC<NoPatientsCardProps> = ({
         program,
         programRules,
     } = useMetadata();
-    const syncActor = SyncContext.useActorRef();
-
     const mainStageDataElements = useMemo(
         () =>
             new Set(
@@ -154,27 +151,6 @@ const NoPatientsCard: React.FC<NoPatientsCardProps> = ({
                             },
                         );
                         await tx2.isPersisted.promise;
-
-                        syncActor.send({
-                            type: "SYNC_ENTITIES",
-                            entities: [
-                                {
-                                    ...enrollment,
-                                    attributes: {
-                                        ...enrollment.attributes,
-                                        ...values,
-                                    },
-                                    syncStatus: "pending",
-                                },
-                                {
-                                    ...trackedEntity,
-                                    attributes: {
-                                        ...trackedEntity.attributes,
-                                        ...values,
-                                    },
-                                },
-                            ],
-                        });
                         if (addAnother) {
                             closeModal();
                             const newPatient = createEmptyTrackedEntity({

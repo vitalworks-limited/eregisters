@@ -1,4 +1,4 @@
-import { assertEvent, assign, fromPromise, setup } from "xstate";
+import { assign, fromPromise, setup } from "xstate";
 import {
     DataElement,
     Dhis2Report,
@@ -371,18 +371,12 @@ const syncDeleteToLocal = async ({
     };
 };
 
-export type SyncEvent =
-    | {
-          type: "SYNC_ENTITIES";
-          entities: Array<
-              FlattenedTrackedEntity | FlattenedEvent | FlattenedEnrollment
-          >;
-      }
+type SyncEvent =
     | {
           type: "PUSH_DATA";
       }
     | { type: "RETRY" }
-    | { type: "START_METADATA_SYNC"; user: string }
+    | { type: "START_METADATA_SYNC" }
     | { type: "START_DATA_SYNC" }
     | { type: "FULL_METADATA_SYNC" }
     | { type: "FULL_DATA_SYNC" }
@@ -393,9 +387,10 @@ export type SyncEvent =
       }
     | { type: "FULL_INDICATOR_SYNC" }
     | { type: "CANCEL" }
+    | { type: "NETWORK_RECONNECT" }
     | { type: "PARENT_READY" }
     | { type: "PARENT_NOT_READY" };
-export const syncMachine = setup({
+const syncMachine = setup({
     types: {
         context: {} as SyncContext,
         events: {} as SyncEvent,
@@ -427,10 +422,6 @@ export const syncMachine = setup({
         resetLastMetadataPull: assign({
             lastMetadataPull: undefined,
         }),
-
-        logDirectSync: ({ event }) => {
-            assertEvent(event, "SYNC_ENTITIES");
-        },
 
         persistSyncState: ({ context }) => {
             db.syncState.put({
@@ -564,37 +555,6 @@ export const syncMachine = setup({
                     await eventsCollection.utils.bulkInsertLocally(
                         mergedEvents,
                     );
-
-                    // Evaluate indicators for pulled events inline
-                    // if (mergedEvents.length > 0) {
-                    //     const indicators = await db.programIndicators.toArray();
-                    //     if (indicators.length > 0) {
-                    //         const teMap = new Map(
-                    //             mergedTrackedEntities.map((te) => [
-                    //                 te.trackedEntity,
-                    //                 te,
-                    //             ]),
-                    //         );
-                    //         for (const event of mergedEvents) {
-                    //             const te = teMap.get(event.trackedEntity);
-                    //             if (te) {
-                    //                 const results =
-                    //                     evaluateProgramIndicatorsForEvent(
-                    //                         event,
-                    //                         indicators,
-                    //                         te,
-                    //                     );
-                    //                 await db.indicatorEvaluations.put({
-                    //                     id: event.event,
-                    //                     eventId: event.event,
-                    //                     results,
-                    //                     updatedAt: new Date().toISOString(),
-                    //                     version: 1,
-                    //                 });
-                    //             }
-                    //         }
-                    //     }
-                    // }
 
                     hasMoreData = shouldContinueDataPull({
                         receivedCount: instances.length,
@@ -955,75 +915,6 @@ export const syncMachine = setup({
             await db.metadataVersions.clear();
         }),
         deleteAllData: fromPromise<void>(async () => {}),
-        uploadEntities: fromPromise(
-            async ({
-                input,
-            }: {
-                input: {
-                    entities: Array<
-                        | FlattenedTrackedEntity
-                        | FlattenedEnrollment
-                        | FlattenedEvent
-                    >;
-                    engine: ReturnType<typeof useDataEngine>;
-
-                    validAttributeIds: Set<string>;
-                    validDataElementsByStage: Map<string, Set<string>>;
-                };
-            }) => {
-                const {
-                    entities,
-                    engine,
-
-                    validAttributeIds,
-                    validDataElementsByStage,
-                } = input;
-
-                const toUpsert = entities.filter(
-                    (e) => !("event" in e) || e.syncStatus !== "deleted",
-                );
-                const toDelete = entities.filter(
-                    (e) => "event" in e && e.syncStatus === "deleted",
-                ) as FlattenedEvent[];
-
-                let result = { processed: 0, succeeded: 0, failed: 0 };
-
-                if (toUpsert.length > 0) {
-                    const upsertResult = await syncReportToLocal({
-                        entities: toUpsert,
-                        engine,
-                        validAttributeIds,
-                        validDataElementsByStage,
-                    });
-                    result = {
-                        processed: result.processed + upsertResult.processed,
-                        succeeded: result.succeeded + upsertResult.succeeded,
-                        failed: result.failed + upsertResult.failed,
-                    };
-                }
-
-                if (toDelete.length > 0) {
-                    const deleteResult = await syncDeleteToLocal({
-                        deletedEvents: toDelete,
-                        engine,
-                    });
-                    result = {
-                        processed:
-                            result.processed +
-                            deleteResult.succeeded +
-                            deleteResult.failed,
-                        succeeded: result.succeeded + deleteResult.succeeded,
-                        failed: result.failed + deleteResult.failed,
-                    };
-                }
-
-                if (result.failed > 0) {
-                    throw new Error("Syncing to DHIS2 has failed");
-                }
-
-                return result;
-            },
-        ),
         processBatchSync: fromPromise(
             async ({
                 input,
@@ -1105,90 +996,10 @@ export const syncMachine = setup({
                 };
             },
         ),
-        // evaluateAllIndicators: fromPromise<void>(async () => {
-        //     const indicators = await db.programIndicators.toArray();
-
-        //     if (indicators.length === 0) {
-        //         return;
-        //     }
-        //     const eventTable: Table<FlattenedEvent, string> =
-        //         eventsCollection.utils.getTable();
-        //     const events = await eventTable
-        //         .filter(
-        //             (e) =>
-        //                 e.syncStatus === "synced" || e.syncStatus === "pending",
-        //         )
-        //         .toArray();
-
-        //     if (events.length === 0) {
-        //         return;
-        //     }
-        //     const trackedEntitiesMap = new Map<
-        //         string,
-        //         FlattenedTrackedEntity
-        //     >();
-        //     const uniqueTeIds = [
-        //         ...new Set(events.map((e) => e.trackedEntity)),
-        //     ];
-        //     const teTable = trackedEntitiesCollection.utils.getTable();
-
-        //     for (const teId of uniqueTeIds) {
-        //         const te = await teTable.get(teId);
-        //         if (te) {
-        //             for (const event of events.filter(
-        //                 (e) => e.trackedEntity === teId,
-        //             )) {
-        //                 trackedEntitiesMap.set(event.event, te);
-        //             }
-        //         }
-        //     }
-        //     const results = evaluateProgramIndicatorsForEvents(
-        //         events,
-        //         indicators,
-        //         trackedEntitiesMap,
-        //     );
-        //     const evaluations = Array.from(results.entries()).map(
-        //         ([eventId, indicatorResults]) => ({
-        //             id: eventId,
-        //             eventId: eventId,
-        //             results: indicatorResults,
-        //             updatedAt: new Date().toISOString(),
-        //             version: 1,
-        //         }),
-        //     );
-
-        //     await db.indicatorEvaluations.bulkPut(evaluations);
-        // }),
-        // evaluateChangedIndicators: fromPromise<
-        //     void,
-        //     {
-        //         event: FlattenedEvent;
-        //         trackedEntity: FlattenedTrackedEntity;
-        //     }
-        // >(async ({ input: { event, trackedEntity } }) => {
-        //     const indicators = await db.programIndicators.toArray();
-
-        //     if (indicators.length === 0) {
-        //         return;
-        //     }
-        //     const indicatorResults = evaluateProgramIndicatorsForEvent(
-        //         event,
-        //         indicators,
-        //         trackedEntity,
-        //     );
-        //     await db.indicatorEvaluations.put({
-        //         id: event.event,
-        //         eventId: event.event,
-        //         results: indicatorResults,
-        //         updatedAt: new Date().toISOString(),
-        //         version: 1,
-        //     });
-        // }),
     },
     delays: {
-        metadataSyncInterval: 1000 * 60 * 60,
-        dataSyncInterval: 1000 * 60 * 5,
-        dataPullInterval: 1000 * 60 * 2,
+        dataSyncInterval: () => 1000 * 60 * 30 + Math.random() * 1000 * 60 * 5,
+        dataPullInterval: () => 1000 * 60 * 15 + Math.random() * 1000 * 60 * 2,
     },
 }).createMachine({
     /** @xstate-layout N4IgpgJg5mDOIC5SwJ4DsDGA6AtmALgIYSFEDK62AlhADZgDEEA9mmFlWgG7MDW7qTLgLFShCkJr0EnHhlJVWAbQAMAXVVrEoAA7NYVfIrTaQAD0QBmAEwBGLCoAsANgAcrlbduXbAVl+WjgA0ICiItiq+jg6WAJwqAOy2Cc6+7gC+6SGC2HhEJOSUHHSMLGwc3HwCRXmihZIlMpXyRsrqSrZaSCB6Bq0m3RYI1q6WWAmxqd7x1nYJrsGh4bau1uNuNrbxo76Z2TUiBeJFUoxgAE7nzOdYOrSkAGbXOFg5wvliEtSNsswtxppNKZeoZjKYhpsHC53J5vH4AoswghRq4sL55t44o50a5bHsQG9akcvsV6AwyAAVACCACUKQB9ACyAFFqQARKnU+lkACaADkAMJA7og-rgxAJMZRXxeFQqWKWZzWRzykJI2wq6LeVKOWIRWzOTz4wmHT4nEoMABiAFUADK2pmsqkcrm8wXC3T6UGscUISwJLDWVIqDwTZwJXWqpYIPwTcZ2Gx6lRK2LWY0HD71bCwQhcThQRmmohMVjsX78V4ZurHIQ5vNoAtFwhNOQKNoadTAr1iwbhVzOLUq5ypGWWVyxSZq8KOLZYVPjw16xz99NCIlmoQARwArhcUPmAJJoCBgMxsgBCJfK5eqa6bJJ3e8Px9PF5bfzbaEBnZF3bBvZjftB2TEdvHHSdo2SawxiSVwEgSaxYQWFZV1ye8ikfc59wbI8TzPS8LiuG47keZ5KzvTMa2wTDsKgXDX3Pd9-nbD0ej-H0ANmBJfDnZNrAnBUokcCMpxjGcA0cEZJnlDUVyyAkq2JIoT3oIwG0LSirzLSoKxNSiSRUgh8w06smM-b8uk9Pp-1AIYNRGLANWTfwXFiXFHERadLB4zxZliFx7N8FRLFQ95qwMsBVOMpsGEI65bnufAnnOF49PC5TIqM9SmzM-oLK7ayONs6cHKckdXPczzAPHKE3DcqZhLxeS0qU2tKHzLSKh4XTFI3bN2obXKAXaH8rO9AZioQeJYkDXFuPReZfGVBJRLhVFEI8nxJjmSZQvXLNyIwDqym07rbzQ-SihyfMhpYzoCvG313HsJx3GxJUuOE1aZRmraEIWBJImTELmt6g7robWLLnikikrIlq+sOm7fmYr8RsstjCom8xEFWX7HH9cNdQQiMVsgxCeIjYT0RnKIvDTUGKPSoQAHdCFBSHKVpBkWXZTkqW5fkhVGzHHoAgcVHGXFlSW5dlwHVaB2iRqQw8ILrHRXZGYu5nsDZjmoCtO0HV551+cF90RdFGycb9Pw5zSHxcU8Anh0VjysEajaB0CRw9vQ1n2bUw2zFgIh8HYQgHgj84AApDTlFQAEoGARg79eD1jraK23IScNwPC8Hx-ECVaCeiby-A8SwVGg8dQta74yTdAV6WZPkKQPTvmTILP2OxoZEMloLE4NHwh6W0SNcBrA4KCmvnECGW-e1rBG9JRgAAVrTIAAJekXSpPusd9Ie0UTzxF9sCfrCnhesH9dX4lp+CV-2IR19OBhQ-DyPo4uWONdE4pzeJ-Eox8xaTTPiPOUY9r5ykntGWYaRZ7cVrtLSYLgG6IwgFQc4YAMD4C+AwCBPZJrDmcLPfOAkAjcVcL4Ke6I1iP2CsmEm8Etbv2wOvbcdxmDEHzGyPBBD8CdRvIdNeiNeG0H4bghsQj8GENumjDsGNs4D2WIkRyctDQRH8kGMmSJlR2HPkGSwlcogTmwQdaRsjBHCMIVDIiCVSIpQkTwvhAj5EOPwMo-Kv4T7i38p7R+cJF6+FiOiKeKoeJpAicOZc1gOEgy4ZIg6AAjUgGAAAWxCTpdSqO4xGmT8A5K+H49GD0yG2woVQ1yE5aFxKnkGewLCRjX0wc4axVEsAlLKZQJxMNErJVSspYpWTcmUAqaoqpNtB5ynPqPK+N8p4Gh4vxZw8QIiBEiE1VJHiChgFtIQMObIxCb23LAbJJCrb919PAmadg4LcWgvZWIU9861XiJEeYIZfBdNXkcC5tBaAb3JNSOkB9zYt1IXM8IqY5yphWLEQG44FhBm+i9C+iF+KKhed04FoKv42ntFC10QtYU5zsgiicTyUUhjcpJZw0SxgfTiBMOw6sIwEu3CCsFP9SB-xjvHC+ICxlEEJRvSlGiYw0qReOVFjKMVIOCdfaCbkky6lGDyvlDxeW0BpGAB4+CrliJ0udNJhBJV6pBYa41cBsnTOlb6JU0RgrxAjIqccQUGHRi2oGGBgRvJhhSQpD+5z9VYBtQao1JrrlxWIsM+G4qrWRujXauNTrbmBPIcqGIHrXbesiFPJI4wYEazrqkUNoCI18ohobfJ4ia0SsjfWrNai7kAQiEGB+Mo0hJPgp4fsoklqomHBqReE4fCpABfs2toL62DMTa40Z4aW11oGlAdtsyqXhFrpQixqx4KAxWMy6My57AGgnTXaWgRZ1hu4fOrAvDDnHNOfOm5Hac22z0WsGcKoFjCU1L6pEw4eI2FxMXRCY43A6tBRnDqXNIWHwtsLL9kCf1yrpYq9FZ6kRRDGIkSD8o4LeVg4Cp9CHIYkodChmF2aMPUrWLS5FOGmWiUCPYNlE5VjGIVHBrAVGQ5h0FVgKOwqE5yjFWu1NfKhPOq7Vh1jDLcOiV1LEjEQDuKSU1pkeSaBmAnngN0HIO6ZUAFoUGSl1FsaDGsZKiXM3mi+tmBJjn7NWsGVEzO+nMxEcYgQ9SpmCvZvUoluIvU01iHEeyH1hTAfQHzAEEKrRrr9a+Mplz0OSf7S6tZczRUoklyaBphKOXs95bE-FoJVWmDxSSC5a4IRHLl3WWAaLPjwheYrtsKaogCEmSUOpatxGY1JQ0SSgwl1a+vQywcTJHB63ZU9jk57LTcHXQxJVogpD8gTMc3aZuI3rUtxAM4xiKm8v6DVF6FaQUkjtpUyRX42f8kd9OQd8ynYQIvAMgN1PevcGkPD4QUhSjxv8lE813s9IeOzWg258HfeWjNaEHgmX+A1GXa+Dh5jSWPQ1t+cXG7I9q5E-r9S0gzkmMkbpJJTjfZS0gyIqICYorSMFf50E6fKR8V8b7BMeL0KiHQyMkpXCMLK3PVhrD0SeZkySWxXioAKJEd99wqJxzJh02slU7ykGSUlk4A0kTJgymnjzoQfTJmYAFyYtBcphwISCqmKqsxFSoK5cuKmsXm09JfYKt9+Azktqud97wtcQkvM2Sid6zSe1tKSAify96-eEtJ6JRensBKhkTs4LwRO0+RoZwExjiBgm6ieaGeCowRIG61O7lFSKvcCfTbGh1AuvAOCI1sGcIWaYceCmiOIzkfqKh9gJk7pfqlDEA45TwOJFwRGHeemqeoJ38QWPEOIAmA8RyDyH2TtBw8rB4ovEYipZgDiVJnrRMWgHDg877lNkqhOM9vtGKIax-oR419iJIre8OiOYAJ+9CWA5+owH01+H+SIwkzGBeSozy-YkwCQem6QQAA */
@@ -1281,8 +1092,13 @@ export const syncMachine = setup({
                                 },
 
                                 actions: assign(({ event }) => {
+                                    const mode =
+                                        event.output.hasEmptyTables ||
+                                        event.output.wasIndexedDBDeleted
+                                            ? "full"
+                                            : "incremental"; // !syncedWithin24Hours but tables populated → incremental
                                     return {
-                                        metadataSyncMode: "full",
+                                        metadataSyncMode: mode,
                                         lastMetadataPull:
                                             event.output.metadataVersion
                                                 ?.lastSync,
@@ -1401,14 +1217,6 @@ export const syncMachine = setup({
                     },
                 },
                 waiting: {
-                    after: {
-                        metadataSyncInterval: {
-                            target: "syncing",
-                            actions: assign({
-                                metadataSyncMode: () => "incremental",
-                            }),
-                        },
-                    },
                     on: {
                         START_METADATA_SYNC: {
                             target: "syncing",
@@ -1435,13 +1243,13 @@ export const syncMachine = setup({
             states: {
                 idle: {
                     on: {
-                        SYNC_ENTITIES: {
-                            target: "directSync",
+                        PUSH_DATA: {
+                            target: "batchSync",
                             actions: assign({
-                                dataPushMode: () => "direct",
+                                dataPushMode: () => "batch",
                             }),
                         },
-                        PUSH_DATA: {
+                        NETWORK_RECONNECT: {
                             target: "batchSync",
                             actions: assign({
                                 dataPushMode: () => "batch",
@@ -1454,49 +1262,6 @@ export const syncMachine = setup({
                             actions: assign({
                                 dataPushMode: () => "batch",
                             }),
-                        },
-                    },
-                },
-                directSync: {
-                    entry: "logDirectSync",
-                    always: [{ target: "uploadingDirect" }],
-                },
-
-                uploadingDirect: {
-                    invoke: {
-                        src: "uploadEntities",
-                        input: ({ context, event }) => {
-                            assertEvent(event, "SYNC_ENTITIES");
-                            return {
-                                entities: event.entities,
-                                engine: context.engine,
-                                validAttributeIds: context.validAttributeIds,
-                                validDataElementsByStage:
-                                    context.validDataElementsByStage,
-                            };
-                        },
-                        onDone: [
-                            {
-                                guard: ({ event }) =>
-                                    shouldRecordDataPush(event.output),
-                                target: "updateLastDataPush",
-                                actions: ({ context }) => {
-                                    context.message.success(
-                                        "Syncing to DHIS2 successful",
-                                    );
-                                },
-                            },
-                            {
-                                target: "idle",
-                            },
-                        ],
-                        onError: {
-                            target: "idle",
-                            actions: ({ event, context }) => {
-                                context.message.success(
-                                    `Direct sync failed ${event.error}, will retry in batch`,
-                                );
-                            },
                         },
                     },
                 },
@@ -1562,6 +1327,13 @@ export const syncMachine = setup({
                                 dataPullMode: () => "full",
                             }),
                         },
+
+                        NETWORK_RECONNECT: {
+                            target: "syncing",
+                            actions: assign({
+                                dataPullMode: () => "incremental",
+                            }),
+                        },
                     },
                 },
                 fullRefresh: {
@@ -1615,7 +1387,7 @@ export const syncMachine = setup({
 
                 waiting: {
                     after: {
-                        60000: {
+                        dataPullInterval: {
                             target: "syncing",
                             actions: assign({
                                 dataPullMode: () => "incremental",
@@ -1635,50 +1407,17 @@ export const syncMachine = setup({
                                 dataPullMode: () => "full",
                             }),
                         },
+                        NETWORK_RECONNECT: {
+                            target: "syncing",
+                            actions: assign({
+                                dataPullMode: () => "incremental",
+                            }),
+                        },
                     },
                 },
                 failure: {},
             },
         },
-        // indicatorEvaluation: {
-        //     initial: "idle",
-        //     id: "indicatorEvaluation",
-        //     states: {
-        //         idle: {
-        //             on: {
-        //                 EVALUATE_INDICATORS: "evaluating",
-        //                 FULL_INDICATOR_SYNC: "fullEvaluation",
-        //             },
-        //         },
-        //         evaluating: {
-        //             invoke: {
-        //                 src: "evaluateChangedIndicators",
-        //                 input: ({ event }) => {
-        //                     assertEvent(event, "EVALUATE_INDICATORS");
-        //                     return {
-        //                         event: event.event,
-        //                         trackedEntity: event.trackedEntity,
-        //                     };
-        //                 },
-        //                 onDone: "idle",
-        //                 onError: "failure",
-        //             },
-        //         },
-        //         fullEvaluation: {
-        //             invoke: {
-        //                 src: "evaluateAllIndicators",
-        //                 onDone: "idle",
-        //                 onError: "failure",
-        //             },
-        //         },
-        //         failure: {
-        //             on: {
-        //                 EVALUATE_INDICATORS: "evaluating",
-        //                 FULL_INDICATOR_SYNC: "fullEvaluation",
-        //             },
-        //         },
-        //     },
-        // },
     },
 });
 

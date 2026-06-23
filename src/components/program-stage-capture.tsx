@@ -155,10 +155,7 @@ export const ProgramStageCapture: React.FC<{
                                 const { markedDeleted } =
                                     await deleteEventWithChildren(record.event);
                                 if (markedDeleted.length > 0) {
-                                    syncActor.send({
-                                        type: "SYNC_ENTITIES",
-                                        entities: markedDeleted,
-                                    });
+                                    syncActor.send({ type: "PUSH_DATA" });
                                 }
                                 message.success("Event deleted");
                             } catch (error) {

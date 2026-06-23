@@ -266,10 +266,7 @@ function TrackedEntityComponent() {
                                             record.event,
                                         );
                                     if (markedDeleted.length > 0) {
-                                        syncActor.send({
-                                            type: "SYNC_ENTITIES",
-                                            entities: markedDeleted,
-                                        });
+                                        syncActor.send({ type: "PUSH_DATA" });
                                     }
                                 } catch (error) {
                                     console.error(
@@ -587,10 +584,6 @@ function TrackedEntityComponent() {
                             return [];
                         });
                         await Promise.all(payload);
-                        syncActor.send({
-                            type: "SYNC_ENTITIES",
-                            entities,
-                        });
                     }
                 }}
                 title={isNew ? "New Visit" : "Edit Visit"}
@@ -669,28 +662,6 @@ function TrackedEntityComponent() {
                             await tx2.isPersisted.promise;
                         }
 
-                        syncActor.send({
-                            type: "SYNC_ENTITIES",
-                            entities: [
-                                {
-                                    ...trackedEntityData,
-                                    attributes: {
-                                        ...trackedEntityData.attributes,
-                                        ...attributeValues,
-                                    },
-                                    syncStatus: "pending",
-                                },
-                                ...(enrolledAt
-                                    ? [
-                                          {
-                                              ...enrollment,
-                                              enrolledAt,
-                                              syncStatus: "pending" as const,
-                                          },
-                                      ]
-                                    : []),
-                            ],
-                        });
                     }
                 }}
                 title="Edit Client"

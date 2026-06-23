@@ -29,7 +29,7 @@ import { db } from "../db";
 
 const GRID_TOTAL = 24;
 
-export const flattenTrackedEntityResponse = (te: TrackedEntityResponse) => {
+const flattenTrackedEntityResponse = (te: TrackedEntityResponse) => {
     return te.trackedEntities.map((trackedEntity) => {
         return flattenTrackedEntity(trackedEntity);
     });
@@ -105,7 +105,7 @@ export const flattenTrackedEntity = ({
     };
 };
 
-export const getAttributes = (attributes: ProgramTrackedEntityAttribute[]) => {
+const getAttributes = (attributes: ProgramTrackedEntityAttribute[]) => {
     const columns: TableProps<FlattenedTrackedEntity>["columns"] =
         attributes.flatMap(({ trackedEntityAttribute, ...rest }) => {
             if (!rest.displayInList) {
@@ -363,7 +363,6 @@ export function executeProgramRules({
         ): number | null => {
             return zScoreHFA(ageMonths, heightCm, sex);
         },
-
         zScoreWFH: (
             heightCm: number,
             weightKg: number,
@@ -497,29 +496,9 @@ export function executeProgramRules({
                 replacement +
                 processedExpression.substring(closeParenPos + 1);
         }
-
+				
         processedExpression = processedExpression.replace(
-            /#\{([^}]+)\}/g,
-            (_, name) => {
-                const val = variableValues[name];
-                if (val === null || val === undefined) return "null";
-                if (typeof val === "number") return String(val);
-                return getFormattedValue(name);
-            },
-        );
-
-        processedExpression = processedExpression.replace(
-            /A\{([^}]+)\}/g,
-            (_, name) => {
-                const val = variableValues[name];
-                if (val === null || val === undefined) return "null";
-                if (typeof val === "number") return String(val);
-                return getFormattedValue(name);
-            },
-        );
-
-        processedExpression = processedExpression.replace(
-            /V\{([^}]+)\}/g,
+            /[#AV]\{([^}]+)\}/g,
             (_, name) => {
                 const val = variableValues[name];
                 if (val === null || val === undefined) return "null";
@@ -629,28 +608,9 @@ export function executeProgramRules({
                 processedCondition.substring(closeParenPos + 1);
         }
 
-        // Replace variable references: #{varName} for data elements
         processedCondition = processedCondition.replace(
-            /#\{([^}]+)\}/g,
-            (_, name) => {
-                return getFormattedValue(name);
-            },
-        );
-
-        // Replace attribute references: A{attributeName} for tracked entity attributes
-        processedCondition = processedCondition.replace(
-            /A\{([^}]+)\}/g,
-            (_, name) => {
-                return getFormattedValue(name);
-            },
-        );
-
-        // Replace system variable references: V{varName}
-        processedCondition = processedCondition.replace(
-            /V\{([^}]+)\}/g,
-            (_, name) => {
-                return getFormattedValue(name);
-            },
+            /[#AV]\{([^}]+)\}/g,
+            (_, name) => getFormattedValue(name),
         );
 
         try {
@@ -904,7 +864,7 @@ export const isDate = (valueType: string | undefined) => {
     return ["DATE", "DATETIME", "TIME"].includes(valueType || "");
 };
 
-export const isNumber = (valueType: string | undefined) => {
+const isNumber = (valueType: string | undefined) => {
     return [
         "NUMBER",
         "INTEGER",
@@ -1179,7 +1139,7 @@ export function buildCurrentAttributes(program: Program) {
  * Deletes children only — does NOT delete the root node itself (caller's responsibility).
  * Uses depth-first order: children are deleted before their parent.
  */
-export async function deleteRecursiveDraftSubtree(
+async function deleteRecursiveDraftSubtree(
     eventId: string | undefined,
     trackedEntityId: string | undefined,
 ): Promise<void> {
@@ -1455,14 +1415,15 @@ export const checkInfo = async (user: string, id: string) => {
         const wasIndexedDBDeleted = !metadataVersion?.lastSync;
         const [program] = await db.programs.toArray();
 
-        const result = {
-            needsSyncing: hasEmptyTables || wasIndexedDBDeleted,
-            metadataVersion,
-            syncStatus,
-            program,
-        };
+        const syncedWithin24Hours = metadataVersion?.lastSync
+            ? dayjs().diff(dayjs(metadataVersion.lastSync), "hour") < 24
+            : false;
+
         return {
-            needsSyncing: hasEmptyTables || wasIndexedDBDeleted,
+            needsSyncing: hasEmptyTables || wasIndexedDBDeleted || !syncedWithin24Hours,
+            hasEmptyTables,
+            wasIndexedDBDeleted,
+            syncedWithin24Hours,
             metadataVersion,
             syncStatus,
             program,
@@ -1472,6 +1433,9 @@ export const checkInfo = async (user: string, id: string) => {
         await db.open();
         return {
             needsSyncing: true,
+            hasEmptyTables: true,
+            wasIndexedDBDeleted: true,
+            syncedWithin24Hours: false,
             metadataVersion: undefined,
             program: undefined,
         };

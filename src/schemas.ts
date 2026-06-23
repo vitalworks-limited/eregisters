@@ -1,9 +1,26 @@
 import { GetProp, TablePaginationConfig, TreeSelectProps } from "antd";
 import { FilterValue } from "antd/es/table/interface";
 import z from "zod";
-import { MetadataVersion } from "./db";
 
-export const UID = z
+export interface MetadataVersion {
+    id: string;
+    lastSync: string;
+    versions: {
+        attributes?: string;
+        programStages?: string;
+        dataElements?: string;
+        programs?: string;
+        trackedEntityTypes?: string;
+        optionSets?: string;
+        programIndicators?: string;
+        me?: string;
+        optionGroups?: string;
+        programRuleVariables?: string;
+        programRules?: string;
+    };
+}
+
+const UID = z
     .string()
     .length(11, "DHIS2 UID must be exactly 11 characters")
     .regex(/^[A-Za-z][A-Za-z0-9]{10}$/, {
@@ -26,7 +43,7 @@ const RenderTypeSchema = z.object({
     ]),
 });
 
-export const SyncStatusSchema = z.enum([
+const SyncStatusSchema = z.enum([
     "draft",
     "pending",
     "syncing",
@@ -36,7 +53,7 @@ export const SyncStatusSchema = z.enum([
     "editing",
 ]);
 
-export const UserSchema = z.object({
+const UserSchema = z.object({
     uid: UID,
     username: z.string(),
     firstName: z.string(),
@@ -47,7 +64,7 @@ export const ClientSchema = z.object({
     search: z.record(z.string(), z.string()).optional(),
 });
 
-export const OptionSetSchema = z.object({
+const OptionSetSchema = z.object({
     name: z.string(),
     options: z.array(
         z.object({
@@ -59,7 +76,7 @@ export const OptionSetSchema = z.object({
     id: UID,
 });
 
-export const DataElementSchema = z.object({
+const DataElementSchema = z.object({
     code: z.string(),
     name: z.string(),
     optionSet: OptionSetSchema.optional(),
@@ -68,7 +85,7 @@ export const DataElementSchema = z.object({
     formName: z.string(),
     id: UID,
 });
-export const ProgramIndicatorSchema = z.object({
+const ProgramIndicatorSchema = z.object({
     filter: z.string(),
     expression: z.string(),
     name: z.string(),
@@ -77,7 +94,7 @@ export const ProgramIndicatorSchema = z.object({
     id: UID,
 });
 
-export const IndicatorEvaluationSchema = z.object({
+const IndicatorEvaluationSchema = z.object({
     id: z.string(),
     eventId: z.string(),
     results: z.record(z.string(), z.literal(1)),
@@ -85,7 +102,7 @@ export const IndicatorEvaluationSchema = z.object({
     version: z.number(),
 });
 
-export const ProgramStageSectionSchema = z.object({
+const ProgramStageSectionSchema = z.object({
     name: z.string(),
     dataElements: z.array(DataElementSchema),
     sortOrder: z.number(),
@@ -93,7 +110,7 @@ export const ProgramStageSectionSchema = z.object({
     id: UID,
 });
 
-export const ProgramStageSchema = z.object({
+const ProgramStageSchema = z.object({
     name: z.string(),
     programStageDataElements: z.array(
         z.object({
@@ -114,7 +131,7 @@ export const ProgramStageSchema = z.object({
     programStageSections: z.array(ProgramStageSectionSchema),
 });
 
-export const TrackedEntityAttributeSchema = z.object({
+const TrackedEntityAttributeSchema = z.object({
     name: z.string(),
     valueType: z.string(),
     optionSet: OptionSetSchema.optional(),
@@ -128,7 +145,7 @@ export const TrackedEntityAttributeSchema = z.object({
     id: UID,
 });
 
-export const ProgramTrackedEntityAttributeSchema = z.object({
+const ProgramTrackedEntityAttributeSchema = z.object({
     sortOrder: z.number(),
     mandatory: z.boolean(),
     id: UID,
@@ -145,7 +162,7 @@ export const ProgramTrackedEntityAttributeSchema = z.object({
         .optional(),
 });
 
-export const ProgramSectionSchema = z.object({
+const ProgramSectionSchema = z.object({
     name: z.string(),
     trackedEntityAttributes: z.array(z.object({ id: UID })),
     sortOrder: z.number(),
@@ -153,7 +170,7 @@ export const ProgramSectionSchema = z.object({
     id: UID,
 });
 
-export const ProgramSchema = z.object({
+const ProgramSchema = z.object({
     name: z.string(),
     programType: z.string(),
     selectEnrollmentDatesInFuture: z.boolean(),
@@ -174,7 +191,7 @@ export const ProgramSchema = z.object({
     programSections: z.array(ProgramSectionSchema),
 });
 
-export const ProgramRuleActionSchema = z.object({
+const ProgramRuleActionSchema = z.object({
     programRuleActionType: z.enum([
         "HIDEFIELD",
         "SHOWFIELD",
@@ -209,7 +226,7 @@ export const ProgramRuleActionSchema = z.object({
     content: z.string().optional(),
 });
 
-export const ProgramRuleSchema = z.object({
+const ProgramRuleSchema = z.object({
     name: z.string(),
     translations: z.array(z.unknown()),
     description: z.string(),
@@ -223,7 +240,7 @@ export const ProgramRuleSchema = z.object({
     program: z.object({ id: UID }).optional(),
 });
 
-export const ProgramRuleVariableSchema = z.object({
+const ProgramRuleVariableSchema = z.object({
     name: z.string(),
     program: z.object({ id: UID }).optional(),
     dataElement: z.object({ id: UID }).optional(),
@@ -236,7 +253,7 @@ export const ProgramRuleVariableSchema = z.object({
     valueType: z.enum(["TEXT", "NUMBER", "BOOLEAN", "DATE"]),
 });
 
-export const OrgUnitSchema = z.object({
+const OrgUnitSchema = z.object({
     id: UID,
     name: z.string(),
     level: z.number(),
@@ -244,7 +261,7 @@ export const OrgUnitSchema = z.object({
     leaf: z.boolean(),
 });
 
-export const AttributeSchema = z.object({
+const AttributeSchema = z.object({
     attribute: z.string(),
     displayName: z.string().optional(),
     createdAt: z.string().optional(),
@@ -253,7 +270,7 @@ export const AttributeSchema = z.object({
     value: z.string(),
 });
 
-export const DataValueSchema = z.object({
+const DataValueSchema = z.object({
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
     storedBy: z.string().optional(),
@@ -264,7 +281,7 @@ export const DataValueSchema = z.object({
     updatedBy: UserSchema.optional(),
 });
 
-export const EventSchema = z.object({
+const EventSchema = z.object({
     event: UID,
     status: z.string(),
     program: UID,
@@ -288,7 +305,7 @@ export const EventSchema = z.object({
     notes: z.array(z.unknown()).optional(),
 });
 
-export const EnrollmentsSchema = z.object({
+const EnrollmentsSchema = z.object({
     enrollment: UID,
     createdAt: z.string(),
     updatedAt: z.string(),
@@ -307,7 +324,7 @@ export const EnrollmentsSchema = z.object({
     notes: z.array(z.unknown()).optional(),
 });
 
-export const TrackedEntitySchema = z.object({
+const TrackedEntitySchema = z.object({
     trackedEntity: UID,
     trackedEntityType: z.string(),
     createdAt: z.string(),
@@ -333,7 +350,7 @@ export const TrackedEntitySchema = z.object({
     parentEntity: UID.optional(),
 });
 
-export const TrackedEntityResponseSchema = z.object({
+const TrackedEntityResponseSchema = z.object({
     pager: z.object({
         page: z.number(),
         pageSize: z.number(),
@@ -343,7 +360,7 @@ export const TrackedEntityResponseSchema = z.object({
     trackedEntities: z.array(TrackedEntitySchema),
 });
 
-export const EventResponseSchema = z.object({
+const EventResponseSchema = z.object({
     pager: z.object({
         page: z.number(),
         pageSize: z.number(),
@@ -384,7 +401,7 @@ export const FlattenedEnrollmentSchema = EnrollmentsSchema.omit({
     version: z.number(),
 });
 
-export const Dhis2ReportSchema = z.object({
+const Dhis2ReportSchema = z.object({
     status: z.string(),
     validationReport: z.object({
         errorReports: z.array(
@@ -509,7 +526,7 @@ export type FlattenedEvent = z.infer<typeof FlattenedEventSchema>;
 export type FlattenedEnrollment = z.infer<typeof FlattenedEnrollmentSchema>;
 export type SyncStatus = z.infer<typeof SyncStatusSchema>;
 
-export const MessageSchema = z.object({
+const MessageSchema = z.object({
     key: z.string(),
     content: z.string(),
 });

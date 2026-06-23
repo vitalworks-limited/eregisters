@@ -1,6 +1,7 @@
 import {
     CloudDownloadOutlined,
     CloudUploadOutlined,
+    DownOutlined,
     HomeOutlined,
     MenuOutlined,
     ReloadOutlined,
@@ -14,15 +15,17 @@ import {
     Badge,
     Button,
     Drawer,
+    Dropdown,
     Flex,
     Grid,
     Layout,
+    Space,
     Tooltip,
     Typography,
 } from "antd";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 import { eq, useLiveSuspenseQuery } from "@tanstack/react-db";
 import { waitFor } from "xstate";
@@ -110,6 +113,73 @@ function SyncButton({
     );
 }
 
+function SplitSyncButton({
+    tooltip,
+    icon,
+    isLoading,
+    idleLabel,
+    loadingLabel,
+    lastTime,
+    primaryAction,
+    dropdownItems,
+    type,
+    danger,
+}: {
+    tooltip: string;
+    icon: React.ReactNode;
+    isLoading: boolean;
+    idleLabel: string;
+    loadingLabel: string;
+    lastTime?: string;
+    primaryAction: () => void;
+    dropdownItems: Array<{ key: string; label: string; onClick: () => void }>;
+    type?: "primary" | "default";
+    danger?: boolean;
+}) {
+    return (
+        <Space.Compact>
+            <Tooltip title={tooltip}>
+                <Button
+                    icon={icon}
+                    loading={isLoading}
+                    onClick={primaryAction}
+                    type={type}
+                    danger={danger}
+                    style={{ height: "auto", padding: "4px 12px" }}
+                >
+                    <Flex vertical align="flex-start" gap={0}>
+                        <span>{isLoading ? loadingLabel : idleLabel}</span>
+                        {lastTime && (
+                            <Text
+                                type="secondary"
+                                style={{ fontSize: 10, lineHeight: 1 }}
+                            >
+                                {lastTime}
+                            </Text>
+                        )}
+                    </Flex>
+                </Button>
+            </Tooltip>
+            <Dropdown
+                menu={{
+                    items: dropdownItems.map((item) => ({
+                        key: item.key,
+                        label: item.label,
+                        onClick: item.onClick,
+                    })),
+                }}
+            >
+                <Button
+                    type={type}
+                    danger={danger}
+                    icon={<DownOutlined />}
+                    style={{ height: "auto", padding: "4px 6px" }}
+                />
+            </Dropdown>
+        </Space.Compact>
+    );
+}
+
 function LayoutWithDrafts() {
     const syncActor = SyncContext.useActorRef();
 
@@ -137,11 +207,7 @@ function LayoutWithDrafts() {
     );
 
     const pushingData = SyncContext.useSelector((snapshot) =>
-        isDataPushLoading(
-            snapshot.matches({ dataSync: "directSync" }) ||
-                snapshot.matches({ dataSync: "uploadingDirect" }) ||
-                snapshot.matches({ dataSync: "batchSync" }),
-        ),
+        isDataPushLoading(snapshot.matches({ dataSync: "batchSync" })),
     );
     const lastDataPull = SyncContext.useSelector((a) => a.context.lastDataPull);
     const lastDataPush = SyncContext.useSelector((a) => a.context.lastDataPush);
@@ -166,6 +232,13 @@ function LayoutWithDrafts() {
             .from({ events: eventsCollection })
             .where(({ events }) => eq(events.syncStatus, "pending")),
     );
+    useEffect(() => {
+        const handleOnline = () =>
+            syncActor.send({ type: "NETWORK_RECONNECT" });
+        window.addEventListener("online", handleOnline);
+        return () => window.removeEventListener("online", handleOnline);
+    }, [syncActor]);
+
     const screens = Grid.useBreakpoint();
     const isMobile = !screens.lg;
     const isLarge = !screens.xl;
@@ -184,19 +257,29 @@ function LayoutWithDrafts() {
                     <Text strong>{orgUnit?.name ?? "Loading..."}</Text>
                 </Flex>
             </Link>
-            <SyncButton
-                tooltip="Pull latest data from server"
+            <SplitSyncButton
+                tooltip="Pull data changes since last sync"
                 icon={<CloudDownloadOutlined />}
                 isLoading={syncingData}
-                idleLabel="Pull Data"
+                idleLabel="Pull Changes"
                 loadingLabel="Pulling..."
                 lastTime={
                     lastDataPull ? dayjs(lastDataPull).fromNow() : undefined
                 }
-                onClick={() => syncActor.send({ type: "START_DATA_SYNC" })}
+                primaryAction={() =>
+                    syncActor.send({ type: "START_DATA_SYNC" })
+                }
+                dropdownItems={[
+                    {
+                        key: "full",
+                        label: "Pull All Data",
+                        onClick: () =>
+                            syncActor.send({ type: "FULL_DATA_SYNC" }),
+                    },
+                ]}
             />
-            <SyncButton
-                tooltip="Sync metadata"
+            <SplitSyncButton
+                tooltip="Sync metadata changes since last sync"
                 icon={<ReloadOutlined />}
                 isLoading={syncingMetadata}
                 idleLabel="Sync Metadata"
@@ -206,7 +289,17 @@ function LayoutWithDrafts() {
                         ? dayjs(lastMetadataPull).fromNow()
                         : undefined
                 }
-                onClick={() => syncActor.send({ type: "FULL_METADATA_SYNC" })}
+                primaryAction={() =>
+                    syncActor.send({ type: "START_METADATA_SYNC" })
+                }
+                dropdownItems={[
+                    {
+                        key: "full",
+                        label: "Full Metadata Sync",
+                        onClick: () =>
+                            syncActor.send({ type: "FULL_METADATA_SYNC" }),
+                    },
+                ]}
                 type="primary"
             />
             <Tooltip title="Push Data">

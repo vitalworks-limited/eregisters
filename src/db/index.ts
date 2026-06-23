@@ -4,6 +4,7 @@ import {
     FlattenedEnrollment,
     FlattenedEvent,
     FlattenedTrackedEntity,
+    MetadataVersion,
     Node,
     Program,
     ProgramIndicator,
@@ -51,23 +52,6 @@ export interface RuleCacheEntry {
     dataValues: Record<string, any>;
     attributes: Record<string, any>;
 }
-export interface MetadataVersion {
-    id: string;
-    lastSync: string;
-    versions: {
-        attributes?: string;
-        programStages?: string;
-        dataElements?: string;
-        programs?: string;
-        trackedEntityTypes?: string;
-        optionSets?: string;
-        programIndicators?: string;
-        me?: string;
-        optionGroups?: string;
-        programRuleVariables?: string;
-        programRules?: string;
-    };
-}
 export interface MetadataSyncProgress {
     id: string;
     status: "idle" | "checking" | "syncing" | "error" | "success";
@@ -103,7 +87,7 @@ export interface IndicatorEvaluation {
     updatedAt: string;
     version: number;
 }
-export class RegisterDatabase extends Dexie {
+class RegisterDatabase extends Dexie {
     programRules!: Table<ProgramRule, string>;
     programRuleVariables!: Table<ProgramRuleVariable, string>;
     optionGroups!: Table<

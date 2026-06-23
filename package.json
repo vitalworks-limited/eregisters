@@ -1,45 +1,40 @@
 {
-    "name": "eregisters",
-    "version": "1.1.2",
-    "description": "",
-    "license": "BSD-3-Clause",
-    "private": true,
-    "packageManager": "pnpm@10.13.1",
-    "scripts": {
-        "build": "d2-app-scripts build",
-        "start": "d2-app-scripts start --proxy https://eregisters.health.go.ug",
-        "test": "d2-app-scripts test",
-        "deploy": "d2-app-scripts deploy"
-    },
-    "dependencies": {
-        "@ant-design/icons": "^6.2.3",
-        "@dhis2/app-runtime": "^3.17.0",
-        "@sqlite.org/sqlite-wasm": "3.53.0-build1",
-        "@tanstack/db": "^0.6.5",
-        "@tanstack/query-core": "^5.100.10",
-        "@tanstack/react-db": "^0.1.83",
-        "@tanstack/react-query": "^5.100.10",
-        "@tanstack/react-router": "^1.169.2",
-        "@xstate/react": "^6.1.0",
-        "antd": "^6.4.2",
-        "dayjs": "^1.11.20",
-        "dexie": "^4.4.2",
-        "dexie-react-hooks": "^4.4.0",
-        "lodash": "^4.18.1",
-        "pluralize": "^8.0.0",
-        "react": "19.2.6",
-        "react-dom": "19.2.6",
-        "tanstack-dexie-db-collection": "^0.1.4",
-        "xstate": "^5.31.1",
-        "zod": "^4.4.3"
-    },
-    "devDependencies": {
-        "@dhis2/cli-app-scripts": "12.11.0",
-        "@types/jest": "^30.0.0",
-        "@types/lodash": "^4.17.24",
-        "@types/node": "^25.8.0",
-        "@types/react": "^19.2.14",
-        "@types/react-dom": "^19.2.3",
-        "typescript": "^6.0.3"
-    }
+  "name": "eregisters",
+  "version": "1.1.2",
+  "description": "",
+  "license": "BSD-3-Clause",
+  "private": true,
+  "packageManager": "pnpm@10.13.1",
+  "scripts": {
+    "build": "d2-app-scripts build",
+    "start": "d2-app-scripts start --proxy https://eregisters.health.go.ug",
+    "test": "d2-app-scripts test",
+    "deploy": "d2-app-scripts deploy"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^6.2.3",
+    "@dhis2/app-runtime": "^3.17.0",
+    "react-dom": "19.2.6",
+    "@tanstack/db": "^0.6.5",
+    "zod": "^4.4.3",
+    "@tanstack/react-db": "^0.1.83",
+    "@tanstack/react-router": "^1.169.2",
+    "@xstate/react": "^6.1.0",
+    "antd": "^6.4.2",
+    "dayjs": "^1.11.20",
+    "dexie": "^4.4.2",
+    "xstate": "^5.31.1",
+    "lodash": "^4.18.1",
+    "tanstack-dexie-db-collection": "^0.1.4",
+    "react": "19.2.6"
+  },
+  "devDependencies": {
+    "@dhis2/cli-app-scripts": "12.11.0",
+    "@types/jest": "^30.0.0",
+    "@types/lodash": "^4.17.24",
+    "@types/node": "^25.8.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^6.0.3"
+  }
 }

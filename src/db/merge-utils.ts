@@ -4,7 +4,7 @@ import {
     FlattenedEnrollment,
 } from "../schemas";
 
-export function mergeEvent(
+function mergeEvent(
     serverEvent: FlattenedEvent,
     localEvent: FlattenedEvent | undefined,
 ): FlattenedEvent {
@@ -20,7 +20,7 @@ export function mergeEvent(
     };
 }
 
-export function mergeTrackedEntity(
+function mergeTrackedEntity(
     serverEntity: FlattenedTrackedEntity,
     localEntity: FlattenedTrackedEntity | undefined,
 ): FlattenedTrackedEntity {
@@ -36,7 +36,7 @@ export function mergeTrackedEntity(
     };
 }
 
-export function mergeEnrollment(
+function mergeEnrollment(
     serverEnrollment: FlattenedEnrollment,
     localEnrollment: FlattenedEnrollment | undefined,
 ): FlattenedEnrollment {

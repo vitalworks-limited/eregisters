@@ -3,7 +3,7 @@ import React from "react";
 import { Spinner } from "../components/spinner";
 import { ReportsRoute } from "./reports";
 
-export const HMISReportsRoute = createRoute({
+const HMISReportsRoute = createRoute({
     getParentRoute: () => ReportsRoute,
     path: "/hmis",
     component: HMISReports,

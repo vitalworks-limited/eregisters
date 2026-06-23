@@ -24,22 +24,48 @@ import {
 } from "./who-zscore-tables";
 
 /**
- * Calculate z-score using WHO LMS method
+ * Calculate z-score using WHO LMS method with SD3 tail correction.
+ *
+ * For |Z| > 3 WHO requires linear extrapolation beyond SD3 using the
+ * distance between SD2 and SD3 as the unit, to avoid unrealistic scores
+ * in the extreme tails (WHO Technical Note, MGRS Group 2006).
  */
 function calculateZScore(value: number, L: number, M: number, S: number): number {
     if (value <= 0 || M <= 0 || S <= 0) {
         return NaN;
     }
 
-    // Special case when L = 0 (use log transformation)
+    let zscore: number;
     if (Math.abs(L) < 0.0001) {
-        return Math.log(value / M) / S;
+        zscore = Math.log(value / M) / S;
+    } else {
+        zscore = (Math.pow(value / M, L) - 1) / (L * S);
     }
 
-    // Standard LMS formula: Z = ((value/M)^L - 1) / (L * S)
-    const ratio = value / M;
-    const powered = Math.pow(ratio, L);
-    const zscore = (powered - 1) / (L * S);
+    // WHO SD3 correction: beyond ±3 SD, extrapolate linearly using the SD2→SD3 interval
+    if (zscore > 3) {
+        let SD2pos: number, SD3pos: number;
+        if (Math.abs(L) < 0.0001) {
+            SD2pos = M * Math.exp(S * 2);
+            SD3pos = M * Math.exp(S * 3);
+        } else {
+            SD2pos = M * Math.pow(1 + L * S * 2, 1 / L);
+            SD3pos = M * Math.pow(1 + L * S * 3, 1 / L);
+        }
+        return 3 + (value - SD3pos) / (SD3pos - SD2pos);
+    }
+
+    if (zscore < -3) {
+        let SD2neg: number, SD3neg: number;
+        if (Math.abs(L) < 0.0001) {
+            SD2neg = M * Math.exp(-S * 2);
+            SD3neg = M * Math.exp(-S * 3);
+        } else {
+            SD2neg = M * Math.pow(1 + L * S * (-2), 1 / L);
+            SD3neg = M * Math.pow(1 + L * S * (-3), 1 / L);
+        }
+        return -3 + (value - SD3neg) / (SD2neg - SD3neg);
+    }
 
     return zscore;
 }

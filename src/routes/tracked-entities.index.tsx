@@ -29,7 +29,6 @@ import {
 import { TrackedEntitiesRoute } from "./tracked-entities";
 import { DataModal } from "../components/data-modal";
 import { TrackedEntityContext } from "../machines";
-import { SyncContext } from "../machines/sync";
 import { useMetadata } from "../hooks/useMetadata";
 import {
     enrollmentsCollection,
@@ -52,7 +51,6 @@ function TrackedEntitiesSearch() {
         program,
         orgUnit: { id },
     } = useMetadata();
-    const syncActor = SyncContext.useActorRef();
     const navigate = TrackedEntitiesIndexRoute.useNavigate();
     const mainStageDataElements = useMemo(
         () =>
@@ -303,26 +301,6 @@ function TrackedEntitiesSearch() {
                             },
                         );
                         await tx1.isPersisted.promise;
-                        syncActor.send({
-                            type: "SYNC_ENTITIES",
-                            entities: [
-                                {
-                                    ...enrollment,
-                                    attributes: {
-                                        ...enrollment.attributes,
-                                        ...values,
-                                    },
-                                    syncStatus: "pending",
-                                },
-                                {
-                                    ...trackedEntity,
-                                    attributes: {
-                                        ...trackedEntity.attributes,
-                                        ...values,
-                                    },
-                                },
-                            ],
-                        });
                         if (addAnother) {
                             closeModal();
                             await createAndOpenNewPatient();

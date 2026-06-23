@@ -3,16 +3,13 @@ import {
     useCurrentUserInfo,
     useDataEngine,
 } from "@dhis2/app-runtime";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { App, ConfigProvider, Typography } from "antd";
 import { isEmpty } from "lodash";
 import React, { FC } from "react";
 import { SyncContext } from "./machines/sync";
-import { queryClient } from "./query-client";
 import { router } from "./router";
-import { redirectByAuthorities, redirectByUnit } from "./utils/utils";
-
+import { redirectByAuthorities } from "./utils/utils";
 const Main = () => {
     const syncActor = SyncContext.useActorRef();
     return <RouterProvider router={router} context={{ syncActor }} />;
@@ -30,22 +27,20 @@ const FullApp: FC<{
     redirectByAuthorities(userInfo?.authorities ?? [], baseUrl);
 
     return (
-        <QueryClientProvider client={queryClient}>
-            <SyncContext.Provider
-                options={{
-                    input: {
-                        engine,
-                        orgUnit,
-                        user,
-                        userInfo,
-                        message,
-                    },
-                }}
-                key={`${user}${orgUnit}`}
-            >
-                <Main />
-            </SyncContext.Provider>
-        </QueryClientProvider>
+        <SyncContext.Provider
+            options={{
+                input: {
+                    engine,
+                    orgUnit,
+                    user,
+                    userInfo,
+                    message,
+                },
+            }}
+            key={`${user}${orgUnit}`}
+        >
+            <Main />
+        </SyncContext.Provider>
     );
 };
 const MyApp: FC = () => {

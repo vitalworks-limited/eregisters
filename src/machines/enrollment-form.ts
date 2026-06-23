@@ -11,7 +11,7 @@ import { FlattenedEnrollment, FlattenedTrackedEntity } from "../schemas";
 
 import { FormEvent } from "./common";
 
-export const enrollmentFormMachine = setup({
+const enrollmentFormMachine = setup({
     types: {
         events: {} as FormEvent,
         context: {} as {
@@ -132,4 +132,4 @@ export const enrollmentFormMachine = setup({
     },
 });
 
-export const EnrollmentContext = createActorContext(enrollmentFormMachine);
+const EnrollmentContext = createActorContext(enrollmentFormMachine);

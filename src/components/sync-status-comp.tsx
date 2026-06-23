@@ -8,7 +8,7 @@ import {
 } from "@ant-design/icons";
 import { Flex, Typography } from "antd";
 
-export const getStatusConfig = (syncStatus: string) => {
+const getStatusConfig = (syncStatus: string) => {
     switch (syncStatus) {
         case "synced":
             return {

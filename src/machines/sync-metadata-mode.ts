@@ -38,7 +38,7 @@ export function shouldRecordDataPush({ processed }: { processed: number }) {
     return processed > 0;
 }
 
-export function extractTrackerJobId(response: unknown) {
+function extractTrackerJobId(response: unknown) {
     const value = response as {
         id?: string;
         location?: string;
@@ -61,7 +61,7 @@ export function extractTrackerJobId(response: unknown) {
     throw new Error("DHIS2 tracker async response did not include a job id");
 }
 
-export function isTrackerJobComplete(jobLogs: unknown) {
+function isTrackerJobComplete(jobLogs: unknown) {
     const logs = Array.isArray(jobLogs) ? jobLogs : [jobLogs];
     return logs.some((log) => {
         const value = log as {

@@ -15,7 +15,7 @@ import {
 import { applyRuleResultsToForm, FormEvent } from "./common";
 import { trackedEntitiesCollection } from "../collections";
 
-export const trackedEntityFormMachine = setup({
+const trackedEntityFormMachine = setup({
     types: {
         events: {} as FormEvent,
         context: {} as {

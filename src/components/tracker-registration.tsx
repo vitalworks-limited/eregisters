@@ -21,7 +21,6 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
     const ruleResult = TrackedEntityContext.useSelector(
         (a) => a.context.ruleResult,
     );
-    const state = TrackedEntityContext.useSelector((a) => a.value);
     const trackedEntityActor = TrackedEntityContext.useActorRef();
     const initialFormData = TrackedEntityContext.useSelector((a) => ({
         ...a.context.trackedEntity.attributes,
@@ -59,7 +58,7 @@ export const TrackerRegistration: React.FC<TrackerRegistrationProps> = ({
     return (
         <Flex vertical gap={10}>
             <Card
-                title={`Registration Details ${state}`}
+                title={`Registration Details`}
                 style={{ borderRadius: 0 }}
                 size="small"
             >
