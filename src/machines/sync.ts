@@ -1,7 +1,6 @@
 import { assign, fromPromise, setup } from "xstate";
 import {
     DataElement,
-    Dhis2Report,
     Enrollment,
     Event,
     FlattenedEnrollment,
@@ -28,31 +27,33 @@ import {
 } from "../collections";
 import { db } from "../db";
 import {
-    mergeBulkEnrollments,
-    mergeBulkEvents,
-    mergeBulkTrackedEntities,
-} from "../db/merge-utils";
-import {
     transformEnrollment,
     transformEvent,
     transformTrackedEntity,
 } from "../db/transformers";
-import {
-    checkInfo,
-    flattenEnrollment,
-    flattenEvent,
-    flattenTrackedEntity,
-    queryInfo,
-} from "../utils/utils";
+import { checkInfo, queryInfo } from "../utils/utils";
 import {
     DataPullMode,
     DataPushMode,
     MetadataSyncMode,
-    shouldContinueDataPull,
     shouldRecordDataPush,
-    shouldUseLastDataPull,
     shouldUseLastUpdatedFilter,
 } from "./sync-metadata-mode";
+import {
+    PROGRAM_UID,
+    SyncMode,
+} from "../sync/config";
+import {
+    pullEventsIncremental,
+    pullTrackedEntitiesIncremental,
+} from "../sync/pullData";
+import {
+    submitTrackerImportAndAwaitReport,
+} from "../sync/trackerImport";
+import { submitEventDeletes } from "../sync/deletes";
+import { acquireSyncLock, buildOwnerId, releaseSyncLock } from "../sync/lock";
+import { getSyncDelayMs } from "../sync/scheduler";
+import { SyncTelemetryBuilder } from "../sync/telemetry";
 
 function deriveValidIds(program: Program | undefined): {
     validAttributeIds: Set<string>;
@@ -103,53 +104,8 @@ async function isDhis2Reachable(engine: ReturnType<typeof useDataEngine>) {
     }
 }
 
-async function submitTrackerImportAndWaitForReport({
-    engine,
-    data,
-    params,
-}: {
-    engine: ReturnType<typeof useDataEngine>;
-    data: any;
-    params: Record<string, any>;
-}) {
-    const response = (await engine.mutate({
-        resource: "tracker",
-        type: "create",
-        data,
-        params: {
-            ...params,
-            async: false,
-        },
-    })) as unknown as Dhis2Report;
-
-    return response;
-    // const jobId = extractTrackerJobId(response);
-    // const startedAt = Date.now();
-
-    // while (Date.now() - startedAt < timeoutMs) {
-    //     const jobResponse = (await engine.query({
-    //         job: {
-    //             resource: `tracker/jobs/${jobId}`,
-    //         },
-    //     })) as { job: unknown };
-
-    //     if (isTrackerJobComplete(jobResponse.job)) {
-    //         const reportResponse = (await engine.query({
-    //             report: {
-    //                 resource: `tracker/jobs/${jobId}/report`,
-    //                 params: {
-    //                     reportMode: "FULL",
-    //                 },
-    //             },
-    //         })) as { report: Dhis2Report };
-    //         return reportResponse.report;
-    //     }
-
-    //     await sleep(pollIntervalMs);
-    // }
-
-    // throw new Error(`Timed out waiting for DHIS2 tracker job ${jobId}`);
-}
+// Tracker async/sync import is implemented in src/sync/trackerImport.ts —
+// the machine calls submitTrackerImportAndAwaitReport directly.
 
 type Resource =
     | "programs"
@@ -231,16 +187,22 @@ const syncReportToLocal = async ({
             events: [],
         },
     );
-    const response = await submitTrackerImportAndWaitForReport({
+    const response = await submitTrackerImportAndAwaitReport({
         engine,
         data: payload,
         params: {
             importStrategy: "CREATE_AND_UPDATE",
             atomicMode: "OBJECT",
-            skipPatternValidation: "true",
-            skipSideEffects: "true",
+            skipPatternValidation: true,
+            skipSideEffects: true,
+            reportMode: "ERRORS",
         },
+        background: true,
     });
+    if (!response) {
+        // Async import accepted; we will reconcile when the job completes.
+        return { processed: entities.length, succeeded: 0, failed: 0 };
+    }
     const failedResponses = new Map(
         response.validationReport.errorReports.map((a) => [a.uid, a.message]),
     );
@@ -348,26 +310,14 @@ const syncDeleteToLocal = async ({
         return { succeeded: 0, failed: 0 };
     }
 
-    const response = await submitTrackerImportAndWaitForReport({
+    const { succeeded, failed } = await submitEventDeletes({
         engine,
-        data: { events: deletedEvents.map((e) => ({ event: e.event })) },
-        params: {
-            importStrategy: "DELETE",
-            atomicMode: "OBJECT",
-        },
+        deletedEvents,
     });
 
-    const succeededUids = new Set(
-        response.bundleReport.typeReportMap.EVENT.objectReports.map(
-            (r) => r.uid,
-        ),
-    );
-    const failedUids = new Map(
-        response.validationReport.errorReports.map((r) => [r.uid, r.message]),
-    );
     return {
-        succeeded: succeededUids.size,
-        failed: failedUids.size,
+        succeeded: succeeded.size,
+        failed: failed.size,
     };
 };
 
@@ -457,111 +407,70 @@ const syncMachine = setup({
                 lastDataPull: string | undefined;
                 engine: ReturnType<typeof useDataEngine>;
                 dataPullMode: DataPullMode;
+                user?: string;
             }
         >(
             async ({
-                input: { lastDataPull, orgUnit, program, engine, dataPullMode },
+                input: {
+                    lastDataPull,
+                    orgUnit,
+                    program,
+                    engine,
+                    dataPullMode,
+                    user,
+                },
             }) => {
-                let currentPage = 1;
-                const pageSize = 100;
-                let hasMoreData = true;
+                // Per-device lock: prevent duplicate concurrent sync across
+                // tabs/reloads. If we cannot acquire, skip silently — the
+                // other tab is already syncing.
+                const ownerId = buildOwnerId({ userUid: user });
+                const acquired = await acquireSyncLock(
+                    "background-data-pull",
+                    ownerId,
+                    30 * 60 * 1000,
+                );
+                if (!acquired) {
+                    return;
+                }
 
-                while (hasMoreData) {
-                    let params: Record<string, any> = {
+                const telemetry = new SyncTelemetryBuilder("data-pull", {
+                    orgUnitUid: orgUnit,
+                    userUid: user,
+                });
+
+                try {
+                    const mode: SyncMode =
+                        dataPullMode === "full"
+                            ? "full-manual-admin"
+                            : "incremental";
+
+                    const tePull = await pullTrackedEntitiesIncremental({
+                        engine,
                         program,
-                        orgUnits: orgUnit,
-                        ouMode: "SELECTED",
-                        fields: "*,enrollments[*,events[*]]",
-                        page: currentPage,
-                        pageSize: pageSize,
-                    };
-                    if (shouldUseLastDataPull(dataPullMode, lastDataPull)) {
-                        params = { ...params, updatedAfter: lastDataPull };
-                    }
-
-                    const response = (await engine.query({
-                        trackedEntities: {
-                            resource: "tracker/trackedEntities",
-                            params,
-                        },
-                    })) as {
-                        trackedEntities: {
-                            pager?: {
-                                page?: number;
-                                pageSize?: number;
-                                pageCount?: number;
-                                nextPage?: string;
-                                total?: number;
-                            };
-                            trackedEntities: TrackedEntity[];
-                        };
-                    };
-                    const { trackedEntities: instances } =
-                        response.trackedEntities;
-                    const pager = response.trackedEntities.pager;
-
-                    const serverTrackedEntities =
-                        instances.map(flattenTrackedEntity);
-                    const serverEvents = instances.flatMap(({ enrollments }) =>
-                        (enrollments ?? []).flatMap(({ events }) =>
-                            (events ?? [])
-                                .filter((event) => event.occurredAt)
-                                .map(flattenEvent),
-                        ),
-                    );
-                    const serverEnrollments = instances.flatMap(
-                        ({ enrollments }) => {
-                            return (enrollments ?? []).map(flattenEnrollment);
-                        },
-                    );
-
-                    const teTable: Table<FlattenedTrackedEntity, string> =
-                        trackedEntitiesCollection.utils.getTable();
-                    const eventTable: Table<FlattenedEvent, string> =
-                        eventsCollection.utils.getTable();
-                    const enrollTable: Table<FlattenedEnrollment, string> =
-                        enrollmentsCollection.utils.getTable();
-
-                    const mergedTrackedEntities =
-                        await mergeBulkTrackedEntities(
-                            serverTrackedEntities,
-                            async (id) => {
-                                const result = await teTable.get(id);
-                                return result;
-                            },
+                        orgUnit,
+                        lastDataPull,
+                        mode,
+                    });
+                    telemetry
+                        .incr("pagesPulled", tePull.pages)
+                        .incr(
+                            "trackedEntitiesPulled",
+                            tePull.trackedEntitiesPulled,
                         );
 
-                    const mergedEvents = await mergeBulkEvents(
-                        serverEvents,
-                        async (id) => {
-                            const result = await eventTable.get(id);
-                            return result;
-                        },
-                    );
-
-                    const mergedEnrollments = await mergeBulkEnrollments(
-                        serverEnrollments,
-                        async (id) => {
-                            const result = await enrollTable.get(id);
-                            return result;
-                        },
-                    );
-                    await enrollmentsCollection.utils.bulkInsertLocally(
-                        mergedEnrollments,
-                    );
-                    await trackedEntitiesCollection.utils.bulkInsertLocally(
-                        mergedTrackedEntities,
-                    );
-                    await eventsCollection.utils.bulkInsertLocally(
-                        mergedEvents,
-                    );
-
-                    hasMoreData = shouldContinueDataPull({
-                        receivedCount: instances.length,
-                        pageSize,
-                        pager,
+                    const eventsPull = await pullEventsIncremental({
+                        engine,
+                        program,
+                        orgUnit,
+                        lastEventPull: lastDataPull,
+                        mode,
                     });
-                    currentPage++;
+                    telemetry
+                        .incr("pagesPulled", eventsPull.pages)
+                        .incr("eventsPulled", eventsPull.eventsPulled);
+                } finally {
+                    await releaseSyncLock("background-data-pull", ownerId);
+                    await telemetry.finish();
                 }
             },
         ),
@@ -998,8 +907,29 @@ const syncMachine = setup({
         ),
     },
     delays: {
-        dataSyncInterval: () => 1000 * 60 * 30 + Math.random() * 1000 * 60 * 5,
-        dataPullInterval: () => 1000 * 60 * 15 + Math.random() * 1000 * 60 * 2,
+        // Background data PUSH: every ~30 min with small jitter once the
+        // first scheduled slot has passed. We keep the recurring cadence
+        // short so users see push progress.
+        dataSyncInterval: () =>
+            1000 * 60 * 30 + Math.random() * 1000 * 60 * 5,
+        // Background data PULL: recurring cadence used after the first
+        // scheduled slot pull has happened. We keep this at ~30 min so
+        // facilities don't constantly hit the tracker endpoint.
+        dataPullInterval: () =>
+            1000 * 60 * 30 + Math.random() * 1000 * 60 * 5,
+        // Initial PULL on app open: defer to the facility's scheduled
+        // sync slot (see src/sync/scheduler.ts). This is the change that
+        // stops hundreds of facilities all hitting DHIS2 simultaneously
+        // when working hours begin. Capped at 2h so off-slot users still
+        // sync that day.
+        initialDataPullDelay: ({ context }) => {
+            const ctx = context as SyncContext;
+            const delay = getSyncDelayMs({
+                orgUnitUid: ctx.orgUnit,
+                userUid: ctx.user,
+            });
+            return Math.min(delay, 1000 * 60 * 60 * 2);
+        },
     },
 }).createMachine({
     /** @xstate-layout N4IgpgJg5mDOIC5SwJ4DsDGA6AtmALgIYSFEDK62AlhADZgDEEA9mmFlWgG7MDW7qTLgLFShCkJr0EnHhlJVWAbQAMAXVVrEoAA7NYVfIrTaQAD0QBmAEwBGLCoAsANgAcrlbduXbAVl+WjgA0ICiItiq+jg6WAJwqAOy2Cc6+7gC+6SGC2HhEJOSUHHSMLGwc3HwCRXmihZIlMpXyRsrqSrZaSCB6Bq0m3RYI1q6WWAmxqd7x1nYJrsGh4bau1uNuNrbxo76Z2TUiBeJFUoxgAE7nzOdYOrSkAGbXOFg5wvliEtSNsswtxppNKZeoZjKYhpsHC53J5vH4AoswghRq4sL55t44o50a5bHsQG9akcvsV6AwyAAVACCACUKQB9ACyAFFqQARKnU+lkACaADkAMJA7og-rgxAJMZRXxeFQqWKWZzWRzykJI2wq6LeVKOWIRWzOTz4wmHT4nEoMABiAFUADK2pmsqkcrm8wXC3T6UGscUISwJLDWVIqDwTZwJXWqpYIPwTcZ2Gx6lRK2LWY0HD71bCwQhcThQRmmohMVjsX78V4ZurHIQ5vNoAtFwhNOQKNoadTAr1iwbhVzOLUq5ypGWWVyxSZq8KOLZYVPjw16xz99NCIlmoQARwArhcUPmAJJoCBgMxsgBCJfK5eqa6bJJ3e8Px9PF5bfzbaEBnZF3bBvZjftB2TEdvHHSdo2SawxiSVwEgSaxYQWFZV1ye8ikfc59wbI8TzPS8LiuG47keZ5KzvTMa2wTDsKgXDX3Pd9-nbD0ej-H0ANmBJfDnZNrAnBUokcCMpxjGcA0cEZJnlDUVyyAkq2JIoT3oIwG0LSirzLSoKxNSiSRUgh8w06smM-b8uk9Pp-1AIYNRGLANWTfwXFiXFHERadLB4zxZliFx7N8FRLFQ95qwMsBVOMpsGEI65bnufAnnOF49PC5TIqM9SmzM-oLK7ayONs6cHKckdXPczzAPHKE3DcqZhLxeS0qU2tKHzLSKh4XTFI3bN2obXKAXaH8rO9AZioQeJYkDXFuPReZfGVBJRLhVFEI8nxJjmSZQvXLNyIwDqym07rbzQ-SihyfMhpYzoCvG313HsJx3GxJUuOE1aZRmraEIWBJImTELmt6g7robWLLnikikrIlq+sOm7fmYr8RsstjCom8xEFWX7HH9cNdQQiMVsgxCeIjYT0RnKIvDTUGKPSoQAHdCFBSHKVpBkWXZTkqW5fkhVGzHHoAgcVHGXFlSW5dlwHVaB2iRqQw8ILrHRXZGYu5nsDZjmoCtO0HV551+cF90RdFGycb9Pw5zSHxcU8Anh0VjysEajaB0CRw9vQ1n2bUw2zFgIh8HYQgHgj84AApDTlFQAEoGARg79eD1jraK23IScNwPC8Hx-ECVaCeiby-A8SwVGg8dQta74yTdAV6WZPkKQPTvmTILP2OxoZEMloLE4NHwh6W0SNcBrA4KCmvnECGW-e1rBG9JRgAAVrTIAAJekXSpPusd9Ie0UTzxF9sCfrCnhesH9dX4lp+CV-2IR19OBhQ-DyPo4uWONdE4pzeJ-Eox8xaTTPiPOUY9r5ykntGWYaRZ7cVrtLSYLgG6IwgFQc4YAMD4C+AwCBPZJrDmcLPfOAkAjcVcL4Ke6I1iP2CsmEm8Etbv2wOvbcdxmDEHzGyPBBD8CdRvIdNeiNeG0H4bghsQj8GENumjDsGNs4D2WIkRyctDQRH8kGMmSJlR2HPkGSwlcogTmwQdaRsjBHCMIVDIiCVSIpQkTwvhAj5EOPwMo-Kv4T7i38p7R+cJF6+FiOiKeKoeJpAicOZc1gOEgy4ZIg6AAjUgGAAAWxCTpdSqO4xGmT8A5K+H49GD0yG2woVQ1yE5aFxKnkGewLCRjX0wc4axVEsAlLKZQJxMNErJVSspYpWTcmUAqaoqpNtB5ynPqPK+N8p4Gh4vxZw8QIiBEiE1VJHiChgFtIQMObIxCb23LAbJJCrb919PAmadg4LcWgvZWIU9861XiJEeYIZfBdNXkcC5tBaAb3JNSOkB9zYt1IXM8IqY5yphWLEQG44FhBm+i9C+iF+KKhed04FoKv42ntFC10QtYU5zsgiicTyUUhjcpJZw0SxgfTiBMOw6sIwEu3CCsFP9SB-xjvHC+ICxlEEJRvSlGiYw0qReOVFjKMVIOCdfaCbkky6lGDyvlDxeW0BpGAB4+CrliJ0udNJhBJV6pBYa41cBsnTOlb6JU0RgrxAjIqccQUGHRi2oGGBgRvJhhSQpD+5z9VYBtQao1JrrlxWIsM+G4qrWRujXauNTrbmBPIcqGIHrXbesiFPJI4wYEazrqkUNoCI18ohobfJ4ia0SsjfWrNai7kAQiEGB+Mo0hJPgp4fsoklqomHBqReE4fCpABfs2toL62DMTa40Z4aW11oGlAdtsyqXhFrpQixqx4KAxWMy6My57AGgnTXaWgRZ1hu4fOrAvDDnHNOfOm5Hac22z0WsGcKoFjCU1L6pEw4eI2FxMXRCY43A6tBRnDqXNIWHwtsLL9kCf1yrpYq9FZ6kRRDGIkSD8o4LeVg4Cp9CHIYkodChmF2aMPUrWLS5FOGmWiUCPYNlE5VjGIVHBrAVGQ5h0FVgKOwqE5yjFWu1NfKhPOq7Vh1jDLcOiV1LEjEQDuKSU1pkeSaBmAnngN0HIO6ZUAFoUGSl1FsaDGsZKiXM3mi+tmBJjn7NWsGVEzO+nMxEcYgQ9SpmCvZvUoluIvU01iHEeyH1hTAfQHzAEEKrRrr9a+Mplz0OSf7S6tZczRUoklyaBphKOXs95bE-FoJVWmDxSSC5a4IRHLl3WWAaLPjwheYrtsKaogCEmSUOpatxGY1JQ0SSgwl1a+vQywcTJHB63ZU9jk57LTcHXQxJVogpD8gTMc3aZuI3rUtxAM4xiKm8v6DVF6FaQUkjtpUyRX42f8kd9OQd8ynYQIvAMgN1PevcGkPD4QUhSjxv8lE813s9IeOzWg258HfeWjNaEHgmX+A1GXa+Dh5jSWPQ1t+cXG7I9q5E-r9S0gzkmMkbpJJTjfZS0gyIqICYorSMFf50E6fKR8V8b7BMeL0KiHQyMkpXCMLK3PVhrD0SeZkySWxXioAKJEd99wqJxzJh02slU7ykGSUlk4A0kTJgymnjzoQfTJmYAFyYtBcphwISCqmKqsxFSoK5cuKmsXm09JfYKt9+Azktqud97wtcQkvM2Sid6zSe1tKSAify96-eEtJ6JRensBKhkTs4LwRO0+RoZwExjiBgm6ieaGeCowRIG61O7lFSKvcCfTbGh1AuvAOCI1sGcIWaYceCmiOIzkfqKh9gJk7pfqlDEA45TwOJFwRGHeemqeoJ38QWPEOIAmA8RyDyH2TtBw8rB4ovEYipZgDiVJnrRMWgHDg877lNkqhOM9vtGKIax-oR419iJIre8OiOYAJ+9CWA5+owH01+H+SIwkzGBeSozy-YkwCQem6QQAA */
@@ -1311,7 +1241,11 @@ const syncMachine = setup({
             states: {
                 idle: {
                     after: {
-                        dataPullInterval: "syncing",
+                        // Defer the initial data pull to the facility's
+                        // scheduled sync slot (spec §4). Manual sync via
+                        // START_DATA_SYNC / NETWORK_RECONNECT still works
+                        // immediately.
+                        initialDataPullDelay: "syncing",
                     },
                     on: {
                         START_DATA_SYNC: {
@@ -1355,16 +1289,15 @@ const syncMachine = setup({
                                 lastDataPull,
                                 orgUnit,
                                 dataPullMode,
+                                user,
                             },
                         }) => ({
                             engine,
                             lastDataPull,
-                            enrollmentsCollection,
-                            eventsCollection,
                             orgUnit,
-                            program: "ueBhWkWll5v",
-                            trackedEntitiesCollection,
+                            program: PROGRAM_UID,
                             dataPullMode,
+                            user,
                         }),
 
                         onDone: {
