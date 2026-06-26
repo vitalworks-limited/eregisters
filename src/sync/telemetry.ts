@@ -1,4 +1,5 @@
 import Dexie, { Table } from "dexie";
+import { APP_VERSION, BUILD_HASH, BUILD_TIME } from "../version";
 
 /**
  * Local sync telemetry.
@@ -93,6 +94,7 @@ export class SyncTelemetryBuilder {
             syncId: partial.syncId ?? newSyncId(),
             startedAt: partial.startedAt ?? new Date().toISOString(),
             mode,
+            appVersion: partial.appVersion ?? APP_VERSION,
             ...partial,
         };
     }
@@ -149,11 +151,26 @@ export async function listTelemetry(): Promise<SyncTelemetry[]> {
 
 /**
  * Returns a JSON Blob suitable for a "Download sync diagnostics" button.
+ *
+ * Includes build identity (appVersion / buildHash / buildTime) so
+ * support can tell which version produced the report.
  */
 export async function downloadSyncDiagnostics(): Promise<Blob> {
     const records = await listTelemetry();
     return new Blob(
-        [JSON.stringify({ generatedAt: new Date().toISOString(), records }, null, 2)],
+        [
+            JSON.stringify(
+                {
+                    generatedAt: new Date().toISOString(),
+                    appVersion: APP_VERSION,
+                    buildHash: BUILD_HASH,
+                    buildTime: BUILD_TIME,
+                    records,
+                },
+                null,
+                2,
+            ),
+        ],
         { type: "application/json" },
     );
 }

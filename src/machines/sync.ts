@@ -54,6 +54,7 @@ import { submitEventDeletes } from "../sync/deletes";
 import { acquireSyncLock, buildOwnerId, releaseSyncLock } from "../sync/lock";
 import { getSyncDelayMs } from "../sync/scheduler";
 import { SyncTelemetryBuilder } from "../sync/telemetry";
+import { isSyncBlockedByUpdate } from "../update/syncGuard";
 
 function deriveValidIds(program: Program | undefined): {
     validAttributeIds: Set<string>;
@@ -420,6 +421,13 @@ const syncMachine = setup({
                     user,
                 },
             }) => {
+                // Phase 17: stop running old sync code once a new build
+                // has been deployed — the safe refresh flow will reload
+                // the page so the new bundle takes over.
+                if (isSyncBlockedByUpdate()) {
+                    return;
+                }
+
                 // Per-device lock: prevent duplicate concurrent sync across
                 // tabs/reloads. If we cannot acquire, skip silently — the
                 // other tab is already syncing.
@@ -834,6 +842,12 @@ const syncMachine = setup({
                     validDataElementsByStage: Map<string, Set<string>>;
                 };
             }) => {
+                // Phase 17 guard: do not push old payloads using stale
+                // code once a new version has been deployed.
+                if (isSyncBlockedByUpdate()) {
+                    return { processed: 0, succeeded: 0, failed: 0 };
+                }
+
                 const { engine, validAttributeIds, validDataElementsByStage } =
                     input;
 

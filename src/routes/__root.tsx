@@ -30,6 +30,7 @@ import React, { useEffect, useState } from "react";
 import { eq, useLiveSuspenseQuery } from "@tanstack/react-db";
 import { waitFor } from "xstate";
 import { Spinner } from "../components/spinner";
+import { SupportInfo } from "../components/support-info";
 import { useMetadata } from "../hooks/useMetadata";
 import { SyncContext } from "../machines/sync";
 import {
@@ -395,6 +396,7 @@ function LayoutWithDrafts() {
                 {navItems(true)}
             </Drawer>
             <Outlet />
+            <SupportInfo />
         </Layout>
     );
 }

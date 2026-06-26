@@ -9,10 +9,16 @@ import { isEmpty } from "lodash";
 import React, { FC } from "react";
 import { SyncContext } from "./machines/sync";
 import { router } from "./router";
+import { UpdateWatcher } from "./update/useUpdateWatcher";
 import { redirectByAuthorities } from "./utils/utils";
 const Main = () => {
     const syncActor = SyncContext.useActorRef();
-    return <RouterProvider router={router} context={{ syncActor }} />;
+    return (
+        <>
+            <UpdateWatcher />
+            <RouterProvider router={router} context={{ syncActor }} />
+        </>
+    );
 };
 
 const FullApp: FC<{
