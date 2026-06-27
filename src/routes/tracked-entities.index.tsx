@@ -9,6 +9,7 @@ import {
     ilike,
     not,
     or,
+    useLiveQuery,
     useLiveSuspenseQuery,
 } from "@tanstack/react-db";
 import { createRoute } from "@tanstack/react-router";
@@ -29,6 +30,7 @@ import { FlattenedTrackedEntity } from "../schemas";
 import { TrackedEntitiesRoute } from "./tracked-entities";
 import { useMetadata } from "../hooks/useMetadata";
 import { trackedEntitiesCollection } from "../collections";
+import { SyncContext } from "../machines/sync";
 
 const { Text } = Typography;
 
@@ -48,6 +50,24 @@ function TrackedEntitiesSearch() {
     } = useMetadata();
     const navigate = TrackedEntitiesIndexRoute.useNavigate();
     const { search } = TrackedEntitiesRoute.useSearch();
+    const syncActor = SyncContext.useActorRef();
+
+    // How many non-draft patients live on this device for this facility?
+    // Used to differentiate "empty database" from "search miss" in the
+    // empty-state copy.
+    const { data: facilityTotal = [] } = useLiveQuery(
+        (q) =>
+            q
+                .from({ t: trackedEntitiesCollection })
+                .where(({ t }) =>
+                    and(
+                        eq(t.orgUnit, id),
+                        not(eq(t.syncStatus, "draft")),
+                    ),
+                ),
+        [id],
+    );
+    const totalLocalClients = facilityTotal.length;
 
     const globalQuery =
         typeof search?._q === "string" && search._q.trim()
@@ -200,8 +220,28 @@ function TrackedEntitiesSearch() {
         return (
             <Col span={24}>
                 <EmptyState
-                    title="Search to find a patient"
-                    description="Enter a name, NIN, phone, or village above. The search matches across every searchable field on the program."
+                    title={
+                        totalLocalClients === 0
+                            ? "No patients on this device yet"
+                            : "Search to find a patient"
+                    }
+                    description={
+                        totalLocalClients === 0
+                            ? "Pull data from the server to bring this facility's existing patients onto this device, or register a new patient using the button above."
+                            : `Enter a name, NIN, phone, or village above. The search matches across every searchable field on the program. ${totalLocalClients} patient${totalLocalClients === 1 ? "" : "s"} on this device.`
+                    }
+                    action={
+                        totalLocalClients === 0 ? (
+                            <Button
+                                type="primary"
+                                onClick={() =>
+                                    syncActor.send({ type: "START_DATA_SYNC" })
+                                }
+                            >
+                                Pull data now
+                            </Button>
+                        ) : undefined
+                    }
                 />
             </Col>
         );
@@ -211,8 +251,32 @@ function TrackedEntitiesSearch() {
         return (
             <Col span={24}>
                 <EmptyState
-                    title="No clients found"
-                    description="Try different search terms, or register a new client using the button above."
+                    title="No matches"
+                    description={
+                        totalLocalClients === 0
+                            ? "There are no patients on this device yet. Pull data from the server first, or register a new patient."
+                            : `Your search didn't match any of the ${totalLocalClients} patient${totalLocalClients === 1 ? "" : "s"} on this device. Try a shorter term, check spelling, or pull recent server changes.`
+                    }
+                    action={
+                        totalLocalClients === 0 ? (
+                            <Button
+                                type="primary"
+                                onClick={() =>
+                                    syncActor.send({ type: "START_DATA_SYNC" })
+                                }
+                            >
+                                Pull data now
+                            </Button>
+                        ) : (
+                            <Button
+                                onClick={() =>
+                                    syncActor.send({ type: "START_DATA_SYNC" })
+                                }
+                            >
+                                Pull changes
+                            </Button>
+                        )
+                    }
                 />
             </Col>
         );
