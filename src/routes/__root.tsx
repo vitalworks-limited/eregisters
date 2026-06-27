@@ -32,8 +32,7 @@ import { redirectByUnit } from "../utils/utils";
 const { Content } = Layout;
 const { Title, Text } = Typography;
 
-const BRAND_BAR_HEIGHT = 56;
-const NAV_BAR_HEIGHT = 44;
+const BRAND_BAR_HEIGHT = 60;
 const UGANDA_LOGO_URL =
     "https://upload.wikimedia.org/wikipedia/commons/7/7c/Coat_of_arms_of_Uganda.svg";
 
@@ -153,31 +152,50 @@ function LayoutWithDrafts() {
                 padding: `0 ${token.padding}px`,
                 height: BRAND_BAR_HEIGHT,
                 display: "flex",
-                alignItems: "center",
+                alignItems: "stretch",
                 justifyContent: "space-between",
-                gap: token.marginSM,
+                gap: token.marginLG,
             }}
         >
-            <Flex align="center" gap={token.marginSM} style={{ minWidth: 0 }}>
-                {isMobile && metadataReady && (
-                    <button
-                        type="button"
-                        aria-label="Open navigation"
-                        onClick={() => setDrawerOpen(true)}
-                        style={{
-                            background: "transparent",
-                            border: "none",
-                            padding: token.paddingXS,
-                            cursor: "pointer",
-                            color: token.colorTextSecondary,
-                            display: "inline-flex",
-                            alignItems: "center",
-                        }}
+            <Flex
+                align="center"
+                gap={token.marginLG}
+                style={{ minWidth: 0, flex: "0 1 auto" }}
+            >
+                <Flex
+                    align="center"
+                    gap={token.marginSM}
+                    style={{ minWidth: 0 }}
+                >
+                    {isMobile && metadataReady && (
+                        <button
+                            type="button"
+                            aria-label="Open navigation"
+                            onClick={() => setDrawerOpen(true)}
+                            style={{
+                                background: "transparent",
+                                border: "none",
+                                padding: token.paddingXS,
+                                cursor: "pointer",
+                                color: token.colorTextSecondary,
+                                display: "inline-flex",
+                                alignItems: "center",
+                            }}
+                        >
+                            <MenuOutlined style={{ fontSize: 20 }} />
+                        </button>
+                    )}
+                    <BrandMark showWordmark={showWordmark} />
+                </Flex>
+                {!isMobile && metadataReady && (
+                    <nav
+                        role="navigation"
+                        aria-label="Primary"
+                        style={{ display: "flex", alignItems: "stretch" }}
                     >
-                        <MenuOutlined style={{ fontSize: 20 }} />
-                    </button>
+                        <AppNav orientation="horizontal" />
+                    </nav>
                 )}
-                <BrandMark showWordmark={showWordmark} />
             </Flex>
             <Flex align="center" gap={token.marginSM}>
                 <OnlineIndicator />
@@ -190,21 +208,6 @@ function LayoutWithDrafts() {
                 />
                 <ThemeToggle />
             </Flex>
-        </div>
-    );
-
-    const navBar = !isMobile && (
-        <div
-            style={{
-                background: token.colorBgContainer,
-                borderBottom: `1px solid ${token.colorBorderSecondary}`,
-                padding: `0 ${token.padding}px`,
-                height: NAV_BAR_HEIGHT,
-                display: "flex",
-                alignItems: "stretch",
-            }}
-        >
-            <AppNav orientation="horizontal" />
         </div>
     );
 
@@ -239,14 +242,7 @@ function LayoutWithDrafts() {
                 Skip to main content
             </a>
             <OfflineBanner />
-            <header role="banner">
-                {brandBar}
-                {metadataReady && (
-                    <nav role="navigation" aria-label="Primary">
-                        {navBar}
-                    </nav>
-                )}
-            </header>
+            <header role="banner">{brandBar}</header>
             <Drawer
                 title="Navigation"
                 placement="left"

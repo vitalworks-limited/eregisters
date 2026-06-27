@@ -30,6 +30,8 @@ export const EmptyState: React.FC<Props> = ({
                 paddingBlock: padded ? token.paddingXL : token.padding,
                 paddingInline: token.padding,
                 width: "100%",
+                flex: 1,
+                minHeight: 240,
             }}
         >
             <Empty

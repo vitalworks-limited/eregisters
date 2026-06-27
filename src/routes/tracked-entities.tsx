@@ -199,6 +199,9 @@ function TrackedEntities() {
         <Content
             style={{
                 padding: isMobile ? token.paddingSM : token.padding,
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
             }}
         >
             <Flex
@@ -306,7 +309,10 @@ function TrackedEntities() {
                 />
             </Flex>
 
-            <Row gutter={[token.marginSM, token.marginSM]}>
+            <Row
+                gutter={[token.marginSM, token.marginSM]}
+                style={{ flex: 1, minHeight: 0 }}
+            >
                 <Outlet />
             </Row>
 

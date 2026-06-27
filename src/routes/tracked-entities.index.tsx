@@ -218,7 +218,7 @@ function TrackedEntitiesSearch() {
 
     if (!hasSearch) {
         return (
-            <Col span={24}>
+            <Col span={24} style={{ display: "flex" }}>
                 <EmptyState
                     title={
                         totalLocalClients === 0
@@ -235,7 +235,7 @@ function TrackedEntitiesSearch() {
                             <Button
                                 type="primary"
                                 onClick={() =>
-                                    syncActor.send({ type: "START_DATA_SYNC" })
+                                    syncActor.send({ type: "FULL_DATA_SYNC" })
                                 }
                             >
                                 Pull data now
@@ -249,7 +249,7 @@ function TrackedEntitiesSearch() {
 
     if (currentTrackedEntities.length === 0) {
         return (
-            <Col span={24}>
+            <Col span={24} style={{ display: "flex" }}>
                 <EmptyState
                     title="No matches"
                     description={
@@ -262,7 +262,7 @@ function TrackedEntitiesSearch() {
                             <Button
                                 type="primary"
                                 onClick={() =>
-                                    syncActor.send({ type: "START_DATA_SYNC" })
+                                    syncActor.send({ type: "FULL_DATA_SYNC" })
                                 }
                             >
                                 Pull data now

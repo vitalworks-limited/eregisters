@@ -1229,7 +1229,31 @@ const syncMachine = setup({
                     },
                 },
 
-                failure: {},
+                failure: {
+                    // Without these, a single transient error (offline, 4xx)
+                    // permanently bricks metadata sync because XState
+                    // silently drops unhandled events.
+                    on: {
+                        START_METADATA_SYNC: {
+                            target: "syncing",
+                            actions: assign({
+                                metadataSyncMode: () => "incremental",
+                            }),
+                        },
+                        FULL_METADATA_SYNC: {
+                            target: "syncing",
+                            actions: assign({
+                                metadataSyncMode: () => "full",
+                            }),
+                        },
+                        NETWORK_RECONNECT: {
+                            target: "syncing",
+                            actions: assign({
+                                metadataSyncMode: () => "incremental",
+                            }),
+                        },
+                    },
+                },
             },
         },
         dataSync: {
@@ -1413,7 +1437,32 @@ const syncMachine = setup({
                         },
                     },
                 },
-                failure: {},
+                failure: {
+                    // Same recovery pattern as metadataSync.failure — a
+                    // dead-end here means the "Pull data" button (and any
+                    // automatic NETWORK_RECONNECT) silently no-ops after
+                    // the first failed pull.
+                    on: {
+                        START_DATA_SYNC: {
+                            target: "syncing",
+                            actions: assign({
+                                dataPullMode: () => "incremental",
+                            }),
+                        },
+                        FULL_DATA_SYNC: {
+                            target: "fullRefresh",
+                            actions: assign({
+                                dataPullMode: () => "full",
+                            }),
+                        },
+                        NETWORK_RECONNECT: {
+                            target: "syncing",
+                            actions: assign({
+                                dataPullMode: () => "incremental",
+                            }),
+                        },
+                    },
+                },
             },
         },
     },
