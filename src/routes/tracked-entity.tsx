@@ -348,18 +348,11 @@ function TrackedEntityComponent() {
                 <Text type="secondary">
                     {events.length} visit{events.length === 1 ? "" : "s"} recorded
                 </Text>
-                <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={handleCreate}
-                >
-                    Add new visit
-                </Button>
             </Flex>
             {events.length === 0 ? (
                 <EmptyState
                     title="No visits yet"
-                    description='Use "Add new visit" above to record one.'
+                    description='Use "New visit" in the page header to record one.'
                 />
             ) : (
                 <div

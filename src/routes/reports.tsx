@@ -43,7 +43,7 @@ const { Title, Text } = Typography;
 
 export const ReportsRoute = createRoute({
     getParentRoute: () => RootRoute,
-    path: "/reports",
+    path: "/dashboard",
     component: Reports,
     pendingComponent: Spinner,
 });
@@ -65,6 +65,10 @@ const RANGE_LABEL: Record<RangeKey, string> = {
 // DHIS2 attribute IDs from the eRegisters program.
 const ATTR_SEX = "bqliZKdUGMX";
 const ATTR_DOB = "Y3DE5CZWySr";
+
+// Main visit stage (where the multi-select "services" data element lives).
+const MAIN_STAGE_UID = "K2nxbE9ubSs";
+const SERVICE_DV = "mrKZWf2WMIC";
 
 const AGE_BANDS: Array<{ label: string; lo: number; hi: number }> = [
     { label: "Under 1", lo: 0, hi: 1 },
@@ -368,21 +372,49 @@ function Reports() {
     }, [trackedEntities, days]);
 
     const visitsByStage = useMemo(() => {
-        const stageNames = new Map(
-            program?.programStages.map((s) => [s.id, s.name]) ?? [],
-        );
-        const counts: Record<string, number> = {};
+        const stageList = program?.programStages ?? [];
+        // Seed every program stage with 0 so empty supplies / lab /
+        // contact-tracing stages still show up — admins want to see what
+        // *isn't* being captured, not just what is.
+        const counts = new Map<string, number>();
+        for (const s of stageList) counts.set(s.name, 0);
         for (const e of events) {
             if (dayjs(e.occurredAt ?? e.createdAt).isBefore(periodStart)) {
                 continue;
             }
-            const key = stageNames.get(e.programStage) ?? e.programStage;
-            counts[key] = (counts[key] ?? 0) + 1;
+            const name =
+                stageList.find((s) => s.id === e.programStage)?.name ??
+                "Other";
+            counts.set(name, (counts.get(name) ?? 0) + 1);
         }
-        return Object.entries(counts)
+        return Array.from(counts.entries())
             .map(([label, value]) => ({ label, value }))
             .sort((a, b) => b.value - a.value);
     }, [events, program, periodStart]);
+
+    const servicesDelivered = useMemo(() => {
+        const counts = new Map<string, number>();
+        for (const e of events) {
+            if (e.programStage !== MAIN_STAGE_UID) continue;
+            if (dayjs(e.occurredAt ?? e.createdAt).isBefore(periodStart)) {
+                continue;
+            }
+            const raw = e.dataValues?.[SERVICE_DV];
+            const items = Array.isArray(raw)
+                ? raw
+                : typeof raw === "string"
+                  ? raw.split(",")
+                  : [];
+            for (const it of items) {
+                const v = String(it).trim();
+                if (!v) continue;
+                counts.set(v, (counts.get(v) ?? 0) + 1);
+            }
+        }
+        return Array.from(counts.entries())
+            .map(([label, value]) => ({ label, value }))
+            .sort((a, b) => b.value - a.value);
+    }, [events, periodStart]);
 
     const sexDistribution = useMemo(() => {
         const counts = new Map<string, number>();
@@ -456,7 +488,7 @@ function Reports() {
             >
                 <Flex vertical gap={token.marginXXS}>
                     <Title level={4} style={{ margin: 0, lineHeight: 1.2 }}>
-                        Reports
+                        Dashboard
                     </Title>
                     <Text type="secondary">
                         Local summary for {name}. {RANGE_LABEL[range]}.
@@ -560,18 +592,37 @@ function Reports() {
 
             <div style={{ marginTop: token.margin }}>
                 <Row gutter={[token.marginSM, token.marginSM]}>
-                    <Col xs={24} lg={12}>
+                    <Col xs={24} xl={14}>
                         <ChartCard
                             icon={<AreaChartOutlined />}
-                            title="Visits by stage"
-                            minHeight={260}
+                            title={`Visits by stage — ${RANGE_LABEL[range].toLowerCase()}`}
+                            minHeight={420}
                         >
                             <StageBarChart
                                 items={visitsByStage}
                                 accent={token.colorPrimary}
+                                maxItems={12}
                             />
                         </ChartCard>
                     </Col>
+                    <Col xs={24} xl={10}>
+                        <ChartCard
+                            icon={<AreaChartOutlined />}
+                            title="Services delivered"
+                            minHeight={420}
+                        >
+                            <StageBarChart
+                                items={servicesDelivered}
+                                accent={token.colorInfo}
+                                maxItems={12}
+                            />
+                        </ChartCard>
+                    </Col>
+                </Row>
+            </div>
+
+            <div style={{ marginTop: token.margin }}>
+                <Row gutter={[token.marginSM, token.marginSM]}>
                     <Col xs={24} lg={12}>
                         <ChartCard
                             icon={<PieChartOutlined />}

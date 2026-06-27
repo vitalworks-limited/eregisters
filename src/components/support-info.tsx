@@ -1,5 +1,5 @@
 import { DownloadOutlined } from "@ant-design/icons";
-import { Button, Flex, Tag, theme, Tooltip, Typography } from "antd";
+import { Button, Divider, Flex, Tag, theme, Tooltip, Typography } from "antd";
 import React from "react";
 import { downloadSyncDiagnostics } from "../sync/telemetry";
 import { APP_VERSION, BUILD_HASH, BUILD_TIME } from "../version";
@@ -25,10 +25,27 @@ export const SupportInfo: React.FC = () => {
             align="center"
             justify="center"
             gap={token.marginXS}
+            wrap
             style={{
-                padding: `${token.paddingXS}px ${token.paddingSM}px`,
+                padding: `${token.paddingSM}px ${token.paddingSM}px`,
             }}
         >
+            <Typography.Text
+                type="secondary"
+                style={{ fontSize: token.fontSizeSM }}
+            >
+                Developed by{" "}
+                <Typography.Link
+                    href="https://www.hispuganda.org"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ fontSize: token.fontSizeSM, fontWeight: 500 }}
+                >
+                    HISP Uganda
+                </Typography.Link>{" "}
+                · © {new Date().getFullYear()}
+            </Typography.Text>
+            <Divider type="vertical" style={{ marginInline: token.marginXS }} />
             <Tooltip title={tooltipTitle}>
                 <Typography.Text
                     type="secondary"

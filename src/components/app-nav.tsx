@@ -1,4 +1,4 @@
-import { BarChartOutlined, TeamOutlined } from "@ant-design/icons";
+import { DashboardOutlined, TeamOutlined } from "@ant-design/icons";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Flex, theme } from "antd";
 import React from "react";
@@ -21,10 +21,11 @@ const NAV: NavItem[] = [
             p.startsWith("/tracked-entity"),
     },
     {
-        to: "/reports",
-        label: "Reports",
-        icon: <BarChartOutlined />,
-        activeWhen: (p) => p.startsWith("/reports"),
+        to: "/dashboard",
+        label: "Dashboard",
+        icon: <DashboardOutlined />,
+        activeWhen: (p) =>
+            p.startsWith("/dashboard") || p.startsWith("/reports"),
     },
 ];
 
