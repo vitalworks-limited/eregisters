@@ -55,6 +55,60 @@ interface UsersQueryResult {
     };
 }
 
+/**
+ * Session state derived from `lastLogin`. DHIS2 doesn't expose a true
+ * presence flag over REST, so we infer:
+ *   ≤ 15 min            → Active (token used very recently)
+ *   15 min – 1 h        → Idle (in session but no recent activity)
+ *   1 h – 30 d          → Closed (session has timed out; we report
+ *                          time-since-login as the time-logged-out)
+ *   > 30 d              → Inactive (not seen in over a month)
+ *   never               → Never logged in
+ *   disabled flag       → Disabled (overrides everything else)
+ */
+type SessionLabel =
+    | "Active"
+    | "Idle"
+    | "Closed"
+    | "Inactive"
+    | "Never"
+    | "Disabled";
+
+interface SessionState {
+    label: SessionLabel;
+    color: string;
+    sub?: string;
+}
+
+function classifySession(u: { lastLogin?: string; disabled?: boolean }): SessionState {
+    if (u.disabled) {
+        return { label: "Disabled", color: "red" };
+    }
+    if (!u.lastLogin) {
+        return { label: "Never", color: "default" };
+    }
+    const mins = dayjs().diff(dayjs(u.lastLogin), "minute");
+    if (mins <= 15) {
+        return { label: "Active", color: "green", sub: "Recent activity" };
+    }
+    if (mins <= 60) {
+        return { label: "Idle", color: "gold", sub: `Idle for ${mins}m` };
+    }
+    const elapsed = dayjs(u.lastLogin).fromNow(true);
+    if (mins <= 60 * 24 * 30) {
+        return {
+            label: "Closed",
+            color: "default",
+            sub: `Logged out ${elapsed} ago`,
+        };
+    }
+    return {
+        label: "Inactive",
+        color: "orange",
+        sub: `No login for ${elapsed}`,
+    };
+}
+
 function AdminUsers() {
     const { token } = theme.useToken();
     const engine = useDataEngine();
@@ -115,29 +169,22 @@ function AdminUsers() {
     const cutoff = days ? dayjs().subtract(days, "day") : undefined;
 
     const totals = useMemo(() => {
-        let active = 0;
-        let inactive = 0;
-        let neverLoggedIn = 0;
-        let disabled = 0;
-        let online = 0;
-        let idle = 0;
-        const now = dayjs();
+        const counts: Record<SessionLabel, number> = {
+            Active: 0,
+            Idle: 0,
+            Closed: 0,
+            Inactive: 0,
+            Never: 0,
+            Disabled: 0,
+        };
+        let activeInRange = 0;
         for (const u of filtered) {
-            if (u.disabled) disabled += 1;
-            if (!u.lastLogin) {
-                neverLoggedIn += 1;
-                continue;
-            }
-            const mins = now.diff(dayjs(u.lastLogin), "minute");
-            if (mins <= 15) online += 1;
-            else if (mins <= 60) idle += 1;
-            if (!cutoff || dayjs(u.lastLogin).isAfter(cutoff)) {
-                active += 1;
-            } else {
-                inactive += 1;
+            counts[classifySession(u).label] += 1;
+            if (u.lastLogin && (!cutoff || dayjs(u.lastLogin).isAfter(cutoff))) {
+                activeInRange += 1;
             }
         }
-        return { active, inactive, neverLoggedIn, disabled, online, idle };
+        return { ...counts, activeInRange };
     }, [filtered, cutoff]);
 
     // Logins-per-day trend over the selected range. DHIS2 doesn't expose
@@ -212,37 +259,38 @@ function AdminUsers() {
                 ),
         },
         {
-            title: "Activity",
-            key: "activity",
+            title: range === "all" ? "Ever logged in" : `In ${range}`,
+            key: "inRange",
+            width: 120,
             render: (_, r) => {
-                if (!r.lastLogin) return <Tag color="default">No activity</Tag>;
-                if (r.disabled) return <Tag color="red">Disabled</Tag>;
+                if (!r.lastLogin) return <Tag color="default">No</Tag>;
                 if (cutoff && dayjs(r.lastLogin).isBefore(cutoff)) {
-                    return <Tag color="orange">Inactive</Tag>;
+                    return <Tag color="default">No</Tag>;
                 }
-                return <Tag color="green">Active</Tag>;
+                return <Tag color="green">Yes</Tag>;
             },
         },
         {
             title: "Session",
             key: "session",
-            width: 130,
+            width: 180,
             render: (_, r) => {
-                // DHIS2 doesn't expose a true "currently logged in" flag
-                // over REST. We infer presence from lastLogin: anyone
-                // whose token was seen in the last 15 min is treated as
-                // active, 1h as recent, etc. This matches the heuristic
-                // the standard tracker apps use on their user pages.
-                if (!r.lastLogin) return <Tag>Never</Tag>;
-                if (r.disabled) return <Tag color="red">Disabled</Tag>;
-                const mins = dayjs().diff(dayjs(r.lastLogin), "minute");
-                if (mins <= 15) return <Tag color="green">Online</Tag>;
-                if (mins <= 60) return <Tag color="cyan">Idle</Tag>;
-                if (mins <= 60 * 24)
-                    return <Tag color="blue">Recent</Tag>;
-                if (mins <= 60 * 24 * 7)
-                    return <Tag color="orange">Away</Tag>;
-                return <Tag>Offline</Tag>;
+                const status = classifySession(r);
+                return (
+                    <Flex vertical gap={0}>
+                        <Tag color={status.color} style={{ alignSelf: "flex-start" }}>
+                            {status.label}
+                        </Tag>
+                        {status.sub && (
+                            <Text
+                                type="secondary"
+                                style={{ fontSize: token.fontSizeSM }}
+                            >
+                                {status.sub}
+                            </Text>
+                        )}
+                    </Flex>
+                );
             },
         },
         {
@@ -327,57 +375,45 @@ function AdminUsers() {
                 </Col>
                 <Col xs={12} sm={6} lg={4}>
                     <MetricCard
-                        label="Online"
-                        value={totals.online}
+                        label="Active"
+                        value={totals.Active}
                         accent={token.colorSuccess}
-                        sublabel="Logged in last 15 min"
+                        sublabel="Token used in last 15 min"
                     />
                 </Col>
                 <Col xs={12} sm={6} lg={4}>
                     <MetricCard
                         label="Idle"
-                        value={totals.idle}
-                        accent={token.colorInfo}
-                        sublabel="Logged in last hour"
+                        value={totals.Idle}
+                        accent={token.colorWarning}
+                        sublabel="In session, 15 min – 1 h"
                     />
                 </Col>
                 <Col xs={12} sm={6} lg={4}>
                     <MetricCard
-                        label={
-                            range === "all"
-                                ? "Ever logged in"
-                                : `Active in ${range}`
-                        }
-                        value={totals.active}
-                        accent={token.colorPrimary}
-                        sublabel={
-                            range !== "all"
-                                ? `${Math.round(
-                                      (totals.active /
-                                          Math.max(filtered.length, 1)) *
-                                          100,
-                                  )}% of cohort`
-                                : undefined
-                        }
+                        label="Closed"
+                        value={totals.Closed}
+                        accent={token.colorInfo}
+                        sublabel="Session expired (1 h – 30 d)"
                     />
                 </Col>
                 <Col xs={12} sm={6} lg={4}>
                     <MetricCard
                         label="Inactive"
-                        value={totals.inactive}
+                        value={totals.Inactive}
                         accent={token.colorWarning}
-                        sublabel="No login in range"
+                        sublabel="No login in over 30 days"
                     />
                 </Col>
                 <Col xs={12} sm={6} lg={4}>
                     <MetricCard
                         label="Never / Disabled"
-                        value={totals.neverLoggedIn + totals.disabled}
+                        value={totals.Never + totals.Disabled}
                         accent={token.colorTextTertiary}
                         sublabel={
-                            totals.disabled > 0
-                                ? `${totals.disabled} disabled`
-                                : "—"
+                            totals.Disabled > 0
+                                ? `${totals.Disabled} disabled in DHIS2`
+                                : "No prior login"
                         }
                     />
                 </Col>
