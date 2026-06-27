@@ -64,6 +64,7 @@ import {
     FlattenedEvent,
     FlattenedTrackedEntity,
 } from "../schemas";
+import { printPatientSummary } from "../utils/printPatientSummary";
 import {
     cancelDataModal,
     createEmptyEvent,
@@ -517,7 +518,23 @@ function TrackedEntityComponent() {
                         </Button>
                         <Button
                             icon={<PrinterOutlined />}
-                            onClick={() => window.print()}
+                            onClick={() =>
+                                printPatientSummary({
+                                    trackedEntity,
+                                    enrollment,
+                                    events,
+                                    program: {
+                                        programStages:
+                                            program?.programStages?.map(
+                                                (s) => ({
+                                                    id: s.id,
+                                                    name: s.name,
+                                                }),
+                                            ) ?? [],
+                                    },
+                                    facilityName: orgUnit?.name,
+                                })
+                            }
                             aria-label="Print summary"
                         />
                     </Flex>
