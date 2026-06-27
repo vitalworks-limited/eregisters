@@ -15,19 +15,20 @@
   "dependencies": {
     "@ant-design/icons": "^6.2.3",
     "@dhis2/app-runtime": "^3.17.0",
-    "react-dom": "19.2.6",
     "@tanstack/db": "^0.6.5",
-    "zod": "^4.4.3",
     "@tanstack/react-db": "^0.1.83",
     "@tanstack/react-router": "^1.169.2",
     "@xstate/react": "^6.1.0",
     "antd": "^6.4.2",
     "dayjs": "^1.11.20",
     "dexie": "^4.4.2",
-    "xstate": "^5.31.1",
     "lodash": "^4.18.1",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "recharts": "^3.9.0",
     "tanstack-dexie-db-collection": "^0.1.4",
-    "react": "19.2.6"
+    "xstate": "^5.31.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@dhis2/cli-app-scripts": "12.11.0",

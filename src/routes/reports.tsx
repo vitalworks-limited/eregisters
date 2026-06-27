@@ -1,11 +1,12 @@
 import {
     ArrowDownOutlined,
     ArrowUpOutlined,
-    BarChartOutlined,
+    AreaChartOutlined,
     CalendarOutlined,
     CloudUploadOutlined,
     DownloadOutlined,
     ExperimentOutlined,
+    PieChartOutlined,
     UserOutlined,
 } from "@ant-design/icons";
 import { and, eq, not, useLiveSuspenseQuery } from "@tanstack/react-db";
@@ -27,9 +28,13 @@ import {
     eventsCollection,
     trackedEntitiesCollection,
 } from "../collections";
-import { Sparkline } from "../components/sparkline";
+import {
+    DistributionDonut,
+    MiniSparkline,
+    StageBarChart,
+    VisitsAreaChart,
+} from "../components/charts";
 import { Spinner } from "../components/spinner";
-import { TrendChart } from "../components/trend-chart";
 import { useMetadata } from "../hooks/useMetadata";
 import { RootRoute } from "./__root";
 
@@ -56,6 +61,20 @@ const RANGE_LABEL: Record<RangeKey, string> = {
     "30d": "Last 30 days",
     "90d": "Last 90 days",
 };
+
+// DHIS2 attribute IDs from the eRegisters program.
+const ATTR_SEX = "bqliZKdUGMX";
+const ATTR_DOB = "Y3DE5CZWySr";
+
+const AGE_BANDS: Array<{ label: string; lo: number; hi: number }> = [
+    { label: "Under 1", lo: 0, hi: 1 },
+    { label: "1–4", lo: 1, hi: 5 },
+    { label: "5–14", lo: 5, hi: 15 },
+    { label: "15–24", lo: 15, hi: 25 },
+    { label: "25–44", lo: 25, hi: 45 },
+    { label: "45–64", lo: 45, hi: 65 },
+    { label: "65+", lo: 65, hi: 200 },
+];
 
 interface MetricCardProps {
     label: string;
@@ -125,11 +144,11 @@ function MetricCard({
                     )}
                 </Flex>
                 {trend && trend.length > 1 && (
-                    <Sparkline
+                    <MiniSparkline
                         values={trend}
-                        accent={accent}
-                        width={104}
+                        color={accent}
                         height={32}
+                        width={112}
                     />
                 )}
             </Flex>
@@ -155,15 +174,18 @@ function MetricCard({
     );
 }
 
-interface BreakdownProps {
+function ChartCard({
+    icon,
+    title,
+    children,
+    minHeight,
+}: {
+    icon: React.ReactNode;
     title: string;
-    items: Array<{ label: string; value: number }>;
-    accent: string;
-}
-
-function Breakdown({ title, items, accent }: BreakdownProps) {
+    children: React.ReactNode;
+    minHeight?: number | string;
+}) {
     const { token } = theme.useToken();
-    const max = Math.max(1, ...items.map((i) => i.value));
     return (
         <Flex
             vertical
@@ -172,45 +194,25 @@ function Breakdown({ title, items, accent }: BreakdownProps) {
                 background: token.colorBgContainer,
                 border: `1px solid ${token.colorBorderSecondary}`,
                 padding: token.padding,
+                height: "100%",
+                minHeight,
             }}
         >
-            <Title level={5} style={{ margin: 0 }}>
-                {title}
-            </Title>
-            {items.length === 0 ? (
-                <Text type="secondary">No data yet.</Text>
-            ) : (
-                <Flex vertical gap={token.marginSM}>
-                    {items.map((it) => (
-                        <Flex key={it.label} vertical gap={token.marginXXS}>
-                            <Flex justify="space-between">
-                                <Text>{it.label}</Text>
-                                <Text strong>{it.value}</Text>
-                            </Flex>
-                            <div
-                                style={{
-                                    background: token.colorFillTertiary,
-                                    height: 6,
-                                    width: "100%",
-                                }}
-                            >
-                                <div
-                                    style={{
-                                        background: accent,
-                                        height: "100%",
-                                        width: `${(it.value / max) * 100}%`,
-                                    }}
-                                />
-                            </div>
-                        </Flex>
-                    ))}
-                </Flex>
-            )}
+            <Flex align="center" gap={token.marginXS}>
+                <span style={{ color: token.colorPrimary }}>{icon}</span>
+                <Title level={5} style={{ margin: 0 }}>
+                    {title}
+                </Title>
+            </Flex>
+            <div style={{ flex: 1, minHeight: 0 }}>{children}</div>
         </Flex>
     );
 }
 
-function buildDailyVisits(events: Array<{ occurredAt?: string; createdAt?: string }>, days: number) {
+function buildDailyVisits(
+    events: Array<{ occurredAt?: string; createdAt?: string }>,
+    days: number,
+) {
     const buckets = new Map<string, number>();
     const start = dayjs().subtract(days - 1, "day").startOf("day");
     for (let i = 0; i < days; i += 1) {
@@ -228,7 +230,10 @@ function buildDailyVisits(events: Array<{ occurredAt?: string; createdAt?: strin
     }));
 }
 
-function downloadCSV(rows: Array<Record<string, string | number>>, filename: string) {
+function downloadCSV(
+    rows: Array<Record<string, string | number>>,
+    filename: string,
+) {
     if (rows.length === 0) return;
     const headers = Object.keys(rows[0]);
     const escape = (v: string | number) => {
@@ -263,10 +268,7 @@ function Reports() {
             q
                 .from({ t: trackedEntitiesCollection })
                 .where(({ t }) =>
-                    and(
-                        eq(t.orgUnit, id),
-                        not(eq(t.syncStatus, "draft")),
-                    ),
+                    and(eq(t.orgUnit, id), not(eq(t.syncStatus, "draft"))),
                 ),
         [id],
     );
@@ -290,10 +292,7 @@ function Reports() {
             q
                 .from({ en: enrollmentsCollection })
                 .where(({ en }) =>
-                    and(
-                        eq(en.orgUnit, id),
-                        not(eq(en.syncStatus, "draft")),
-                    ),
+                    and(eq(en.orgUnit, id), not(eq(en.syncStatus, "draft"))),
                 ),
         [id],
     );
@@ -351,9 +350,7 @@ function Reports() {
         const pending = (list: Array<{ syncStatus?: string }>) =>
             list.filter((x) => x.syncStatus === "pending").length;
         return (
-            pending(trackedEntities) +
-            pending(enrollments) +
-            pending(events)
+            pending(trackedEntities) + pending(enrollments) + pending(events)
         );
     }, [trackedEntities, enrollments, events]);
 
@@ -386,6 +383,53 @@ function Reports() {
             .map(([label, value]) => ({ label, value }))
             .sort((a, b) => b.value - a.value);
     }, [events, program, periodStart]);
+
+    const sexDistribution = useMemo(() => {
+        const counts = new Map<string, number>();
+        for (const t of trackedEntities) {
+            const raw = t.attributes?.[ATTR_SEX];
+            const label =
+                typeof raw === "string" && raw.trim() ? raw : "Unspecified";
+            counts.set(label, (counts.get(label) ?? 0) + 1);
+        }
+        return Array.from(counts.entries())
+            .map(([label, value]) => ({ label, value }))
+            .sort((a, b) => b.value - a.value);
+    }, [trackedEntities]);
+
+    const ageDistribution = useMemo(() => {
+        const counts = new Map<string, number>();
+        AGE_BANDS.forEach((b) => counts.set(b.label, 0));
+        for (const t of trackedEntities) {
+            const dob = t.attributes?.[ATTR_DOB];
+            if (typeof dob !== "string") continue;
+            const d = dayjs(dob);
+            if (!d.isValid()) continue;
+            const years = dayjs().diff(d, "year");
+            const band = AGE_BANDS.find(
+                (b) => years >= b.lo && years < b.hi,
+            );
+            if (band) counts.set(band.label, (counts.get(band.label) ?? 0) + 1);
+        }
+        // Drop empty leading/trailing bands for a cleaner chart.
+        const entries = Array.from(counts.entries());
+        const firstNonZero = entries.findIndex(([, v]) => v > 0);
+        const lastNonZero = entries
+            .map(([, v]) => v)
+            .lastIndexOf(
+                entries
+                    .map(([, v]) => v)
+                    .reduce((max, v) => (v > 0 ? v : max), 0),
+            );
+        const trimmed =
+            firstNonZero === -1
+                ? entries
+                : entries.slice(
+                      firstNonZero,
+                      Math.max(lastNonZero, firstNonZero) + 1,
+                  );
+        return trimmed.map(([label, value]) => ({ label, value }));
+    }, [trackedEntities]);
 
     const exportRegistrations = () => {
         const rows = trackedEntities.map((t) => ({
@@ -480,62 +524,65 @@ function Reports() {
             </Row>
 
             <div style={{ marginTop: token.margin }}>
-                <Flex
-                    vertical
-                    gap={token.marginSM}
-                    style={{
-                        background: token.colorBgContainer,
-                        border: `1px solid ${token.colorBorderSecondary}`,
-                        padding: token.padding,
-                    }}
-                >
-                    <Flex align="center" gap={token.marginXS}>
-                        <BarChartOutlined
-                            style={{ color: token.colorPrimary }}
-                        />
-                        <Title level={5} style={{ margin: 0 }}>
-                            Visits over {RANGE_LABEL[range].toLowerCase()}
-                        </Title>
-                    </Flex>
-                    <TrendChart points={dailyVisits} accent={token.colorPrimary} />
-                </Flex>
+                <Row gutter={[token.marginSM, token.marginSM]}>
+                    <Col xs={24} xl={16}>
+                        <ChartCard
+                            icon={<AreaChartOutlined />}
+                            title={`Visits over ${RANGE_LABEL[range].toLowerCase()}`}
+                            minHeight={300}
+                        >
+                            <VisitsAreaChart
+                                points={dailyVisits}
+                                accent={token.colorPrimary}
+                                height={240}
+                            />
+                        </ChartCard>
+                    </Col>
+                    <Col xs={24} xl={8}>
+                        <ChartCard
+                            icon={<PieChartOutlined />}
+                            title="Sex distribution"
+                            minHeight={300}
+                        >
+                            <DistributionDonut
+                                items={sexDistribution}
+                                totalLabel="Total clients"
+                                palette={[
+                                    token.colorPrimary,
+                                    "#A855F7",
+                                    token.colorTextTertiary,
+                                ]}
+                            />
+                        </ChartCard>
+                    </Col>
+                </Row>
             </div>
 
             <div style={{ marginTop: token.margin }}>
                 <Row gutter={[token.marginSM, token.marginSM]}>
                     <Col xs={24} lg={12}>
-                        <Breakdown
+                        <ChartCard
+                            icon={<AreaChartOutlined />}
                             title="Visits by stage"
-                            items={visitsByStage}
-                            accent={token.colorPrimary}
-                        />
+                            minHeight={260}
+                        >
+                            <StageBarChart
+                                items={visitsByStage}
+                                accent={token.colorPrimary}
+                            />
+                        </ChartCard>
                     </Col>
                     <Col xs={24} lg={12}>
-                        <Flex
-                            vertical
-                            gap={token.marginSM}
-                            style={{
-                                background: token.colorBgContainer,
-                                border: `1px solid ${token.colorBorderSecondary}`,
-                                padding: token.padding,
-                                height: "100%",
-                            }}
+                        <ChartCard
+                            icon={<PieChartOutlined />}
+                            title="Age distribution"
+                            minHeight={260}
                         >
-                            <Flex align="center" gap={token.marginXS}>
-                                <BarChartOutlined
-                                    style={{ color: token.colorPrimary }}
-                                />
-                                <Title level={5} style={{ margin: 0 }}>
-                                    Coming next
-                                </Title>
-                            </Flex>
-                            <Text type="secondary">
-                                Per-facility breakdowns, vaccination coverage,
-                                and printable summaries are planned. Open the
-                                sync popover to download a local backup any
-                                time.
-                            </Text>
-                        </Flex>
+                            <DistributionDonut
+                                items={ageDistribution}
+                                totalLabel="Clients with DOB"
+                            />
+                        </ChartCard>
                     </Col>
                 </Row>
             </div>

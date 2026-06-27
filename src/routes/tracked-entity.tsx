@@ -409,11 +409,283 @@ function TrackedEntityComponent() {
         </div>
     );
 
+    const lastVisit = events[0];
+    const last30 = events.filter((e) =>
+        dayjs(e.occurredAt ?? e.createdAt).isAfter(dayjs().subtract(30, "day")),
+    ).length;
+
+    const pendingRecords =
+        (trackedEntity.syncStatus === "pending" ? 1 : 0) +
+        (enrollment.syncStatus === "pending" ? 1 : 0) +
+        events.filter((e) => e.syncStatus === "pending").length;
+
+    const nin = String(trackedEntity.attributes?.["BiTsLcJQ95V"] ?? "");
+    const phone = String(trackedEntity.attributes?.["sB1IHYu2xQT"] ?? "");
+    const clientId = String(trackedEntity.attributes?.["oTI0DLitzFY"] ?? "");
+    const village =
+        (trackedEntity.attributes?.["xcYGVzmcWvi"] as
+            | string
+            | undefined) ?? "";
+
+    const renderVisitTags = (
+        text: string | string[] | undefined,
+        color: string,
+    ) => {
+        if (!text) return <Text type="secondary">—</Text>;
+        const tags = Array.isArray(text) ? text : text.split(",");
+        return (
+            <Flex gap={token.marginXXS} wrap>
+                {tags
+                    .map((t) => t.trim())
+                    .filter(Boolean)
+                    .map((t) => (
+                        <Tag key={t} color={color}>
+                            {t.toUpperCase()}
+                        </Tag>
+                    ))}
+            </Flex>
+        );
+    };
+
+    const StatTile = ({
+        label,
+        value,
+        accent,
+    }: {
+        label: string;
+        value: React.ReactNode;
+        accent: string;
+    }) => (
+        <Flex
+            vertical
+            gap={token.marginXXS}
+            style={{
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorderSecondary}`,
+                padding: token.padding,
+                flex: "1 1 160px",
+                minWidth: 0,
+            }}
+        >
+            <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                {label}
+            </Text>
+            <span
+                style={{
+                    color: accent,
+                    fontWeight: 600,
+                    fontSize: 24,
+                    lineHeight: 1.1,
+                }}
+            >
+                {value}
+            </span>
+        </Flex>
+    );
+
+    const InfoRow = ({
+        label,
+        children,
+    }: {
+        label: string;
+        children: React.ReactNode;
+    }) => (
+        <Flex
+            justify="space-between"
+            align="flex-start"
+            gap={token.marginSM}
+            wrap
+            style={{
+                padding: `${token.paddingXS}px 0`,
+                borderBottom: `1px solid ${token.colorBorderSecondary}`,
+            }}
+        >
+            <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                {label}
+            </Text>
+            <div style={{ textAlign: "right", flex: "0 1 auto", minWidth: 0 }}>
+                {children}
+            </div>
+        </Flex>
+    );
+
     const overviewPane = (
-        <EmptyState
-            title="Overview"
-            description="Last visit summary, key vitals, and pending follow-ups will appear here."
-        />
+        <Flex vertical gap={token.marginSM}>
+            <Flex gap={token.marginSM} wrap>
+                <StatTile
+                    label="Total visits"
+                    value={events.length}
+                    accent={token.colorPrimary}
+                />
+                <StatTile
+                    label="Last 30 days"
+                    value={last30}
+                    accent={token.colorSuccess}
+                />
+                <StatTile
+                    label="Pending sync"
+                    value={pendingRecords}
+                    accent={
+                        pendingRecords > 0
+                            ? token.colorWarning
+                            : token.colorTextTertiary
+                    }
+                />
+            </Flex>
+
+            <div
+                style={{
+                    background: token.colorBgContainer,
+                    border: `1px solid ${token.colorBorderSecondary}`,
+                }}
+            >
+                <Flex
+                    align="center"
+                    justify="space-between"
+                    gap={token.marginSM}
+                    style={{
+                        padding: `${token.paddingSM}px ${token.padding}px`,
+                        borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                    }}
+                >
+                    <Text strong>Last visit</Text>
+                    {lastVisit ? (
+                        <Text
+                            type="secondary"
+                            style={{ fontSize: token.fontSizeSM }}
+                        >
+                            {dayjs(
+                                lastVisit.occurredAt ?? lastVisit.createdAt,
+                            ).format("ddd, MMM D, YYYY")}
+                        </Text>
+                    ) : (
+                        <Text
+                            type="secondary"
+                            style={{ fontSize: token.fontSizeSM }}
+                        >
+                            No visits yet
+                        </Text>
+                    )}
+                </Flex>
+                <div style={{ padding: token.padding }}>
+                    {lastVisit ? (
+                        <>
+                            <InfoRow label="Services">
+                                {renderVisitTags(
+                                    lastVisit.dataValues?.["mrKZWf2WMIC"] as
+                                        | string
+                                        | undefined,
+                                    "blue",
+                                )}
+                            </InfoRow>
+                            <InfoRow label="Immunization">
+                                {renderVisitTags(
+                                    lastVisit.dataValues?.["ZuYU54N4pjS"] as
+                                        | string
+                                        | undefined,
+                                    "green",
+                                )}
+                            </InfoRow>
+                            <InfoRow label="Referral">
+                                <Text>
+                                    {String(
+                                        lastVisit.dataValues?.["EzGu4kzZZTz"] ??
+                                            "",
+                                    ) || (
+                                        <Text type="secondary">—</Text>
+                                    )}
+                                </Text>
+                            </InfoRow>
+                            <InfoRow label="Weight">
+                                <Text>
+                                    {lastVisit.dataValues?.["scpPwoNsS27"]
+                                        ? `${lastVisit.dataValues?.["scpPwoNsS27"]} kg`
+                                        : "—"}
+                                </Text>
+                            </InfoRow>
+                            <InfoRow label="Height">
+                                <Text>
+                                    {lastVisit.dataValues?.["uIFJ94mZt0S"]
+                                        ? `${lastVisit.dataValues?.["uIFJ94mZt0S"]} cm`
+                                        : "—"}
+                                </Text>
+                            </InfoRow>
+                            <Flex
+                                justify="flex-end"
+                                style={{ paddingTop: token.paddingSM }}
+                            >
+                                <Button
+                                    type="text"
+                                    onClick={() =>
+                                        openModal(lastVisit, enrollment)
+                                    }
+                                >
+                                    Open last visit
+                                </Button>
+                            </Flex>
+                        </>
+                    ) : (
+                        <Flex
+                            vertical
+                            align="center"
+                            gap={token.marginXS}
+                            style={{ paddingBlock: token.paddingLG }}
+                        >
+                            <Text type="secondary">
+                                Record a visit to populate this overview.
+                            </Text>
+                            <Button
+                                type="primary"
+                                icon={<PlusOutlined />}
+                                onClick={handleCreate}
+                            >
+                                Add new visit
+                            </Button>
+                        </Flex>
+                    )}
+                </div>
+            </div>
+
+            <div
+                style={{
+                    background: token.colorBgContainer,
+                    border: `1px solid ${token.colorBorderSecondary}`,
+                }}
+            >
+                <Flex
+                    align="center"
+                    style={{
+                        padding: `${token.paddingSM}px ${token.padding}px`,
+                        borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                    }}
+                >
+                    <Text strong>Patient identifiers</Text>
+                </Flex>
+                <div style={{ padding: token.padding }}>
+                    <InfoRow label="Client ID">
+                        <Text>{clientId || <Text type="secondary">—</Text>}</Text>
+                    </InfoRow>
+                    <InfoRow label="National ID (NIN)">
+                        <Text>{nin || <Text type="secondary">—</Text>}</Text>
+                    </InfoRow>
+                    <InfoRow label="Phone">
+                        <Text>{phone || <Text type="secondary">—</Text>}</Text>
+                    </InfoRow>
+                    <InfoRow label="Village">
+                        <Text>{village || <Text type="secondary">—</Text>}</Text>
+                    </InfoRow>
+                    <InfoRow label="Registered">
+                        <Text>
+                            {trackedEntity.createdAt
+                                ? dayjs(trackedEntity.createdAt).format(
+                                      "MMM D, YYYY",
+                                  )
+                                : "—"}
+                        </Text>
+                    </InfoRow>
+                </div>
+            </div>
+        </Flex>
     );
 
     return (
