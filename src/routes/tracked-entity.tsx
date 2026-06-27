@@ -471,7 +471,7 @@ function TrackedEntityComponent() {
                         <Flex vertical gap={token.marginXXS}>
                             <Title
                                 level={isMobile ? 5 : 4}
-                                style={{ margin: 0 }}
+                                style={{ margin: 0, lineHeight: 1.2 }}
                             >
                                 {firstName} {surname}
                             </Title>

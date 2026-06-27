@@ -125,10 +125,6 @@ const baseComponents: NonNullable<ThemeConfig["components"]> = {
         borderRadiusLG: 2,
         controlItemBgHover: "#F1F5F9",
     },
-    Statistic: {
-        titleFontSize: 13,
-        contentFontSize: 28,
-    },
     Divider: {
         colorSplit: "#EEF1F5",
     },

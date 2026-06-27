@@ -50,21 +50,25 @@ function BrandMark({ showWordmark }: { showWordmark: boolean }) {
             <img
                 src={UGANDA_LOGO_URL}
                 alt="Uganda Coat of Arms"
-                style={{ height: showWordmark ? 32 : 28 }}
+                style={{ height: showWordmark ? 34 : 28 }}
             />
             {showWordmark && (
                 <Title
-                    level={5}
+                    level={4}
                     style={{
                         margin: 0,
                         color: token.colorPrimary,
                         fontWeight: 600,
                         lineHeight: 1.2,
                         whiteSpace: "nowrap",
+                        letterSpacing: -0.2,
                     }}
                 >
                     Medical{" "}
-                    <Text type="secondary" style={{ fontWeight: 400 }}>
+                    <Text
+                        type="secondary"
+                        style={{ fontWeight: 400, fontSize: "inherit" }}
+                    >
                         eRegistry
                     </Text>
                 </Title>
@@ -155,7 +159,7 @@ function LayoutWithDrafts() {
             }}
         >
             <Flex align="center" gap={token.marginSM} style={{ minWidth: 0 }}>
-                {isMobile && (
+                {isMobile && metadataReady && (
                     <button
                         type="button"
                         aria-label="Open navigation"
@@ -237,9 +241,11 @@ function LayoutWithDrafts() {
             <OfflineBanner />
             <header role="banner">
                 {brandBar}
-                <nav role="navigation" aria-label="Primary">
-                    {navBar}
-                </nav>
+                {metadataReady && (
+                    <nav role="navigation" aria-label="Primary">
+                        {navBar}
+                    </nav>
+                )}
             </header>
             <Drawer
                 title="Navigation"

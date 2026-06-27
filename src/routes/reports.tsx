@@ -104,9 +104,17 @@ function MetricCard({
             </Flex>
             <Flex align="flex-end" justify="space-between" gap={token.marginSM}>
                 <Flex vertical gap={0}>
-                    <Title level={2} style={{ margin: 0, color: accent }}>
+                    <span
+                        style={{
+                            margin: 0,
+                            color: accent,
+                            fontWeight: 600,
+                            lineHeight: 1.1,
+                            fontSize: 28,
+                        }}
+                    >
                         {value}
-                    </Title>
+                    </span>
                     {sublabel && (
                         <Text
                             type="secondary"
@@ -403,7 +411,7 @@ function Reports() {
                 style={{ marginBottom: token.margin }}
             >
                 <Flex vertical gap={token.marginXXS}>
-                    <Title level={3} style={{ margin: 0 }}>
+                    <Title level={4} style={{ margin: 0, lineHeight: 1.2 }}>
                         Reports
                     </Title>
                     <Text type="secondary">

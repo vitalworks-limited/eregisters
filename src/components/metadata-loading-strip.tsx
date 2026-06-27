@@ -85,12 +85,13 @@ export const MetadataLoadingStrip: React.FC = () => {
         >
             <div style={{ width: "min(420px, 100%)" }}>
                 <Title
-                    level={4}
+                    level={3}
                     style={{
                         margin: 0,
                         textAlign: "center",
                         marginBottom: token.marginSM,
                         fontWeight: 500,
+                        letterSpacing: -0.2,
                     }}
                 >
                     {headline}
