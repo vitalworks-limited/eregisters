@@ -10,6 +10,7 @@ import React, { FC, useEffect, useState } from "react";
 import { ErrorBoundary } from "./components/error-boundary";
 import { SyncContext } from "./machines/sync";
 import { router } from "./router";
+import { startAdminConfigPolling } from "./sync/adminConfigCache";
 import { requestPersistentStorage } from "./sync/persistentStorage";
 import { darkTheme, lightTheme } from "./theme";
 import { UpdateWatcher } from "./update/useUpdateWatcher";
@@ -24,13 +25,19 @@ export const ThemeContext = React.createContext<{
 }>({ mode: "light", setMode: () => undefined });
 const Main = () => {
     const syncActor = SyncContext.useActorRef();
+    const engine = useDataEngine();
     useEffect(() => {
         // Ask the browser to keep our IndexedDB data even under storage
         // pressure. Granted automatically for installed PWAs / frequently
         // visited origins. Failures are silent — the worst case is the
         // existing behaviour.
         requestPersistentStorage().catch(() => undefined);
-    }, []);
+        // Poll the admin-controlled dataStore config so the sync guard
+        // (kill switch, allowed/blocked windows) and the in-app notice
+        // stay in sync without an explicit page refresh.
+        const stop = startAdminConfigPolling(engine);
+        return () => stop();
+    }, [engine]);
     return (
         <ErrorBoundary>
             <UpdateWatcher />

@@ -1,13 +1,20 @@
-import { DashboardOutlined, TeamOutlined } from "@ant-design/icons";
+import {
+    ControlOutlined,
+    DashboardOutlined,
+    TeamOutlined,
+} from "@ant-design/icons";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Flex, theme } from "antd";
 import React from "react";
+import { useAuthorities } from "../hooks/useAuthorities";
 
 interface NavItem {
     to: string;
     label: string;
     icon: React.ReactNode;
     activeWhen: (pathname: string) => boolean;
+    /** When set, only render the item if the predicate returns true. */
+    visibleWhen?: (ctx: { isAdmin: boolean }) => boolean;
 }
 
 const NAV: NavItem[] = [
@@ -27,6 +34,13 @@ const NAV: NavItem[] = [
         activeWhen: (p) =>
             p.startsWith("/dashboard") || p.startsWith("/reports"),
     },
+    {
+        to: "/admin",
+        label: "Admin",
+        icon: <ControlOutlined />,
+        activeWhen: (p) => p.startsWith("/admin"),
+        visibleWhen: (ctx) => ctx.isAdmin,
+    },
 ];
 
 interface Props {
@@ -39,6 +53,10 @@ export const AppNav: React.FC<Props> = ({ orientation, onItemClick }) => {
     const pathname = useRouterState({
         select: (s) => s.location.pathname,
     });
+    const { isAdmin } = useAuthorities();
+    const visibleItems = NAV.filter(
+        (item) => !item.visibleWhen || item.visibleWhen({ isAdmin }),
+    );
 
     return (
         <Flex
@@ -47,7 +65,7 @@ export const AppNav: React.FC<Props> = ({ orientation, onItemClick }) => {
             align={orientation === "vertical" ? "stretch" : "center"}
             style={{ height: "100%" }}
         >
-            {NAV.map((item) => {
+            {visibleItems.map((item) => {
                 const active = item.activeWhen(pathname);
                 const baseStyle: React.CSSProperties = {
                     display: "inline-flex",

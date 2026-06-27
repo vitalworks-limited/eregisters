@@ -5,18 +5,33 @@ import {
 } from "@tanstack/react-router";
 import React from "react";
 import { Spinner } from "./components/spinner";
+import { AdminRoute } from "./routes/admin";
+import { AdminConfigRoute } from "./routes/admin.config";
+import { AdminIndexRoute } from "./routes/admin.index";
+import { AdminInsightsRoute } from "./routes/admin.insights";
+import { AdminLogsRoute } from "./routes/admin.logs";
+import { AdminSyncRoute } from "./routes/admin.sync";
+import { AdminUsersRoute } from "./routes/admin.users";
 import { RootRoute } from "./routes/__root";
 import { IndexRoute } from "./routes/index";
+import { ReportsRoute } from "./routes/reports";
 import { TrackedEntitiesRoute } from "./routes/tracked-entities";
 import { TrackedEntitiesIndexRoute } from "./routes/tracked-entities.index";
 import { TrackedEntityRoute } from "./routes/tracked-entity";
-import { ReportsRoute } from "./routes/reports";
 
 const routeTree = RootRoute.addChildren([
     IndexRoute,
     TrackedEntitiesRoute.addChildren([TrackedEntitiesIndexRoute]),
     TrackedEntityRoute,
     ReportsRoute,
+    AdminRoute.addChildren([
+        AdminIndexRoute,
+        AdminSyncRoute,
+        AdminUsersRoute,
+        AdminLogsRoute,
+        AdminConfigRoute,
+        AdminInsightsRoute,
+    ]),
 ]);
 export const router = createRouter({
     routeTree,
