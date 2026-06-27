@@ -119,19 +119,25 @@ function AdminUsers() {
         let inactive = 0;
         let neverLoggedIn = 0;
         let disabled = 0;
+        let online = 0;
+        let idle = 0;
+        const now = dayjs();
         for (const u of filtered) {
             if (u.disabled) disabled += 1;
             if (!u.lastLogin) {
                 neverLoggedIn += 1;
                 continue;
             }
+            const mins = now.diff(dayjs(u.lastLogin), "minute");
+            if (mins <= 15) online += 1;
+            else if (mins <= 60) idle += 1;
             if (!cutoff || dayjs(u.lastLogin).isAfter(cutoff)) {
                 active += 1;
             } else {
                 inactive += 1;
             }
         }
-        return { active, inactive, neverLoggedIn, disabled };
+        return { active, inactive, neverLoggedIn, disabled, online, idle };
     }, [filtered, cutoff]);
 
     // Logins-per-day trend over the selected range. DHIS2 doesn't expose
@@ -218,6 +224,28 @@ function AdminUsers() {
             },
         },
         {
+            title: "Session",
+            key: "session",
+            width: 130,
+            render: (_, r) => {
+                // DHIS2 doesn't expose a true "currently logged in" flag
+                // over REST. We infer presence from lastLogin: anyone
+                // whose token was seen in the last 15 min is treated as
+                // active, 1h as recent, etc. This matches the heuristic
+                // the standard tracker apps use on their user pages.
+                if (!r.lastLogin) return <Tag>Never</Tag>;
+                if (r.disabled) return <Tag color="red">Disabled</Tag>;
+                const mins = dayjs().diff(dayjs(r.lastLogin), "minute");
+                if (mins <= 15) return <Tag color="green">Online</Tag>;
+                if (mins <= 60) return <Tag color="cyan">Idle</Tag>;
+                if (mins <= 60 * 24)
+                    return <Tag color="blue">Recent</Tag>;
+                if (mins <= 60 * 24 * 7)
+                    return <Tag color="orange">Away</Tag>;
+                return <Tag>Offline</Tag>;
+            },
+        },
+        {
             title: "Org units",
             key: "ou",
             render: (_, r) => (
@@ -290,22 +318,38 @@ function AdminUsers() {
             </Flex>
 
             <Row gutter={[token.marginSM, token.marginSM]}>
-                <Col xs={12} sm={6}>
+                <Col xs={12} sm={6} lg={4}>
                     <MetricCard
-                        label="Total users"
+                        label="Total"
                         value={filtered.length}
                         accent={token.colorPrimary}
                     />
                 </Col>
-                <Col xs={12} sm={6}>
+                <Col xs={12} sm={6} lg={4}>
+                    <MetricCard
+                        label="Online"
+                        value={totals.online}
+                        accent={token.colorSuccess}
+                        sublabel="Logged in last 15 min"
+                    />
+                </Col>
+                <Col xs={12} sm={6} lg={4}>
+                    <MetricCard
+                        label="Idle"
+                        value={totals.idle}
+                        accent={token.colorInfo}
+                        sublabel="Logged in last hour"
+                    />
+                </Col>
+                <Col xs={12} sm={6} lg={4}>
                     <MetricCard
                         label={
                             range === "all"
-                                ? "Logged in"
+                                ? "Ever logged in"
                                 : `Active in ${range}`
                         }
                         value={totals.active}
-                        accent={token.colorSuccess}
+                        accent={token.colorPrimary}
                         sublabel={
                             range !== "all"
                                 ? `${Math.round(
@@ -313,27 +357,27 @@ function AdminUsers() {
                                           Math.max(filtered.length, 1)) *
                                           100,
                                   )}% of cohort`
-                                : "Has ever logged in"
+                                : undefined
                         }
                     />
                 </Col>
-                <Col xs={12} sm={6}>
+                <Col xs={12} sm={6} lg={4}>
                     <MetricCard
                         label="Inactive"
                         value={totals.inactive}
                         accent={token.colorWarning}
-                        sublabel="No login in selected range"
+                        sublabel="No login in range"
                     />
                 </Col>
-                <Col xs={12} sm={6}>
+                <Col xs={12} sm={6} lg={4}>
                     <MetricCard
-                        label="Never logged in"
-                        value={totals.neverLoggedIn}
+                        label="Never / Disabled"
+                        value={totals.neverLoggedIn + totals.disabled}
                         accent={token.colorTextTertiary}
                         sublabel={
                             totals.disabled > 0
-                                ? `${totals.disabled} disabled in DHIS2`
-                                : undefined
+                                ? `${totals.disabled} disabled`
+                                : "—"
                         }
                     />
                 </Col>

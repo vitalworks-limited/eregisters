@@ -2,6 +2,7 @@ import {
     BarChartOutlined,
     ControlOutlined,
     DashboardOutlined,
+    DatabaseOutlined,
     FileSearchOutlined,
     TeamOutlined,
     ThunderboltOutlined,
@@ -37,6 +38,12 @@ export const ADMIN_NAV: NavItem[] = [
         label: "Users",
         icon: <TeamOutlined />,
         activeWhen: (p) => p.startsWith("/admin/users"),
+    },
+    {
+        to: "/admin/data-capture",
+        label: "Data capture",
+        icon: <DatabaseOutlined />,
+        activeWhen: (p) => p.startsWith("/admin/data-capture"),
     },
     {
         to: "/admin/logs",

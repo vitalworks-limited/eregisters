@@ -7,6 +7,7 @@ import React from "react";
 import { Spinner } from "./components/spinner";
 import { AdminRoute } from "./routes/admin";
 import { AdminConfigRoute } from "./routes/admin.config";
+import { AdminDataCaptureRoute } from "./routes/admin.data-capture";
 import { AdminIndexRoute } from "./routes/admin.index";
 import { AdminInsightsRoute } from "./routes/admin.insights";
 import { AdminLogsRoute } from "./routes/admin.logs";
@@ -28,6 +29,7 @@ const routeTree = RootRoute.addChildren([
         AdminIndexRoute,
         AdminSyncRoute,
         AdminUsersRoute,
+        AdminDataCaptureRoute,
         AdminLogsRoute,
         AdminConfigRoute,
         AdminInsightsRoute,

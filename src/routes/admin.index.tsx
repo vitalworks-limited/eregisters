@@ -13,6 +13,7 @@ import dayjs from "dayjs";
 import React, { useEffect, useState } from "react";
 import { useMetadata } from "../hooks/useMetadata";
 import { SyncContext } from "../machines/sync";
+import { getStorageEstimate } from "../sync/persistentStorage";
 import {
     DEFAULT_KILL_SWITCH,
     DEFAULT_SYNC_CONFIG,
@@ -84,6 +85,10 @@ function AdminOverview() {
     const [syncConfig, setSyncConfig] = useState<SyncConfig>(DEFAULT_SYNC_CONFIG);
     const [killSwitch, setKillSwitch] = useState<KillSwitch>(DEFAULT_KILL_SWITCH);
     const [telemetry, setTelemetry] = useState<SyncTelemetry[]>([]);
+    const [storage, setStorage] = useState<{ quotaBytes?: number; usageBytes?: number }>({});
+    const [online, setOnline] = useState(
+        typeof navigator !== "undefined" ? navigator.onLine : true,
+    );
 
     const lastDataPull = SyncContext.useSelector((s) => s.context.lastDataPull);
     const lastDataPush = SyncContext.useSelector((s) => s.context.lastDataPush);
@@ -99,6 +104,15 @@ function AdminOverview() {
             })
             .catch(() => undefined);
         listTelemetry().then(setTelemetry).catch(() => undefined);
+        getStorageEstimate().then(setStorage).catch(() => undefined);
+        const on = () => setOnline(true);
+        const off = () => setOnline(false);
+        window.addEventListener("online", on);
+        window.addEventListener("offline", off);
+        return () => {
+            window.removeEventListener("online", on);
+            window.removeEventListener("offline", off);
+        };
     }, [engine]);
 
     const recentFailures = telemetry.filter(
@@ -106,6 +120,46 @@ function AdminOverview() {
     );
     const totalSyncs = telemetry.length;
     const recentSync = telemetry[0];
+    const successCount = telemetry.filter(
+        (t) =>
+            (t.failures?.length ?? 0) === 0 &&
+            ((t.trackedEntitiesPulled ?? 0) +
+                (t.eventsPulled ?? 0) +
+                (t.trackerPosts ?? 0)) >
+                0,
+    ).length;
+    const successRate =
+        totalSyncs === 0
+            ? 0
+            : Math.round(((totalSyncs - recentFailures.length) / totalSyncs) * 100);
+    const avgPullSize =
+        telemetry.length === 0
+            ? 0
+            : Math.round(
+                  telemetry.reduce(
+                      (s, t) =>
+                          s +
+                          (t.trackedEntitiesPulled ?? 0) +
+                          (t.eventsPulled ?? 0),
+                      0,
+                  ) / telemetry.length,
+              );
+    const pendingTotal = telemetry.reduce(
+        (s, t) => s + (t.trackerPosts ?? 0),
+        0,
+    );
+
+    const storagePct =
+        storage.usageBytes && storage.quotaBytes
+            ? Math.min(
+                  100,
+                  Math.round(
+                      (storage.usageBytes / storage.quotaBytes) * 100,
+                  ),
+              )
+            : undefined;
+    const mb = (b?: number) =>
+        b === undefined ? "—" : `${(b / (1024 * 1024)).toFixed(1)} MB`;
 
     const allowedCount = syncConfig.allowedWindows.length;
     const blockedCount = syncConfig.blockedWindows.length;
@@ -201,6 +255,59 @@ function AdminOverview() {
                         icon={<TeamOutlined />}
                         accent={token.colorPrimary}
                         sublabel="Facility scope"
+                    />
+                </Col>
+            </Row>
+
+            <Row gutter={[token.marginSM, token.marginSM]}>
+                <Col xs={12} sm={6}>
+                    <StatusCard
+                        title="Network"
+                        value={online ? "Online" : "Offline"}
+                        icon={
+                            online ? <CheckCircleOutlined /> : <CloseCircleOutlined />
+                        }
+                        accent={online ? token.colorSuccess : token.colorError}
+                        sublabel={online ? "Sync flowing" : "Queueing locally"}
+                    />
+                </Col>
+                <Col xs={12} sm={6}>
+                    <StatusCard
+                        title="Sync success rate"
+                        value={`${successRate}%`}
+                        icon={<SyncOutlined />}
+                        accent={
+                            successRate >= 95
+                                ? token.colorSuccess
+                                : successRate >= 80
+                                  ? token.colorWarning
+                                  : token.colorError
+                        }
+                        sublabel={`${recentFailures.length} of ${totalSyncs} failed`}
+                    />
+                </Col>
+                <Col xs={12} sm={6}>
+                    <StatusCard
+                        title="Avg pull size"
+                        value={avgPullSize}
+                        icon={<DatabaseOutlined />}
+                        accent={token.colorInfo}
+                        sublabel="TE + events per run"
+                    />
+                </Col>
+                <Col xs={12} sm={6}>
+                    <StatusCard
+                        title="Local storage"
+                        value={
+                            storagePct === undefined ? "—" : `${storagePct}%`
+                        }
+                        icon={<DatabaseOutlined />}
+                        accent={
+                            storagePct !== undefined && storagePct > 75
+                                ? token.colorWarning
+                                : token.colorPrimary
+                        }
+                        sublabel={`${mb(storage.usageBytes)} of ${mb(storage.quotaBytes)}`}
                     />
                 </Col>
             </Row>
