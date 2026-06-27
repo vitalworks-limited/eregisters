@@ -6,7 +6,7 @@ import {
     stopUpdatePolling,
 } from "./updateChecker";
 import { startSafeRefreshFlow } from "./safeRefresh";
-import { VersionInfo } from "../version";
+import { BUILD_HASH, VersionInfo } from "../version";
 
 /**
  * Mount once at the top of the React tree to:
@@ -23,6 +23,10 @@ export function UpdateWatcher() {
     const { message, modal } = App.useApp();
 
     React.useEffect(() => {
+        // In dev (`pnpm start`) BUILD_HASH is "local" but public/version.json
+        // carries the real git hash, so polling would trigger an immediate
+        // reload loop. Skip polling entirely outside production builds.
+        if (BUILD_HASH === "local") return;
         const stop = startUpdatePolling({});
         const off = onUpdateAvailable((remote: VersionInfo) => {
             startSafeRefreshFlow(remote, {

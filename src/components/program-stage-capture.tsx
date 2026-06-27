@@ -14,6 +14,7 @@ import {
     Popconfirm,
     Table,
     TableProps,
+    theme,
     Typography,
 } from "antd";
 import dayjs from "dayjs";
@@ -59,6 +60,7 @@ export const ProgramStageCapture: React.FC<{
 }) => {
     const screens = Grid.useBreakpoint();
     const isMobile = !screens.lg;
+    const { token } = theme.useToken();
     const { data, isOpen, isNew, openModal, closeModal } =
         useModalState<FlattenedEvent>();
     const { dataElements, optionSets, programRuleVariables, programRules } =
@@ -214,29 +216,17 @@ export const ProgramStageCapture: React.FC<{
                             <Flex align="center" gap="small">
                                 <ExperimentOutlined
                                     style={{
-                                        fontSize: 28,
-                                        color: "#7c3aed",
+                                        fontSize: token.fontSizeHeading3,
+                                        color: token.colorPrimary,
                                     }}
                                 />
-                                <Text
-                                    strong
-                                    style={{
-                                        fontSize: 14,
-                                    }}
-                                >
-                                    {programStage.name}
-                                </Text>
+                                <Text strong>{programStage.name}</Text>
                             </Flex>
                             <Button
                                 type="primary"
                                 icon={<PlusOutlined />}
                                 size="middle"
                                 onClick={handleCreate}
-                                style={{
-                                    background: "#7c3aed",
-                                    borderColor: "#7c3aed",
-                                    borderRadius: 6,
-                                }}
                             >
                                 {isMobile ? "Add" : `Add ${programStage.name}`}
                             </Button>

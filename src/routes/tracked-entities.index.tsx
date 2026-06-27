@@ -3,39 +3,35 @@ import {
     MoreOutlined,
     UserOutlined,
 } from "@ant-design/icons";
-import { and, eq, ilike, not, useLiveSuspenseQuery } from "@tanstack/react-db";
+import {
+    and,
+    eq,
+    ilike,
+    not,
+    or,
+    useLiveSuspenseQuery,
+} from "@tanstack/react-db";
 import { createRoute } from "@tanstack/react-router";
 import {
     Button,
-    Card,
+    Col,
     Dropdown,
     Flex,
-    Form,
     MenuProps,
     Table,
+    theme,
     Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-
 import React, { useMemo } from "react";
-import NoPatientsCard from "../components/no-patient-card";
-import { TrackerRegistration } from "../components/tracker-registration";
-import { useModalState } from "../hooks/useModalState";
+import { EmptyState } from "../components/empty-state";
 import { FlattenedTrackedEntity } from "../schemas";
-import {
-    createEmptyEnrollment,
-    createEmptyTrackedEntity,
-} from "../utils/utils";
 import { TrackedEntitiesRoute } from "./tracked-entities";
-import { DataModal } from "../components/data-modal";
-import { TrackedEntityContext } from "../machines";
 import { useMetadata } from "../hooks/useMetadata";
-import {
-    enrollmentsCollection,
-    trackedEntitiesCollection,
-} from "../collections";
+import { trackedEntitiesCollection } from "../collections";
 
 const { Text } = Typography;
+
 export const TrackedEntitiesIndexRoute = createRoute({
     getParentRoute: () => TrackedEntitiesRoute,
     path: "/",
@@ -43,55 +39,62 @@ export const TrackedEntitiesIndexRoute = createRoute({
 });
 
 function TrackedEntitiesSearch() {
+    const { token } = theme.useToken();
     const {
         trackedEntityAttributes,
         organisations,
-        programRules,
-        programRuleVariables,
         program,
         orgUnit: { id },
     } = useMetadata();
     const navigate = TrackedEntitiesIndexRoute.useNavigate();
-    const mainStageDataElements = useMemo(
-        () =>
-            new Set(
-                program.programTrackedEntityAttributes.map(
-                    ({ trackedEntityAttribute }) => trackedEntityAttribute.id,
-                ),
-            ),
-        [program],
-    );
-    const {
-        data: trackedEntity,
-        enrollment,
-        isOpen,
-        openModal,
-        closeModal,
-    } = useModalState<FlattenedTrackedEntity>();
     const { search } = TrackedEntitiesRoute.useSearch();
-    const searchInitialAttributes = useMemo(
-        () =>
-            Object.fromEntries(
-                Object.entries(search ?? {}).filter(([, value]) =>
-                    Boolean(value),
-                ),
-            ),
-        [search],
-    );
+
+    const globalQuery =
+        typeof search?._q === "string" && search._q.trim()
+            ? search._q.trim()
+            : undefined;
+
+    // Per-key filters (any key other than _q) are kept for backwards
+    // compatibility — if a future advanced-filter drawer writes them,
+    // they'll AND with each other. The free-text _q ORs across all
+    // searchable attributes.
+    const fieldFilters = useMemo(() => {
+        if (!search) return [] as Array<[string, string]>;
+        return Object.entries(search).filter(
+            ([k, v]) => k !== "_q" && typeof v === "string" && v,
+        ) as Array<[string, string]>;
+    }, [search]);
+
+    const searchableAttrIds = useMemo(() => {
+        if (!program) return [] as string[];
+        return program.programTrackedEntityAttributes
+            .filter((a) => a.searchable)
+            .map((a) => a.trackedEntityAttribute.id);
+    }, [program]);
+
+    const hasSearch = !!globalQuery || fieldFilters.length > 0;
 
     const { data: currentTrackedEntities = [] } = useLiveSuspenseQuery(
         (q) => {
-            const hasSearch = search && Object.keys(search).length > 0;
-
             if (!hasSearch) {
                 return q
                     .from({ trackedEntity: trackedEntitiesCollection })
                     .where(() => eq(1, 0));
             }
-
             let query = q.from({ trackedEntity: trackedEntitiesCollection });
 
-            for (const [filterKey, filterValue] of Object.entries(search)) {
+            if (globalQuery && searchableAttrIds.length > 0) {
+                const pattern = `%${globalQuery}%`;
+                query = query.where(({ trackedEntity }) => {
+                    const terms = searchableAttrIds.map((aid) =>
+                        ilike(trackedEntity.attributes[aid], pattern),
+                    );
+                    if (terms.length === 1) return terms[0];
+                    const [first, second, ...rest] = terms;
+                    return or(first, second, ...rest);
+                });
+            }
+            for (const [filterKey, filterValue] of fieldFilters) {
                 query = query.where(({ trackedEntity }) =>
                     ilike(
                         trackedEntity.attributes[filterKey],
@@ -99,7 +102,6 @@ function TrackedEntitiesSearch() {
                     ),
                 );
             }
-
             return query.where(({ trackedEntity }) =>
                 and(
                     eq(trackedEntity.orgUnit, id),
@@ -107,18 +109,8 @@ function TrackedEntitiesSearch() {
                 ),
             );
         },
-        [search],
+        [globalQuery, fieldFilters, searchableAttrIds, id],
     );
-    const createAndOpenNewPatient = async () => {
-        const newPatient = createEmptyTrackedEntity({ orgUnit: id });
-        const newEnrollment = createEmptyEnrollment({
-            orgUnit: id,
-            trackedEntity: newPatient.trackedEntity,
-        });
-        await trackedEntitiesCollection.utils.insertLocally(newPatient);
-        await enrollmentsCollection.utils.insertLocally(newEnrollment);
-        openModal(newPatient, newEnrollment);
-    };
 
     const actionMenu: MenuProps = {
         items: [
@@ -134,6 +126,7 @@ function TrackedEntitiesSearch() {
             },
         ],
     };
+
     const columns: ColumnsType<FlattenedTrackedEntity> = [
         ...program.programTrackedEntityAttributes.map(
             ({ trackedEntityAttribute: { id }, ...rest }) => ({
@@ -163,9 +156,7 @@ function TrackedEntitiesSearch() {
                     trackedEntityAttribute.displayFormName ||
                     trackedEntityAttribute.name,
                 key: trackedEntityAttribute.id,
-                render: (record) => {
-                    return organisations.get(record.orgUnit) || "N/A";
-                },
+                render: (record) => organisations.get(record.orgUnit) || "N/A",
             };
         }
         if (trackedEntityAttribute.id === "oTI0DLitzFY") {
@@ -175,33 +166,27 @@ function TrackedEntitiesSearch() {
                     trackedEntityAttribute.name,
                 key: trackedEntityAttribute.id,
                 dataIndex: ["attributes", "oTI0DLitzFY"],
-                render: (text) => {
-                    return String(text).split("(")[1]?.replace(")", "");
-                },
+                render: (text) =>
+                    String(text).split("(")[1]?.replace(")", "") ?? "",
             };
         }
-
         if (trackedEntityAttribute.id === "actions") {
             return {
-                title: "Action",
+                title: "",
                 key: "action",
-                fixed: "right",
-                width: 100,
-                render: (_, record) => (
+                fixed: "right" as const,
+                width: 56,
+                render: () => (
                     <Dropdown menu={actionMenu} trigger={["click"]}>
                         <Button
                             type="text"
                             icon={<MoreOutlined />}
-                            style={{
-                                color: "#666",
-                                fontSize: 20,
-                            }}
+                            aria-label="Patient actions"
                         />
                     </Dropdown>
                 ),
             };
         }
-
         return {
             title:
                 trackedEntityAttribute.displayFormName ||
@@ -211,143 +196,76 @@ function TrackedEntitiesSearch() {
         };
     });
 
-    if (
-        currentTrackedEntities.length === 0 &&
-        Object.values(searchInitialAttributes).some(Boolean)
-    )
+    if (!hasSearch) {
         return (
-            <NoPatientsCard
-                message="No clients found matching your search criteria."
-                initialAttributes={searchInitialAttributes}
-            />
+            <Col span={24}>
+                <EmptyState
+                    title="Search to find a patient"
+                    description="Enter a name, NIN, phone, or village above. The search matches across every searchable field on the program."
+                />
+            </Col>
         );
-    if (currentTrackedEntities.length === 0)
-        return <NoPatientsCard message="" />;
+    }
+
+    if (currentTrackedEntities.length === 0) {
+        return (
+            <Col span={24}>
+                <EmptyState
+                    title="No clients found"
+                    description="Try different search terms, or register a new client using the button above."
+                />
+            </Col>
+        );
+    }
 
     return (
-        <Card
-            variant="borderless"
-            extra={
+        <Col span={24}>
+            <div
+                style={{
+                    background: token.colorBgContainer,
+                    border: `1px solid ${token.colorBorderSecondary}`,
+                }}
+            >
                 <Flex
-                    gap="small"
                     align="center"
                     justify="space-between"
-                    style={{ width: "100%" }}
+                    style={{
+                        padding: `${token.paddingSM}px ${token.padding}px`,
+                        borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                    }}
                 >
-                    <Text>{`${currentTrackedEntities.length} results matching`}</Text>
-                    <Button
-                        type="primary"
-                        size="large"
-                        onClick={createAndOpenNewPatient}
-                    >
-                        Register New Client
-                    </Button>
+                    <Text strong>
+                        {currentTrackedEntities.length} result
+                        {currentTrackedEntities.length === 1 ? "" : "s"}
+                    </Text>
                 </Flex>
-            }
-            style={{ height: "calc(100vh - 144px)" }}
-        >
-            <Table
-                columns={columns}
-                dataSource={currentTrackedEntities}
-                rowKey="trackedEntity"
-                pagination={{
-                    pageSize: 5,
-                    showSizeChanger: true,
-                    total: currentTrackedEntities.length,
-                    showTotal: (total, range) =>
-                        `Showing ${range[0]} to ${range[1]} of ${total}`,
-                    hideOnSinglePage: true,
-                }}
-                onRow={(record) => {
-                    return {
-                        onClick: () => {
+                <Table
+                    columns={columns}
+                    dataSource={currentTrackedEntities}
+                    rowKey="trackedEntity"
+                    size="middle"
+                    sticky
+                    pagination={{
+                        pageSize: 10,
+                        showSizeChanger: true,
+                        total: currentTrackedEntities.length,
+                        showTotal: (total, range) =>
+                            `Showing ${range[0]}–${range[1]} of ${total}`,
+                        hideOnSinglePage: false,
+                    }}
+                    onRow={(record) => ({
+                        onClick: () =>
                             navigate({
-                                to: `/tracked-entity/$trackedEntity`,
-                                params: { trackedEntity: record.trackedEntity },
-                            });
-                        },
-                        style: { cursor: "pointer" },
-                    };
-                }}
-                scroll={{ x: "max-content" }}
-            />
-
-            <DataModal<FlattenedTrackedEntity>
-                open={isOpen}
-                data={trackedEntity}
-                enrollment={enrollment}
-                onClose={closeModal}
-                onSave={async ({ values, addAnother }) => {
-                    if (values && trackedEntity && enrollment) {
-                        const tx2 = enrollmentsCollection.update(
-                            enrollment.enrollment,
-                            (draft) => {
-                                draft.attributes = {
-                                    ...enrollment.attributes,
-                                    ...values,
-                                };
-                                draft.syncStatus = "pending";
-                            },
-                        );
-                        await tx2.isPersisted.promise;
-                        const tx1 = trackedEntitiesCollection.update(
-                            trackedEntity.trackedEntity,
-                            (draft) => {
-                                draft.attributes = {
-                                    ...trackedEntity.attributes,
-                                    ...values,
-                                };
-                                draft.syncStatus = "pending";
-                            },
-                        );
-                        await tx1.isPersisted.promise;
-                        if (addAnother) {
-                            closeModal();
-                            await createAndOpenNewPatient();
-                        } else {
-                            navigate({
-                                to: `/tracked-entity/$trackedEntity`,
-                                search: {
-                                    orgUnits: id,
-                                },
+                                to: "/tracked-entity/$trackedEntity",
                                 params: {
-                                    trackedEntity: trackedEntity.trackedEntity,
+                                    trackedEntity: record.trackedEntity,
                                 },
-                            });
-                        }
-                    }
-                }}
-                title="Register New Client"
-                submitButtonText="Register client"
-                hasAddAnother={true}
-            >
-                {(form) => (
-                    <TrackedEntityContext.Provider
-                        key={trackedEntity?.trackedEntity || "closed"}
-                        options={{
-                            input: {
-                                programRules,
-                                programRuleVariables,
-                                program: "ueBhWkWll5v",
-                                trackedEntity: trackedEntity!,
-                                validDataElements: mainStageDataElements,
-                                form,
-                            },
-                        }}
-                    >
-                        <Form
-                            form={form}
-                            layout="vertical"
-                            initialValues={trackedEntity?.attributes}
-                        >
-                            <TrackerRegistration
-                                trackedEntity={trackedEntity!}
-                                form={form}
-                            />
-                        </Form>
-                    </TrackedEntityContext.Provider>
-                )}
-            </DataModal>
-        </Card>
+                            }),
+                        style: { cursor: "pointer" },
+                    })}
+                    scroll={{ x: "max-content" }}
+                />
+            </div>
+        </Col>
     );
 }

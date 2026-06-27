@@ -114,7 +114,7 @@ export default function DobPicker({
             </Form.Item>
             <Flex gap={8} style={{ width: "100%" }}>
                 <Flex gap={5} style={{ flex: 1 }} align="center">
-                    <Text style={{ fontSize: 12 }}>Years</Text>
+                    <Text type="secondary">Years</Text>
                     <InputNumber
                         min={0}
                         placeholder="Years"
@@ -132,7 +132,7 @@ export default function DobPicker({
                     />
                 </Flex>
                 <Flex gap={5} style={{ flex: 1 }} align="center">
-                    <Text style={{ fontSize: 12 }}>Months</Text>
+                    <Text type="secondary">Months</Text>
                     <InputNumber
                         min={0}
                         max={11}
@@ -151,7 +151,7 @@ export default function DobPicker({
                     />
                 </Flex>
                 <Flex gap={5} style={{ flex: 1 }} align="center">
-                    <Text style={{ fontSize: 12 }}>Days</Text>
+                    <Text type="secondary">Days</Text>
                     <InputNumber
                         min={0}
                         max={31}

@@ -436,6 +436,14 @@ export const DataElementField = React.memo<{
                     }
                     name={dataElement.id}
                     required={required}
+                    tooltip={
+                        required
+                            ? {
+                                  title: "This field is required",
+                                  placement: "topLeft",
+                              }
+                            : undefined
+                    }
                     rules={[
                         {
                             required: required,

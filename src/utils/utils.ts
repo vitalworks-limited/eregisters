@@ -1391,7 +1391,29 @@ export const queryInfo = async (user: string, id: string) => {
     };
 };
 
-export const checkInfo = async (user: string, id: string) => {
+export interface CheckInfoInput {
+    user: string;
+    id: string;
+    /**
+     * Result of the cheap pre-sync version probe. `undefined` means the
+     * probe was not performed or failed (e.g. offline) — fall back to the
+     * existing time-based rules in that case.
+     */
+    remoteProgramSummary?: { version: number; lastUpdated: string };
+}
+
+export const checkInfo = async (
+    userOrInput: string | CheckInfoInput,
+    maybeId?: string,
+) => {
+    // Back-compat: support both legacy positional args and the new
+    // object form. Internal callers should use the object form.
+    const input: CheckInfoInput =
+        typeof userOrInput === "string"
+            ? { user: userOrInput, id: maybeId ?? "" }
+            : userOrInput;
+    const { user, id, remoteProgramSummary } = input;
+
     try {
         const queries = await Promise.all([
             db.dataElements.count(),
@@ -1419,11 +1441,41 @@ export const checkInfo = async (user: string, id: string) => {
             ? dayjs().diff(dayjs(metadataVersion.lastSync), "hour") < 24
             : false;
 
+        // Version-gated decision. The probe is the source of truth when
+        // it succeeds; otherwise we fall back to the legacy 24h window so
+        // an offline app load still behaves the same as before.
+        let remoteVersionMatches = false;
+        let remoteProbeSucceeded = false;
+        if (remoteProgramSummary && metadataVersion?.programVersion !== undefined) {
+            remoteProbeSucceeded = true;
+            remoteVersionMatches =
+                metadataVersion.programVersion === remoteProgramSummary.version;
+        } else if (remoteProgramSummary) {
+            // Probe worked but we never stored a local programVersion
+            // (legacy install). Treat as "definitely needs sync" so we
+            // populate the field on the next pull.
+            remoteProbeSucceeded = true;
+            remoteVersionMatches = false;
+        }
+
+        let needsSyncing: boolean;
+        if (hasEmptyTables || wasIndexedDBDeleted) {
+            needsSyncing = true;
+        } else if (remoteProbeSucceeded) {
+            // Probe verdict trumps the 24h timer in both directions.
+            needsSyncing = !remoteVersionMatches;
+        } else {
+            needsSyncing = !syncedWithin24Hours;
+        }
+
         return {
-            needsSyncing: hasEmptyTables || wasIndexedDBDeleted || !syncedWithin24Hours,
+            needsSyncing,
             hasEmptyTables,
             wasIndexedDBDeleted,
             syncedWithin24Hours,
+            remoteVersionMatches,
+            remoteProbeSucceeded,
+            remoteProgramSummary,
             metadataVersion,
             syncStatus,
             program,
@@ -1436,6 +1488,9 @@ export const checkInfo = async (user: string, id: string) => {
             hasEmptyTables: true,
             wasIndexedDBDeleted: true,
             syncedWithin24Hours: false,
+            remoteVersionMatches: false,
+            remoteProbeSucceeded: false,
+            remoteProgramSummary: undefined,
             metadataVersion: undefined,
             program: undefined,
         };

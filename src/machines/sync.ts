@@ -55,6 +55,15 @@ import { acquireSyncLock, buildOwnerId, releaseSyncLock } from "../sync/lock";
 import { getSyncDelayMs } from "../sync/scheduler";
 import { SyncTelemetryBuilder } from "../sync/telemetry";
 import { isSyncBlockedByUpdate } from "../update/syncGuard";
+import { probeProgramVersion } from "../sync/programVersionProbe";
+import {
+    fail as progressFail,
+    finish as progressFinish,
+    labelFor as progressLabel,
+    report as progressReport,
+    saving as progressSaving,
+    start as progressStart,
+} from "../sync/metadataProgress";
 
 function deriveValidIds(program: Program | undefined): {
     validAttributeIds: Set<string>;
@@ -390,9 +399,26 @@ const syncMachine = setup({
     actors: {
         checkIndexDB: fromPromise<
             Awaited<ReturnType<typeof checkInfo>>,
-            { user: string; id: string }
-        >(async ({ input: { user, id } }) => {
-            return checkInfo(user, id);
+            {
+                user: string;
+                id: string;
+                engine: ReturnType<typeof useDataEngine>;
+                program: string;
+            }
+        >(async ({ input: { user, id, engine, program } }) => {
+            // Cheap server probe — does the program version differ from
+            // what we have stored? Undefined means probe failed (offline
+            // or transient), in which case checkInfo will fall back to
+            // the legacy 24h timer.
+            const remoteProgramSummary = await probeProgramVersion(
+                engine,
+                program,
+            );
+            return checkInfo({
+                user,
+                id,
+                remoteProgramSummary,
+            });
         }),
         queryIndexDB: fromPromise<
             Awaited<ReturnType<typeof queryInfo>>,
@@ -495,7 +521,23 @@ const syncMachine = setup({
             await db.optionSets.bulkPut(input.optionSets);
             await db.optionGroups.bulkPut(input.optionGroups);
 
+            // Capture program.version + lastUpdated on the metadataVersion
+            // row so the next app load's probe can short-circuit when the
+            // server hasn't moved.
+            const programPayload = input.programs?.[0] as
+                | { version?: number; lastUpdated?: string }
+                | undefined;
+            if (
+                programPayload &&
+                input.metadataVersion?.[0] &&
+                typeof programPayload.version === "number"
+            ) {
+                input.metadataVersion[0].programVersion = programPayload.version;
+                input.metadataVersion[0].programLastUpdated =
+                    programPayload.lastUpdated;
+            }
             await db.metadataVersions.bulkPut(input.metadataVersion);
+            progressFinish();
         }),
         pullResource: fromPromise<
             Metadata,
@@ -521,7 +563,11 @@ const syncMachine = setup({
                 trackedEntityAttributes: [],
                 metadataVersion: [],
             };
+            progressStart(resources);
+            let stepIndex = 0;
             for (const resource of resources) {
+                progressReport(stepIndex, progressLabel(resource));
+                stepIndex += 1;
                 switch (resource) {
                     case "me":
                         const { me } = (await engine.query({
@@ -552,7 +598,7 @@ const syncMachine = setup({
                                 resource: "programs",
                                 id: "ueBhWkWll5v",
                                 params: {
-                                    fields: "id,name,programSections[id,name,sortOrder,trackedEntityAttributes[id]],trackedEntityType[id,trackedEntityTypeAttributes[id]],programType,selectEnrollmentDatesInFuture,selectIncidentDatesInFuture,organisationUnits[id,name],programStages[id,repeatable,name,code,programStageDataElements[id,compulsory,renderOptionsAsRadio,dataElement[id],renderType,allowFutureDate],programStageSections[id,name,sortOrder,dataElements[id]]],programTrackedEntityAttributes[id,mandatory,searchable,renderOptionsAsRadio,renderType,sortOrder,allowFutureDate,displayInList,trackedEntityAttribute[id]]",
+                                    fields: "id,name,version,lastUpdated,programSections[id,name,sortOrder,trackedEntityAttributes[id]],trackedEntityType[id,trackedEntityTypeAttributes[id]],programType,selectEnrollmentDatesInFuture,selectIncidentDatesInFuture,organisationUnits[id,name],programStages[id,repeatable,name,code,programStageDataElements[id,compulsory,renderOptionsAsRadio,dataElement[id],renderType,allowFutureDate],programStageSections[id,name,sortOrder,dataElements[id]]],programTrackedEntityAttributes[id,mandatory,searchable,renderOptionsAsRadio,renderType,sortOrder,allowFutureDate,displayInList,trackedEntityAttribute[id]]",
                                 },
                             },
                         })) as { program: Program };
@@ -817,6 +863,7 @@ const syncMachine = setup({
                 version.lastSync = currentTimestamp;
                 results.metadataVersion = [version];
             }
+            progressSaving();
             return results;
         }),
         deleteAllMetadata: fromPromise(async () => {
@@ -1008,6 +1055,10 @@ const syncMachine = setup({
                             return {
                                 user: context.user,
                                 id: context.orgUnit,
+                                engine: context.engine,
+                                // Hard-coded program id matches the rest of
+                                // the app (App.tsx, hooks, sync flow).
+                                program: "ueBhWkWll5v",
                             };
                         },
                         onDone: [

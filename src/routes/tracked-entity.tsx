@@ -1,31 +1,31 @@
 import {
-    ArrowLeftOutlined,
     CalendarOutlined,
-    CaretRightOutlined,
     DeleteOutlined,
     EditOutlined,
     PlusOutlined,
+    PrinterOutlined,
     UserOutlined,
 } from "@ant-design/icons";
-import { createRoute } from "@tanstack/react-router";
+import { createRoute, Link } from "@tanstack/react-router";
 import type { DescriptionsProps, TableProps } from "antd";
 
 import { and, eq, not, useLiveSuspenseQuery } from "@tanstack/react-db";
 import {
+    Avatar,
+    Breadcrumb,
     Button,
-    Card,
-    Collapse,
     Descriptions,
     Flex,
     Form,
     Grid,
     Popconfirm,
-    Space,
-    Splitter,
+    Tabs,
     Table,
     Tag,
+    theme,
     Typography,
 } from "antd";
+import { EmptyState } from "../components/empty-state";
 import dayjs from "dayjs";
 import { Table as DexieTable } from "dexie";
 import { isEmpty } from "lodash";
@@ -85,6 +85,7 @@ function renderTags(text: string | string[] | undefined, color: string) {
 
 function TrackedEntityComponent() {
     const syncActor = SyncContext.useActorRef();
+    const { token } = theme.useToken();
     const { data, isOpen, isNew, openModal, closeModal } =
         useModalState<FlattenedEvent>();
 
@@ -102,7 +103,6 @@ function TrackedEntityComponent() {
         programRules,
     } = useMetadata();
     const { trackedEntity: tei } = TrackedEntityRoute.useParams();
-    const navigate = TrackedEntityRoute.useNavigate();
     const attributes = Array.from(trackedEntityAttributes.values());
     const mainStage = program?.programStages.find(
         (s) => s.id === "K2nxbE9ubSs",
@@ -313,16 +313,27 @@ function TrackedEntityComponent() {
         openModal(newEvent, enrollment, true);
     };
 
-    const leftPanel = (
-        <Card
-            title={
-                <Space>
-                    <CalendarOutlined />
-                    <span>Client Visits</span>
-                    {!navigator.onLine && <Tag color="orange">Offline</Tag>}
-                </Space>
-            }
-            extra={
+    const initials = `${firstName.charAt(0)}${surname.charAt(0)}`.toUpperCase();
+
+    const openEditProfile = () =>
+        openTrackedEntityModal(
+            {
+                ...trackedEntity,
+                attributes: {
+                    ...trackedEntity.attributes,
+                    enrolledAt: enrollment.enrolledAt,
+                    ...enrollment.attributes,
+                },
+            },
+            enrollment,
+        );
+
+    const visitsPane = (
+        <Flex vertical gap={token.marginSM}>
+            <Flex align="center" justify="space-between" wrap gap={token.marginSM}>
+                <Text type="secondary">
+                    {events.length} visit{events.length === 1 ? "" : "s"} recorded
+                </Text>
                 <Button
                     type="primary"
                     icon={<PlusOutlined />}
@@ -330,130 +341,214 @@ function TrackedEntityComponent() {
                 >
                     Add new visit
                 </Button>
-            }
-        >
-            <Table
-                columns={columns}
-                dataSource={events}
-                pagination={false}
-                rowKey="event"
-                scroll={{ x: "max-content" }}
-            />
-        </Card>
+            </Flex>
+            {events.length === 0 ? (
+                <EmptyState
+                    title="No visits yet"
+                    description='Use "Add new visit" above to record one.'
+                />
+            ) : (
+                <div
+                    style={{
+                        background: token.colorBgContainer,
+                        border: `1px solid ${token.colorBorderSecondary}`,
+                    }}
+                >
+                    <Table
+                        columns={columns}
+                        dataSource={events}
+                        pagination={false}
+                        rowKey="event"
+                        size="middle"
+                        sticky
+                        scroll={{ x: "max-content" }}
+                    />
+                </div>
+            )}
+        </Flex>
     );
 
-    const rightPanel = (
-        <Collapse
-            expandIcon={({ isActive }) => (
-                <CaretRightOutlined rotate={isActive ? 90 : 0} />
-            )}
-            style={{ backgroundColor: "white" }}
-            items={[
-                {
-                    key: "1",
-                    label: "Person Profile",
-                    children: (
-                        <Descriptions bordered column={1} items={items} />
-                    ),
-                    extra: (
-                        <Button
-                            icon={<EditOutlined />}
-                            size="small"
-                            onClick={() =>
-                                openTrackedEntityModal(
-                                    {
-                                        ...trackedEntity,
-                                        attributes: {
-                                            ...trackedEntity.attributes,
-                                            enrolledAt: enrollment.enrolledAt,
-                                            ...enrollment.attributes,
-                                        },
-                                    },
-                                    enrollment,
-                                )
-                            }
-                        >
-                            Edit
-                        </Button>
-                    ),
-                },
-            ]}
-            styles={{ body: { padding: 0, margin: 0 } }}
+    const enrollmentPane = (
+        <div
+            style={{
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorderSecondary}`,
+            }}
+        >
+            <Flex
+                align="center"
+                justify="space-between"
+                style={{
+                    padding: `${token.paddingSM}px ${token.padding}px`,
+                    borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                }}
+            >
+                <Text strong>Person profile</Text>
+                <Button
+                    icon={<EditOutlined />}
+                    size="small"
+                    onClick={openEditProfile}
+                >
+                    Edit
+                </Button>
+            </Flex>
+            <Descriptions
+                bordered={false}
+                column={isMobile ? 1 : 2}
+                items={items}
+                style={{ padding: token.padding }}
+                colon={false}
+                styles={{
+                    label: {
+                        color: token.colorTextSecondary,
+                        width: 220,
+                        fontWeight: 500,
+                    },
+                }}
+            />
+        </div>
+    );
+
+    const overviewPane = (
+        <EmptyState
+            title="Overview"
+            description="Last visit summary, key vitals, and pending follow-ups will appear here."
         />
     );
 
     return (
-        <Flex
-            style={{
-                padding: "8px 0",
-            }}
-            vertical
-            gap={5}
-        >
-            <Flex
-                vertical={isMobile}
-                align={isMobile ? "flex-start" : "center"}
-                gap={isMobile ? 4 : 8}
+        <Flex vertical gap={0}>
+            <div
                 style={{
-                    padding: 10,
-                    borderBottom: "1px solid #f0f0f0",
-                    background: "#fff",
+                    background: token.colorBgContainer,
+                    borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                    paddingBlock: token.paddingXS,
+                    paddingInline: token.padding,
                 }}
             >
-                <Button
-                    icon={<ArrowLeftOutlined />}
-                    type="text"
-                    onClick={() => navigate({ to: "/tracked-entities" })}
-                >
-                    Back
-                </Button>
-                <Flex align="center" gap={8} wrap>
-                    <UserOutlined
-                        style={{
-                            fontSize: isMobile ? 16 : 18,
-                            color: "#1f4788",
-                        }}
-                    />
-                    <Title level={isMobile ? 5 : 4} style={{ margin: 0 }}>
-                        {firstName} {surname}
-                    </Title>
-                    {age !== null && <Tag color="blue">{age} yrs</Tag>}
-                    <Tag color="purple">{sex}</Tag>
-
-                    <SyncStatusComp syncStatus={trackedEntity.syncStatus} />
-                </Flex>
-            </Flex>
-
-            {isMobile ? (
+                <Breadcrumb
+                    items={[
+                        {
+                            title: (
+                                <Link to="/tracked-entities">Patients</Link>
+                            ),
+                        },
+                        {
+                            title: `${firstName ?? ""} ${surname ?? ""}`.trim(),
+                        },
+                    ]}
+                />
+            </div>
+            <div
+                style={{
+                    position: "sticky",
+                    top: 0,
+                    zIndex: 10,
+                    background: token.colorBgContainer,
+                    borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                    paddingBlock: token.paddingSM,
+                    paddingInline: token.padding,
+                }}
+            >
                 <Flex
-                    vertical
-                    gap={16}
-                    style={{
-                        padding: 10,
-                        overflow: "auto",
-                    }}
+                    align={isMobile ? "flex-start" : "center"}
+                    justify="space-between"
+                    gap={token.marginSM}
+                    wrap
+                    vertical={isMobile}
                 >
-                    {rightPanel}
-                    {leftPanel}
+                    <Flex align="center" gap={token.marginSM} wrap>
+                        <Avatar
+                            shape="square"
+                            size={isMobile ? 36 : 44}
+                            style={{
+                                backgroundColor: token.colorPrimary,
+                                fontWeight: 600,
+                            }}
+                        >
+                            {initials || <UserOutlined />}
+                        </Avatar>
+                        <Flex vertical gap={token.marginXXS}>
+                            <Title
+                                level={isMobile ? 5 : 4}
+                                style={{ margin: 0 }}
+                            >
+                                {firstName} {surname}
+                            </Title>
+                            <Flex
+                                gap={token.marginXS}
+                                align="center"
+                                wrap
+                            >
+                                {sex && <Tag>{sex}</Tag>}
+                                {age !== null && <Tag>{age} yrs</Tag>}
+                                <SyncStatusComp
+                                    syncStatus={trackedEntity.syncStatus}
+                                />
+                            </Flex>
+                        </Flex>
+                    </Flex>
+                    <Flex gap={token.marginXS} wrap>
+                        <Button
+                            icon={<EditOutlined />}
+                            onClick={openEditProfile}
+                        >
+                            Edit details
+                        </Button>
+                        <Button
+                            type="primary"
+                            icon={<PlusOutlined />}
+                            onClick={handleCreate}
+                        >
+                            New visit
+                        </Button>
+                        <Button
+                            icon={<PrinterOutlined />}
+                            onClick={() => window.print()}
+                            aria-label="Print summary"
+                        />
+                    </Flex>
                 </Flex>
-            ) : (
-                <Splitter style={{ height: "calc(100vh - 181px)" }}>
-                    <Splitter.Panel style={{ padding: "0 10px" }}>
-                        {leftPanel}
-                    </Splitter.Panel>
-                    <Splitter.Panel
-                        defaultSize="25%"
-                        style={{ padding: "0 10px" }}
-                        collapsible={{
-                            start: true,
-                            end: true,
-                            showCollapsibleIcon: true,
-                        }}
-                    >
-                        {rightPanel}
-                    </Splitter.Panel>
-                </Splitter>
-            )}
+            </div>
+
+            <div
+                style={{
+                    padding: isMobile ? token.paddingSM : token.padding,
+                }}
+            >
+                <Tabs
+                    defaultActiveKey="visits"
+                    items={[
+                        {
+                            key: "overview",
+                            label: (
+                                <span>
+                                    <UserOutlined /> Overview
+                                </span>
+                            ),
+                            children: overviewPane,
+                        },
+                        {
+                            key: "visits",
+                            label: (
+                                <span>
+                                    <CalendarOutlined /> Visits
+                                </span>
+                            ),
+                            children: visitsPane,
+                        },
+                        {
+                            key: "enrollment",
+                            label: (
+                                <span>
+                                    <UserOutlined /> Enrollment
+                                </span>
+                            ),
+                            children: enrollmentPane,
+                        },
+                    ]}
+                />
+            </div>
 
             <DataModal<FlattenedEvent>
                 open={isOpen}

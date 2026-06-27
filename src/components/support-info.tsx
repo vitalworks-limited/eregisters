@@ -1,14 +1,9 @@
 import { DownloadOutlined } from "@ant-design/icons";
-import { Button, Flex, Tooltip, Typography } from "antd";
+import { Button, Flex, Tag, theme, Tooltip, Typography } from "antd";
 import React from "react";
 import { downloadSyncDiagnostics } from "../sync/telemetry";
 import { APP_VERSION, BUILD_HASH, BUILD_TIME } from "../version";
 
-/**
- * Small support footer surfaced on the main layout (Phase 17.9).
- * Shows the current version + build hash + a "download diagnostics"
- * action so field support can identify which build a device is running.
- */
 async function handleDownload() {
     const blob = await downloadSyncDiagnostics();
     const url = URL.createObjectURL(blob);
@@ -22,23 +17,33 @@ async function handleDownload() {
 }
 
 export const SupportInfo: React.FC = () => {
+    const { token } = theme.useToken();
+    const isDev = BUILD_HASH === "local";
     const tooltipTitle = `eRegisters ${APP_VERSION}\nBuild: ${BUILD_HASH}\nBuilt: ${BUILD_TIME}`;
     return (
         <Flex
             align="center"
             justify="center"
-            gap={8}
+            gap={token.marginXS}
             style={{
-                padding: "4px 8px",
-                fontSize: 11,
-                color: "rgba(0, 0, 0, 0.45)",
+                padding: `${token.paddingXS}px ${token.paddingSM}px`,
             }}
         >
             <Tooltip title={tooltipTitle}>
-                <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                <Typography.Text
+                    type="secondary"
+                    style={{ fontSize: token.fontSizeSM }}
+                >
                     eRegisters v{APP_VERSION} · build {BUILD_HASH}
                 </Typography.Text>
             </Tooltip>
+            {isDev && (
+                <Tooltip title="Dev build: in-app update polling is disabled to prevent reload loops.">
+                    <Tag color="default" style={{ marginInlineEnd: 0 }}>
+                        dev · auto-update off
+                    </Tag>
+                </Tooltip>
+            )}
             <Tooltip title="Download sync diagnostics (support)">
                 <Button
                     type="text"

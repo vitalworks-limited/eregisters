@@ -1,29 +1,27 @@
-import { CalendarOutlined, UserOutlined } from "@ant-design/icons";
+import { PlusOutlined, SearchOutlined } from "@ant-design/icons";
 import { and, eq, not, useLiveSuspenseQuery } from "@tanstack/react-db";
 import { createRoute, Outlet } from "@tanstack/react-router";
 import {
     Button,
-    Card,
-    Col,
     Flex,
-    Form,
     Grid,
+    Input,
     Layout,
     Row,
-    Statistic,
+    theme,
     Typography,
 } from "antd";
-import React from "react";
-import { DataElementField } from "../components/data-element-field";
-import { ClientSchema } from "../schemas";
-import { RootRoute } from "./__root";
-
 import dayjs from "dayjs";
+import React, { useMemo } from "react";
+import { ClientSchema } from "../schemas";
 import { trackedEntitiesCollection } from "../collections";
 import { useMetadata } from "../hooks/useMetadata";
+import { usePatientRegistration } from "../hooks/usePatientRegistration";
+import { RootRoute } from "./__root";
 
 const { Content } = Layout;
-const { Title } = Typography;
+const { Title, Text } = Typography;
+
 export const TrackedEntitiesRoute = createRoute({
     getParentRoute: () => RootRoute,
     path: "/tracked-entities",
@@ -31,15 +29,51 @@ export const TrackedEntitiesRoute = createRoute({
     validateSearch: ClientSchema,
 });
 
+function StatChip({
+    label,
+    value,
+    accent,
+}: {
+    label: string;
+    value: React.ReactNode;
+    accent: string;
+}) {
+    const { token } = theme.useToken();
+    return (
+        <Flex
+            align="center"
+            gap={token.marginXS}
+            style={{
+                paddingInline: token.paddingSM,
+                paddingBlock: token.paddingXXS,
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorderSecondary}`,
+            }}
+        >
+            <span
+                style={{
+                    width: 6,
+                    height: 6,
+                    background: accent,
+                    display: "inline-block",
+                }}
+            />
+            <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                {label}
+            </Text>
+            <Text strong>{value}</Text>
+        </Flex>
+    );
+}
+
 function TrackedEntities() {
+    const { token } = theme.useToken();
     const {
-        program,
-        trackedEntityAttributes,
-        optionSets,
         orgUnit: { id },
     } = useMetadata();
 
-    const [form] = Form.useForm();
+    const navigate = TrackedEntitiesRoute.useNavigate();
+    const { search } = TrackedEntitiesRoute.useSearch();
 
     const { data: total } = useLiveSuspenseQuery(
         (q) =>
@@ -53,152 +87,139 @@ function TrackedEntities() {
                 ),
         [id],
     );
-    const navigate = TrackedEntitiesRoute.useNavigate();
-    const { search } = TrackedEntitiesRoute.useSearch();
 
-    const handleClear = () => {
-        form.resetFields();
-        navigate({
-            search: (prev) => ({ ...prev, search: undefined }),
-        });
-    };
+    const registeredToday = useMemo(
+        () =>
+            total.filter(
+                (te) =>
+                    dayjs(te.createdAt).format("YYYY-MM-DD") ===
+                    dayjs().format("YYYY-MM-DD"),
+            ).length,
+        [total],
+    );
 
-    const onStageSubmit = (values: any) => {
-        navigate({
-            search: (prev) => {
-                return {
-                    ...prev,
-                    search: values,
-                };
-            },
-        });
-    };
-
-    const onFieldChange = () => {};
+    const pendingSync = useMemo(
+        () => total.filter((te) => te.syncStatus === "pending").length,
+        [total],
+    );
 
     const screens = Grid.useBreakpoint();
-    const isMobile = !screens.lg;
+    const isMobile = !screens.md;
 
-    const statsSection = (
-        <Flex gap={8} style={{ marginBottom: 8 }}>
-            <Card variant="borderless" style={{ flex: 1 }}>
-                <Statistic
-                    title="Total Clients"
-                    value={total.length}
-                    prefix={<UserOutlined />}
-                    styles={{
-                        content: { color: "#1f4788" },
-                    }}
-                />
-            </Card>
-            <Card variant="borderless" style={{ flex: 1 }}>
-                <Statistic
-                    title="Registered Today"
-                    value={
-                        total.filter(
-                            (te) =>
-                                dayjs(te.createdAt).format("YYYY-MM-DD") ===
-                                dayjs().format("YYYY-MM-DD"),
-                        ).length
-                    }
-                    prefix={<CalendarOutlined />}
-                    styles={{
-                        content: { color: "#52c41a" },
-                    }}
-                />
-            </Card>
-        </Flex>
-    );
+    const { openRegistration, registrationModal } = usePatientRegistration({
+        onSaved: (trackedEntityId) =>
+            navigate({
+                to: "/tracked-entity/$trackedEntity",
+                params: { trackedEntity: trackedEntityId },
+            }),
+    });
+
+    const handleSearchSubmit = (raw: string) => {
+        const trimmed = raw.trim();
+        navigate({
+            search: (prev) => ({
+                ...prev,
+                search: trimmed ? { _q: trimmed } : undefined,
+            }),
+        });
+    };
+
+    const currentQuery = (search?._q as string | undefined) ?? "";
 
     return (
         <Content
             style={{
-                padding: "16px",
+                padding: isMobile ? token.paddingSM : token.padding,
             }}
         >
-            <Row gutter={[16, 16]}>
-                {isMobile && <Col span={24}>{statsSection}</Col>}
-                <Col xs={24} lg={8}>
-                    <Card
-                        title={<Title level={4}>Search clients</Title>}
-                        variant="borderless"
-                        style={{
-                            height: isMobile
-                                ? undefined
-                                : "calc(100vh - 144px)",
-                        }}
-                    >
-                        <Form
-                            form={form}
-                            layout="vertical"
-                            onFinish={onStageSubmit}
-                            style={{ margin: 0, padding: 0 }}
-                            initialValues={search}
-                        >
-                            <Row gutter={[16, 16]}>
-                                {program?.programTrackedEntityAttributes.flatMap(
-                                    ({
-                                        trackedEntityAttribute: { id },
-                                        searchable,
-                                    }) => {
-                                        if (!searchable) {
-                                            return [];
-                                        }
-                                        const current =
-                                            trackedEntityAttributes.get(id);
+            <Flex
+                align="center"
+                justify="space-between"
+                gap={token.marginSM}
+                wrap
+                style={{ marginBottom: token.margin }}
+            >
+                <Flex vertical gap={token.marginXXS}>
+                    <Title level={3} style={{ margin: 0 }}>
+                        Patients
+                    </Title>
+                    <Text type="secondary">
+                        Search the registry or register a new client.
+                    </Text>
+                </Flex>
+                <Button
+                    type="primary"
+                    size="large"
+                    icon={<PlusOutlined />}
+                    onClick={openRegistration}
+                >
+                    Register new patient
+                </Button>
+            </Flex>
 
-                                        if (current === undefined) {
-                                            return [];
-                                        }
-                                        const optionSet =
-                                            current.optionSet?.id ?? "";
+            <div
+                style={{
+                    background: token.colorBgContainer,
+                    border: `1px solid ${token.colorBorderSecondary}`,
+                    padding: token.padding,
+                    marginBottom: token.marginSM,
+                }}
+            >
+                <Input.Search
+                    size="large"
+                    allowClear
+                    enterButton={
+                        <span>
+                            <SearchOutlined /> Search
+                        </span>
+                    }
+                    prefix={
+                        <SearchOutlined
+                            style={{ color: token.colorTextTertiary }}
+                        />
+                    }
+                    placeholder="Search by name, NIN, phone, village…"
+                    defaultValue={currentQuery}
+                    onSearch={handleSearchSubmit}
+                />
+                <Text
+                    type="secondary"
+                    style={{
+                        display: "block",
+                        marginTop: token.marginXXS,
+                        fontSize: token.fontSizeSM,
+                    }}
+                >
+                    Matches across all searchable fields on the program.
+                </Text>
+            </div>
 
-                                        const finalOptions =
-                                            optionSets.get(optionSet) ?? [];
+            <Flex
+                gap={token.marginSM}
+                wrap
+                style={{ marginBottom: token.marginSM }}
+            >
+                <StatChip
+                    label="Total clients"
+                    value={total.length}
+                    accent={token.colorPrimary}
+                />
+                <StatChip
+                    label="Registered today"
+                    value={registeredToday}
+                    accent={token.colorSuccess}
+                />
+                <StatChip
+                    label="Pending sync"
+                    value={pendingSync}
+                    accent={token.colorWarning}
+                />
+            </Flex>
 
-                                        return (
-                                            <DataElementField
-                                                key={id}
-                                                dataElement={current}
-                                                hidden={false}
-                                                finalOptions={finalOptions}
-                                                messages={[]}
-                                                warnings={[]}
-                                                errors={[]}
-                                                required={false}
-                                                xs={24}
-                                                sm={24}
-                                                md={24}
-                                                lg={24}
-                                                xl={24}
-                                                form={form}
-                                                onFieldChange={onFieldChange}
-                                            />
-                                        );
-                                    },
-                                )}
-                                <Col span={24}>
-                                    <Flex align="center" gap={20}>
-                                        <Button
-                                            type="primary"
-                                            htmlType="submit"
-                                        >
-                                            Search
-                                        </Button>
-                                        <Button onClick={handleClear}>
-                                            Clear
-                                        </Button>
-                                    </Flex>
-                                </Col>
-                            </Row>
-                        </Form>
-                    </Card>
-                </Col>
-                <Col xs={24} lg={16}>
-                    {!isMobile && statsSection}
-                    <Outlet />
-                </Col>
+            <Row gutter={[token.marginSM, token.marginSM]}>
+                <Outlet />
             </Row>
+            {registrationModal}
         </Content>
     );
 }

@@ -5,6 +5,14 @@ import z from "zod";
 export interface MetadataVersion {
     id: string;
     lastSync: string;
+    /**
+     * Server-side program.version captured at the last successful sync.
+     * Used as the "did anything change?" gate on app load — see
+     * `src/sync/programVersionProbe.ts`.
+     */
+    programVersion?: number;
+    /** Server-side program.lastUpdated captured at the last sync. */
+    programLastUpdated?: string;
     versions: {
         attributes?: string;
         programStages?: string;
@@ -183,6 +191,8 @@ const ProgramSchema = z.object({
         ),
     }),
     id: UID,
+    version: z.number().optional(),
+    lastUpdated: z.string().optional(),
     organisationUnits: z.array(z.object({ id: UID, name: z.string() })),
     programStages: z.array(ProgramStageSchema),
     programTrackedEntityAttributes: z.array(
