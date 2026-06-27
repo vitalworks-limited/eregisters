@@ -3,6 +3,7 @@ import {
     ControlOutlined,
     DashboardOutlined,
     DatabaseOutlined,
+    CloudUploadOutlined,
     FileSearchOutlined,
     TeamOutlined,
     ThunderboltOutlined,
@@ -32,6 +33,12 @@ export const ADMIN_NAV: NavItem[] = [
         label: "Sync activity",
         icon: <ThunderboltOutlined />,
         activeWhen: (p) => p.startsWith("/admin/sync"),
+    },
+    {
+        to: "/admin/queue",
+        label: "Pending queue",
+        icon: <CloudUploadOutlined />,
+        activeWhen: (p) => p.startsWith("/admin/queue"),
     },
     {
         to: "/admin/users",

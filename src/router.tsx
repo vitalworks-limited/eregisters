@@ -11,6 +11,7 @@ import { AdminDataCaptureRoute } from "./routes/admin.data-capture";
 import { AdminIndexRoute } from "./routes/admin.index";
 import { AdminInsightsRoute } from "./routes/admin.insights";
 import { AdminLogsRoute } from "./routes/admin.logs";
+import { AdminQueueRoute } from "./routes/admin.queue";
 import { AdminSyncRoute } from "./routes/admin.sync";
 import { AdminUsersRoute } from "./routes/admin.users";
 import { RootRoute } from "./routes/__root";
@@ -28,6 +29,7 @@ const routeTree = RootRoute.addChildren([
     AdminRoute.addChildren([
         AdminIndexRoute,
         AdminSyncRoute,
+        AdminQueueRoute,
         AdminUsersRoute,
         AdminDataCaptureRoute,
         AdminLogsRoute,
