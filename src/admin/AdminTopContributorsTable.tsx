@@ -29,6 +29,16 @@ import { useUsersByOrgUnit } from "./useUsersByOrgUnit";
 
 const { Title, Text } = Typography;
 
+/**
+ * Hard cap on rows rendered while printMode is active. Rendering a
+ * 9 000-row DOM tree and then snapshotting it via html2canvas was
+ * blowing the canvas memory budget on production-sized programs —
+ * the PDF generator was crashing mid-capture. Top-500 by the
+ * default GETs-desc sort surfaces the rows operations cares about
+ * anyway; the CSV export still covers the full set.
+ */
+const PRINT_MAX_ROWS = 500;
+
 interface ContributorRow {
     orgUnit: string;
     name: string;
@@ -625,34 +635,57 @@ export const AdminTopContributorsTable: React.FC<{
                     }}
                 />
             ) : (
-                <Table
-                    columns={columns}
-                    dataSource={filtered}
-                    rowKey="orgUnit"
-                    size="small"
-                    loading={
-                        (facLoading || usersLoading) && merged.length === 0
-                    }
-                    className={
-                        printMode
-                            ? "eregisters-contributors-table eregisters-print-table"
-                            : "eregisters-contributors-table"
-                    }
-                    pagination={
-                        printMode || showAll
-                            ? false
-                            : {
-                                  pageSize: 20,
-                                  showSizeChanger: true,
-                                  pageSizeOptions: [
-                                      "20",
-                                      "50",
-                                      "100",
-                                      "500",
-                                  ],
-                              }
-                    }
-                />
+                <>
+                    {printMode && filtered.length > PRINT_MAX_ROWS && (
+                        <Text
+                            type="secondary"
+                            style={{
+                                fontSize: token.fontSizeSM,
+                                marginBottom: token.marginXS,
+                            }}
+                        >
+                            PDF capped to the top{" "}
+                            <Text strong>
+                                {PRINT_MAX_ROWS.toLocaleString()}
+                            </Text>{" "}
+                            facilities (of {filtered.length.toLocaleString()})
+                            sorted by tracker GET volume. Export CSV for the
+                            full list.
+                        </Text>
+                    )}
+                    <Table
+                        columns={columns}
+                        dataSource={
+                            printMode
+                                ? filtered.slice(0, PRINT_MAX_ROWS)
+                                : filtered
+                        }
+                        rowKey="orgUnit"
+                        size="small"
+                        loading={
+                            (facLoading || usersLoading) && merged.length === 0
+                        }
+                        className={
+                            printMode
+                                ? "eregisters-contributors-table eregisters-print-table"
+                                : "eregisters-contributors-table"
+                        }
+                        pagination={
+                            printMode || showAll
+                                ? false
+                                : {
+                                      pageSize: 20,
+                                      showSizeChanger: true,
+                                      pageSizeOptions: [
+                                          "20",
+                                          "50",
+                                          "100",
+                                          "500",
+                                      ],
+                                  }
+                        }
+                    />
+                </>
             )}
         </Flex>
     );
