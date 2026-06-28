@@ -52,6 +52,9 @@ function TrackedEntitiesSearch() {
     const navigate = TrackedEntitiesIndexRoute.useNavigate();
     const { search } = TrackedEntitiesRoute.useSearch();
     const syncActor = SyncContext.useActorRef();
+    const lastDataPull = SyncContext.useSelector(
+        (s) => s.context.lastDataPull,
+    );
 
     // How many non-draft patients live on this device for this facility?
     // Used to differentiate "empty database" from "search miss" in the
@@ -274,7 +277,15 @@ function TrackedEntitiesSearch() {
                             <Button
                                 onClick={() => {
                                     markNextSyncManual();
-                                    syncActor.send({ type: "START_DATA_SYNC" });
+                                    // Match the sync popover: if the
+                                    // device has no watermark yet,
+                                    // escalate to a full pull so the
+                                    // button actually fetches data.
+                                    syncActor.send({
+                                        type: lastDataPull
+                                            ? "START_DATA_SYNC"
+                                            : "FULL_DATA_SYNC",
+                                    });
                                 }}
                             >
                                 Pull changes

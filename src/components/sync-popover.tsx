@@ -159,7 +159,19 @@ export const SyncPopover: React.FC<Props> = ({ pendingCount, compact = false }) 
                 loading={syncingData}
                 onClick={() => {
                     markNextSyncManual();
-                    syncActor.send({ type: "START_DATA_SYNC" });
+                    // On a device that has never completed a data pull
+                    // the incremental watermark is empty and the
+                    // resolveUpdatedAfter() default bounds the request
+                    // to the last 24h — which is why "Pull changes"
+                    // appeared to do nothing on fresh installs.
+                    // Escalate to a full pull in that case so the
+                    // operator's intent ("get the data") matches what
+                    // the button does.
+                    if (!lastDataPull) {
+                        syncActor.send({ type: "FULL_DATA_SYNC" });
+                    } else {
+                        syncActor.send({ type: "START_DATA_SYNC" });
+                    }
                 }}
                 block
                 style={{ justifyContent: "flex-start" }}
