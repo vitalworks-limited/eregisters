@@ -20,22 +20,26 @@ import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import React, { useMemo, useState } from "react";
 import { FacilityRiskPoint, HealthStatus } from "./summaryTypes";
-import { useProgramFacilities } from "./useProgramFacilities";
+import { useOrgUnitLevels } from "./useOrgUnitLevels";
+import {
+    AncestorRef,
+    useProgramFacilities,
+} from "./useProgramFacilities";
+import { useUsersByOrgUnit } from "./useUsersByOrgUnit";
 
 const { Title, Text } = Typography;
 
-/**
- * Merged row: one per program-enrolled facility, hydrated with summary
- * data when available. `risk === undefined` means the operational
- * summary has not been generated for this facility yet — its row still
- * appears so admins can see total coverage.
- */
 interface ContributorRow {
     orgUnit: string;
     name: string;
-    districtName?: string;
-    regionName?: string;
+    parentName?: string;
+    ancestors: AncestorRef[];
+    /** Map<level, ancestorId> — used for cascading filters. */
+    ancestorByLevel: Map<number, AncestorRef>;
     hasCoords: boolean;
+    /** Real DHIS2 user count (active = not disabled). */
+    activeUserCount: number;
+    totalUserCount: number;
     risk?: FacilityRiskPoint;
 }
 
@@ -55,12 +59,14 @@ function downloadCsv(rows: ContributorRow[]): void {
     const headers = [
         "orgUnit",
         "name",
-        "district",
-        "region",
+        "parent",
+        "ancestors",
         "hasCoordinates",
         "hasSummary",
         "status",
-        "activeUsers",
+        "users",
+        "activeUsersInPeriod",
+        "loggedInNow",
         "trackerGets",
         "trackerPosts",
         "slowRequests",
@@ -80,12 +86,14 @@ function downloadCsv(rows: ContributorRow[]): void {
             [
                 r.orgUnit,
                 r.name,
-                r.districtName ?? "",
-                r.regionName ?? "",
+                r.parentName ?? "",
+                r.ancestors.map((a) => a.displayName).join(" / "),
                 r.hasCoords ? "yes" : "no",
                 r.risk ? "yes" : "no",
                 r.risk?.status ?? "",
+                r.activeUserCount,
                 r.risk?.activeUsers ?? "",
+                r.risk?.loggedInUsers ?? "",
                 r.risk?.trackerGets ?? "",
                 r.risk?.trackerPosts ?? "",
                 r.risk?.slowRequests ?? "",
@@ -114,42 +122,48 @@ export const AdminTopContributorsTable: React.FC<{
     rows: FacilityRiskPoint[];
 }> = ({ rows }) => {
     const { token } = theme.useToken();
-    const { facilities: programFacilities, loading } = useProgramFacilities();
+    const { facilities: programFacilities, loading: facLoading } =
+        useProgramFacilities();
+    const { levels: orgUnitLevels } = useOrgUnitLevels();
+    const { counts: userCounts, loading: usersLoading } = useUsersByOrgUnit();
 
     const [statusFilter, setStatusFilter] = useState<HealthStatus | "all">("all");
-    const [districtFilter, setDistrictFilter] = useState<string | undefined>();
-    const [regionFilter, setRegionFilter] = useState<string | undefined>();
     const [summaryFilter, setSummaryFilter] = useState<"all" | "yes" | "no">(
         "all",
     );
     const [coordsFilter, setCoordsFilter] = useState<"all" | "yes" | "no">(
         "all",
     );
+    /** Map<level, selectedAncestorId> — drives the cascading filter selects. */
+    const [hierarchy, setHierarchy] = useState<Map<number, string>>(
+        new Map(),
+    );
     const [search, setSearch] = useState("");
 
-    // Index summary rows by org-unit id for O(1) hydration.
     const riskById = useMemo(() => {
         const m = new Map<string, FacilityRiskPoint>();
         for (const r of rows) m.set(r.orgUnit, r);
         return m;
     }, [rows]);
 
-    // Build the full list from program metadata; fall back to summary rows
-    // for any contributors that aren't in the program list (rare, but keeps
-    // the data honest).
     const merged: ContributorRow[] = useMemo(() => {
         const seen = new Set<string>();
         const out: ContributorRow[] = programFacilities.map((f) => {
             seen.add(f.id);
             const risk = riskById.get(f.id);
+            const ancestorByLevel = new Map<number, AncestorRef>();
+            for (const a of f.ancestors) ancestorByLevel.set(a.level, a);
             return {
                 orgUnit: f.id,
                 name: f.displayName,
-                districtName: f.parentName ?? risk?.districtName,
-                regionName: risk?.regionName,
+                parentName: f.parentName,
+                ancestors: f.ancestors,
+                ancestorByLevel,
                 hasCoords:
                     typeof f.latitude === "number" &&
                     typeof f.longitude === "number",
+                activeUserCount: userCounts.activeById.get(f.id) ?? 0,
+                totalUserCount: userCounts.totalById.get(f.id) ?? 0,
                 risk,
             };
         });
@@ -158,38 +172,69 @@ export const AdminTopContributorsTable: React.FC<{
             out.push({
                 orgUnit: r.orgUnit,
                 name: r.name,
-                districtName: r.districtName,
-                regionName: r.regionName,
+                parentName: r.districtName,
+                ancestors: [],
+                ancestorByLevel: new Map(),
                 hasCoords:
                     typeof r.latitude === "number" &&
                     typeof r.longitude === "number",
+                activeUserCount: userCounts.activeById.get(r.orgUnit) ?? 0,
+                totalUserCount: userCounts.totalById.get(r.orgUnit) ?? 0,
                 risk: r,
             });
         }
         return out;
-    }, [programFacilities, rows, riskById]);
+    }, [programFacilities, rows, riskById, userCounts]);
 
-    const districts = useMemo(() => {
-        const set = new Set<string>();
-        for (const r of merged) if (r.districtName) set.add(r.districtName);
-        return Array.from(set).sort();
+    // Derive which hierarchy levels are present in the data so we don't
+    // render filters for empty levels.
+    const populatedLevels = useMemo(() => {
+        const present = new Set<number>();
+        for (const r of merged)
+            for (const a of r.ancestors) present.add(a.level);
+        return Array.from(present).sort((a, b) => a - b);
     }, [merged]);
 
-    const regions = useMemo(() => {
-        const set = new Set<string>();
-        for (const r of merged) if (r.regionName) set.add(r.regionName);
-        return Array.from(set).sort();
-    }, [merged]);
+    // Filter facilities by the cascading hierarchy first — each higher
+    // level constrains the choices at lower levels.
+    const ancestryFiltered = useMemo(() => {
+        if (hierarchy.size === 0) return merged;
+        return merged.filter((r) => {
+            for (const [level, selectedId] of hierarchy) {
+                const ancestor = r.ancestorByLevel.get(level);
+                if (!ancestor || ancestor.id !== selectedId) return false;
+            }
+            return true;
+        });
+    }, [merged, hierarchy]);
+
+    /** Options for each level select: only ancestors present after the
+     *  upstream constraints are applied. */
+    const levelOptions = useMemo(() => {
+        const out = new Map<
+            number,
+            { value: string; label: string }[]
+        >();
+        for (const level of populatedLevels) {
+            const seen = new Map<string, AncestorRef>();
+            for (const r of ancestryFiltered) {
+                const a = r.ancestorByLevel.get(level);
+                if (a && !seen.has(a.id)) seen.set(a.id, a);
+            }
+            const opts = Array.from(seen.values())
+                .sort((a, b) => a.displayName.localeCompare(b.displayName))
+                .map((a) => ({ value: a.id, label: a.displayName }));
+            out.set(level, opts);
+        }
+        return out;
+    }, [populatedLevels, ancestryFiltered]);
 
     const filtered = useMemo(() => {
         const lc = search.trim().toLowerCase();
-        return merged.filter((r) => {
+        return ancestryFiltered.filter((r) => {
             const status = r.risk?.status ?? "unknown";
             if (statusFilter !== "all" && status !== statusFilter)
                 return false;
-            if (districtFilter && r.districtName !== districtFilter)
-                return false;
-            if (regionFilter && r.regionName !== regionFilter) return false;
             if (summaryFilter === "yes" && !r.risk) return false;
             if (summaryFilter === "no" && r.risk) return false;
             if (coordsFilter === "yes" && !r.hasCoords) return false;
@@ -199,14 +244,27 @@ export const AdminTopContributorsTable: React.FC<{
             return true;
         });
     }, [
-        merged,
+        ancestryFiltered,
         statusFilter,
-        districtFilter,
-        regionFilter,
         summaryFilter,
         coordsFilter,
         search,
     ]);
+
+    const setLevelFilter = (level: number, value?: string) => {
+        setHierarchy((prev) => {
+            const next = new Map(prev);
+            if (!value) {
+                next.delete(level);
+                // Clearing an upstream level also clears all dependents.
+                for (const l of populatedLevels)
+                    if (l > level) next.delete(l);
+            } else {
+                next.set(level, value);
+            }
+            return next;
+        });
+    };
 
     const columns: ColumnsType<ContributorRow> = [
         {
@@ -235,14 +293,15 @@ export const AdminTopContributorsTable: React.FC<{
                             </Tooltip>
                         )}
                     </Flex>
-                    {(r.districtName || r.regionName) && (
+                    {r.ancestors.length > 0 && (
                         <Text
                             type="secondary"
                             style={{ fontSize: token.fontSizeSM }}
                         >
-                            {[r.districtName, r.regionName]
-                                .filter(Boolean)
-                                .join(" · ")}
+                            {r.ancestors
+                                .slice(-3)
+                                .map((a) => a.displayName)
+                                .join(" / ")}
                         </Text>
                     )}
                 </Flex>
@@ -269,11 +328,52 @@ export const AdminTopContributorsTable: React.FC<{
         },
         {
             title: "Users",
+            key: "users",
+            width: 90,
+            sorter: (a, b) => a.activeUserCount - b.activeUserCount,
+            render: (_, r) =>
+                r.totalUserCount === 0 ? (
+                    <Text type="secondary">—</Text>
+                ) : (
+                    <Tooltip
+                        title={`${r.activeUserCount} active · ${
+                            r.totalUserCount - r.activeUserCount
+                        } disabled`}
+                    >
+                        <Text>
+                            {r.activeUserCount.toLocaleString()}
+                            {r.totalUserCount !== r.activeUserCount && (
+                                <Text type="secondary">
+                                    {" "}
+                                    / {r.totalUserCount.toLocaleString()}
+                                </Text>
+                            )}
+                        </Text>
+                    </Tooltip>
+                ),
+        },
+        {
+            title: "Logged in",
+            key: "loggedIn",
+            width: 90,
+            sorter: (a, b) =>
+                (a.risk?.loggedInUsers ?? -1) -
+                (b.risk?.loggedInUsers ?? -1),
+            render: (_, r) =>
+                r.risk?.loggedInUsers !== undefined ? (
+                    <Text>{r.risk.loggedInUsers}</Text>
+                ) : (
+                    <Text type="secondary">—</Text>
+                ),
+        },
+        {
+            title: "Active (period)",
             key: "activeUsers",
-            width: 70,
+            width: 110,
             sorter: (a, b) =>
                 (a.risk?.activeUsers ?? -1) - (b.risk?.activeUsers ?? -1),
-            render: (_, r) => r.risk?.activeUsers ?? <Text type="secondary">—</Text>,
+            render: (_, r) =>
+                r.risk?.activeUsers ?? <Text type="secondary">—</Text>,
         },
         {
             title: "GETs",
@@ -281,7 +381,8 @@ export const AdminTopContributorsTable: React.FC<{
             width: 80,
             sorter: (a, b) =>
                 (a.risk?.trackerGets ?? -1) - (b.risk?.trackerGets ?? -1),
-            render: (_, r) => r.risk?.trackerGets ?? <Text type="secondary">—</Text>,
+            render: (_, r) =>
+                r.risk?.trackerGets ?? <Text type="secondary">—</Text>,
         },
         {
             title: "POSTs",
@@ -302,14 +403,6 @@ export const AdminTopContributorsTable: React.FC<{
                 r.risk?.slowRequests ?? <Text type="secondary">—</Text>,
         },
         {
-            title: "MB",
-            key: "responseMb",
-            width: 70,
-            sorter: (a, b) =>
-                (a.risk?.responseMb ?? -1) - (b.risk?.responseMb ?? -1),
-            render: (_, r) => r.risk?.responseMb ?? <Text type="secondary">—</Text>,
-        },
-        {
             title: "Failed",
             key: "failedSyncs",
             width: 80,
@@ -323,19 +416,10 @@ export const AdminTopContributorsTable: React.FC<{
             key: "oldAppSessions",
             width: 110,
             sorter: (a, b) =>
-                (a.risk?.oldAppSessions ?? -1) - (b.risk?.oldAppSessions ?? -1),
+                (a.risk?.oldAppSessions ?? -1) -
+                (b.risk?.oldAppSessions ?? -1),
             render: (_, r) =>
                 r.risk?.oldAppSessions ?? <Text type="secondary">—</Text>,
-        },
-        {
-            title: "Primary risk",
-            key: "risk",
-            render: (_, r) =>
-                r.risk?.riskReasons[0] ? (
-                    <Text>{r.risk.riskReasons[0]}</Text>
-                ) : (
-                    <Text type="secondary">—</Text>
-                ),
         },
         {
             title: "Last activity",
@@ -400,32 +484,29 @@ export const AdminTopContributorsTable: React.FC<{
                     ]}
                     style={{ width: 160 }}
                 />
-                {regions.length > 0 && (
-                    <Select
-                        value={regionFilter}
-                        onChange={setRegionFilter}
-                        options={[
-                            { value: undefined, label: "All regions" },
-                            ...regions.map((r) => ({ value: r, label: r })),
-                        ]}
-                        style={{ minWidth: 160 }}
-                        allowClear
-                        placeholder="Region"
-                    />
-                )}
-                {districts.length > 0 && (
-                    <Select
-                        value={districtFilter}
-                        onChange={setDistrictFilter}
-                        options={[
-                            { value: undefined, label: "All districts" },
-                            ...districts.map((d) => ({ value: d, label: d })),
-                        ]}
-                        style={{ minWidth: 160 }}
-                        allowClear
-                        placeholder="District"
-                    />
-                )}
+                {populatedLevels.map((level) => {
+                    const opts = levelOptions.get(level) ?? [];
+                    if (opts.length === 0 && !hierarchy.has(level))
+                        return null;
+                    const levelMeta = orgUnitLevels.find(
+                        (l) => l.level === level,
+                    );
+                    return (
+                        <Select
+                            key={`level-${level}`}
+                            value={hierarchy.get(level)}
+                            onChange={(v) => setLevelFilter(level, v)}
+                            options={opts}
+                            placeholder={
+                                levelMeta?.displayName ?? `Level ${level}`
+                            }
+                            showSearch
+                            optionFilterProp="label"
+                            allowClear
+                            style={{ minWidth: 180 }}
+                        />
+                    );
+                })}
                 <Segmented
                     value={summaryFilter}
                     onChange={(v) => setSummaryFilter(v as typeof summaryFilter)}
@@ -450,7 +531,7 @@ export const AdminTopContributorsTable: React.FC<{
                 <Empty
                     description={
                         merged.length === 0
-                            ? loading
+                            ? facLoading
                                 ? "Loading program facilities…"
                                 : "No facilities enrolled in this program."
                             : "No facilities match the current filters."
@@ -467,7 +548,9 @@ export const AdminTopContributorsTable: React.FC<{
                     dataSource={filtered}
                     rowKey="orgUnit"
                     size="small"
-                    loading={loading && merged.length === 0}
+                    loading={
+                        (facLoading || usersLoading) && merged.length === 0
+                    }
                     pagination={{
                         pageSize: 20,
                         showSizeChanger: true,

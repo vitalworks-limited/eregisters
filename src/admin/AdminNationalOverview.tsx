@@ -29,6 +29,9 @@ import {
     OverviewCards,
     PeriodType,
 } from "./summaryTypes";
+import { useProgramFacilities } from "./useProgramFacilities";
+import { useProgramTotals } from "./useProgramTotals";
+import { useUsersByOrgUnit } from "./useUsersByOrgUnit";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -105,6 +108,11 @@ export const AdminNationalOverview: React.FC<{
     );
     const [summary, setSummary] = useState<AdminOverviewSummary | undefined>();
     const [loading, setLoading] = useState(false);
+    const { totals: liveTotals } = useProgramTotals(
+        scopeRootOrgUnit?.id,
+    );
+    const { facilities: programFacilities } = useProgramFacilities();
+    const { counts: userCounts } = useUsersByOrgUnit();
     const [deliveredBy, setDeliveredBy] = useState<
         "datastore" | "fixture" | "no-data" | undefined
     >();
@@ -164,12 +172,63 @@ export const AdminNationalOverview: React.FC<{
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [period, orgUnit.id, orgUnit.scope]);
 
+    // Hydrate the four metadata-backed cards with live DHIS2 values
+    // whenever they're available. This keeps the rest of the summary
+    // (cache age, source labels, alerts, map) intact while ensuring the
+    // numbers you care about — facilities, users, clients, encounters —
+    // reflect the current instance, not last week's cache.
+    const cards = useMemo(() => {
+        if (!summary) return undefined;
+        const next: typeof summary.cards = { ...summary.cards };
+        if (programFacilities.length > 0) {
+            next.facilitiesUsingERegistry = {
+                ...next.facilitiesUsingERegistry,
+                value: programFacilities.length,
+                source: "datastore",
+                status: "healthy",
+            };
+        }
+        const distinctActiveUsers = userCounts.activeById.size;
+        const distinctTotalUsers = userCounts.totalById.size;
+        if (distinctTotalUsers > 0) {
+            next.registeredUsers = {
+                ...next.registeredUsers,
+                value: distinctTotalUsers,
+                source: "datastore",
+                status: "healthy",
+            };
+            next.activeUsers = {
+                ...next.activeUsers,
+                value: distinctActiveUsers,
+                source: "datastore",
+                status: distinctActiveUsers > 0 ? "healthy" : "watch",
+            };
+        }
+        if (typeof liveTotals.registeredClients === "number") {
+            next.registeredClients = {
+                ...next.registeredClients,
+                value: liveTotals.registeredClients,
+                source: "datastore",
+                status: "healthy",
+            };
+        }
+        if (typeof liveTotals.totalEvents === "number") {
+            next.totalEncounters = {
+                ...next.totalEncounters,
+                value: liveTotals.totalEvents,
+                source: "datastore",
+                status: "healthy",
+            };
+        }
+        return next;
+    }, [summary, programFacilities, userCounts, liveTotals]);
+
     const health = useMemo(
         () =>
-            summary
-                ? calculateAdminOverviewHealth(summary.cards)
+            cards
+                ? calculateAdminOverviewHealth(cards)
                 : { score: 0, band: "unknown" as const, penalties: [] },
-        [summary],
+        [cards],
     );
 
     return (
@@ -257,7 +316,7 @@ export const AdminNationalOverview: React.FC<{
                     {CARD_ORDER.map((key) => (
                         <Col key={key} xs={24} sm={12} md={8} lg={6} xl={6}>
                             <AdminSummaryCard
-                                metric={summary.cards[key]}
+                                metric={(cards ?? summary.cards)[key]}
                             />
                         </Col>
                     ))}

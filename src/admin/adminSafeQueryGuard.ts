@@ -21,25 +21,43 @@ export interface SafeQueryViolation {
     detail: string;
 }
 
+/**
+ * Count-only tracker reads are tolerated when the URL pins
+ * `pageSize=1` (return just one row + the page metadata). That's a
+ * single tiny request — fundamentally not a sync storm — but it lets
+ * the dashboard show real enrolment / event totals.
+ */
+function isCountOnlyTrackerProbe(url: string): boolean {
+    return (
+        /[?&]pageSize=1\b/.test(url) &&
+        /[?&]totalPages=true\b/.test(url) &&
+        !/fields=\*/.test(url) &&
+        !/events\[\*\]/.test(url) &&
+        !/enrollments\[[^\]]*events\[\*\]/.test(url)
+    );
+}
+
 const UNSAFE_PATTERNS: { test: (url: string) => SafeQueryViolation | null }[] = [
     {
         test: (url) =>
-            /\/tracker\/trackedEntities/.test(url)
+            /\/tracker\/trackedEntities/.test(url) &&
+            !isCountOnlyTrackerProbe(url)
                 ? {
                       pattern: "tracker/trackedEntities",
                       detail:
-                          "Admin Overview must read precomputed summaries — never the live tracker export.",
+                          "Admin Overview must read precomputed summaries — never the live tracker export. (Count-only probes with pageSize=1&totalPages=true are permitted.)",
                   }
                 : null,
     },
     {
         test: (url) =>
             /\/tracker\/events(?!\/?[\w-]*$)/.test(url) &&
-            !/dataValuesOnly=true/.test(url)
+            !/dataValuesOnly=true/.test(url) &&
+            !isCountOnlyTrackerProbe(url)
                 ? {
                       pattern: "tracker/events",
                       detail:
-                          "Admin Overview must use cached event counts, not live tracker/events.",
+                          "Admin Overview must use cached event counts, not live tracker/events. (Count-only probes with pageSize=1&totalPages=true are permitted.)",
                   }
                 : null,
     },

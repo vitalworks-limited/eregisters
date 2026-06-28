@@ -27,6 +27,9 @@ describe("adminSafeQueryGuard", () => {
             "/api/analytics?dimension=ou:NATIONAL&dimension=pe:THIS_YEAR",
             "/api/me?fields=id,displayName,authorities,organisationUnits[id,displayName],dataViewOrganisationUnits[id,displayName]",
             "/api/dataStore/eregisters-admin/sync-config",
+            // Count-only tracker probes are explicitly tolerated.
+            "/api/tracker/trackedEntities?program=PROG&ouMode=DESCENDANTS&orgUnit=ROOT&pageSize=1&totalPages=true&fields=trackedEntity",
+            "/api/tracker/events?program=PROG&ouMode=DESCENDANTS&orgUnit=ROOT&pageSize=1&totalPages=true&fields=event",
         ];
         test.each(allowed)("does not throw for %s", (url) => {
             expect(() => assertAdminOverviewSafeRequest(url)).not.toThrow();

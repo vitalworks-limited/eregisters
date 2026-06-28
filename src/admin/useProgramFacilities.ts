@@ -11,11 +11,19 @@ import { assertAdminOverviewSafeRequest } from "./adminSafeQueryGuard";
  * plot a point even when the operational summary hasn't been
  * generated yet.
  */
+export interface AncestorRef {
+    id: string;
+    displayName: string;
+    level: number;
+}
+
 export interface ProgramFacility {
     id: string;
     displayName: string;
     level?: number;
     parentName?: string;
+    /** Ordered root → parent. Each element has DHIS2 id, name and level. */
+    ancestors: AncestorRef[];
     latitude?: number;
     longitude?: number;
 }
@@ -25,6 +33,7 @@ interface ProgramQueryRow {
     displayName: string;
     level?: number;
     parent?: { displayName?: string };
+    ancestors?: Array<{ id: string; displayName: string; level: number }>;
     geometry?: { type?: string; coordinates?: unknown };
 }
 
@@ -102,7 +111,7 @@ export function useProgramFacilities(): {
                         resource,
                         params: {
                             fields:
-                                "organisationUnits[id,displayName,level,parent[displayName],geometry]",
+                                "organisationUnits[id,displayName,level,parent[displayName],ancestors[id,displayName,level],geometry]",
                         },
                     },
                 })) as unknown as ProgramFacilitiesQuery;
@@ -114,6 +123,11 @@ export function useProgramFacilities(): {
                         displayName: ou.displayName,
                         level: ou.level,
                         parentName: ou.parent?.displayName,
+                        ancestors: (ou.ancestors ?? []).map((a) => ({
+                            id: a.id,
+                            displayName: a.displayName,
+                            level: a.level,
+                        })),
                         latitude: ll ? ll[1] : undefined,
                         longitude: ll ? ll[0] : undefined,
                     };
