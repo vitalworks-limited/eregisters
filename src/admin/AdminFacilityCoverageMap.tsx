@@ -1,8 +1,8 @@
-import { Flex, Radio, Skeleton, theme, Typography } from "antd";
+import { Flex, Radio, Segmented, Select, Skeleton, theme, Typography } from "antd";
 import L from "leaflet";
 // @ts-expect-error — d2-app-scripts handles CSS via Vite; no TS types needed.
 import "leaflet/dist/leaflet.css";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
     CircleMarker,
     GeoJSON,
@@ -13,7 +13,14 @@ import {
 } from "react-leaflet";
 import { FacilityRiskPoint, HealthStatus } from "./summaryTypes";
 import { useOrgUnitBoundaries } from "./useOrgUnitBoundaries";
-import { ProgramFacility, useProgramFacilities } from "./useProgramFacilities";
+import { useOrgUnitLevels } from "./useOrgUnitLevels";
+import {
+    AncestorRef,
+    ProgramFacility,
+    useProgramFacilities,
+} from "./useProgramFacilities";
+import { useTotalFacilitiesPerAncestor } from "./useTotalFacilitiesPerAncestor";
+import { useUsersByOrgUnit } from "./useUsersByOrgUnit";
 
 const { Text, Title } = Typography;
 
@@ -21,13 +28,16 @@ interface PlottedFacility {
     id: string;
     name: string;
     districtName?: string;
-    regionName?: string;
     latitude: number;
     longitude: number;
+    ancestors: AncestorRef[];
     risk?: FacilityRiskPoint;
+    activeUserCount: number;
 }
 
-type LayerKey =
+type DisplayMode = "facilities" | "choropleth" | "both";
+
+type ThematicKey =
     | "coverage"
     | "active"
     | "noData"
@@ -38,11 +48,41 @@ type LayerKey =
     | "failed"
     | "oldSession";
 
-interface LayerSpec {
-    key: LayerKey;
+interface ThematicSpec {
+    key: ThematicKey;
     label: string;
     description: string;
     bin: (f: PlottedFacility) => { label: string; color: string } | null;
+}
+
+type ChoroplethMetric =
+    | "enrolledCount"
+    | "coverageRatio"
+    | "activeUsers"
+    | "loggedInUsers"
+    | "trackerGets"
+    | "trackerPosts"
+    | "failedSyncs";
+
+interface ChoroplethSpec {
+    key: ChoroplethMetric;
+    label: string;
+    description: string;
+    extract: (agg: PolygonAggregate) => number | undefined;
+    /** When true, value is interpreted as a 0-100 % rather than a count. */
+    isRatio?: boolean;
+}
+
+interface PolygonAggregate {
+    polygonId: string;
+    polygonName: string;
+    enrolledCount: number;
+    totalFacilities?: number;
+    activeUsers: number;
+    loggedInUsers: number;
+    trackerGets: number;
+    trackerPosts: number;
+    failedSyncs: number;
 }
 
 const STATUS_COLOR: Record<HealthStatus, string> = {
@@ -52,6 +92,15 @@ const STATUS_COLOR: Record<HealthStatus, string> = {
     critical: "#b91c1c",
     unknown: "#9ca3af",
 };
+
+const CHOROPLETH_RAMP = [
+    "#eef2ff",
+    "#c7d2fe",
+    "#93c5fd",
+    "#60a5fa",
+    "#3b82f6",
+    "#1d4ed8",
+];
 
 function bandForCount(value: number, thresholds: [number, number, number]) {
     if (value === 0) return { label: "0", color: "#cbd5e1" };
@@ -69,7 +118,7 @@ function bandForCount(value: number, thresholds: [number, number, number]) {
     return { label: `> ${thresholds[2]}`, color: "#b91c1c" };
 }
 
-const LAYERS: LayerSpec[] = [
+const THEMATIC_LAYERS: ThematicSpec[] = [
     {
         key: "coverage",
         label: "Coverage",
@@ -78,7 +127,7 @@ const LAYERS: LayerSpec[] = [
     },
     {
         key: "active",
-        label: "Active users",
+        label: "Active users (logged in now)",
         description:
             "Facilities with users signed in right now (currently logged-in sessions).",
         bin: (f) => {
@@ -155,11 +204,56 @@ const LAYERS: LayerSpec[] = [
     },
 ];
 
-/**
- * Fits the map viewport to the GeoJSON bounding box once boundaries
- * load. Re-running on level changes keeps the view tidy when the user
- * toggles regions vs. districts later.
- */
+const CHOROPLETH_METRICS: ChoroplethSpec[] = [
+    {
+        key: "enrolledCount",
+        label: "Enrolled facilities",
+        description: "Number of program-enrolled facilities in each area.",
+        extract: (a) => a.enrolledCount,
+    },
+    {
+        key: "coverageRatio",
+        label: "Coverage % (enrolled ÷ total)",
+        description:
+            "Share of facilities in each area enrolled in the program.",
+        extract: (a) =>
+            a.totalFacilities && a.totalFacilities > 0
+                ? Math.round((a.enrolledCount / a.totalFacilities) * 100)
+                : undefined,
+        isRatio: true,
+    },
+    {
+        key: "activeUsers",
+        label: "Active users (period)",
+        description: "Total users active in the period across each area.",
+        extract: (a) => a.activeUsers,
+    },
+    {
+        key: "loggedInUsers",
+        label: "Logged in now",
+        description: "Currently signed-in users aggregated by area.",
+        extract: (a) => a.loggedInUsers,
+    },
+    {
+        key: "trackerGets",
+        label: "Tracker GETs",
+        description: "Total tracker GET volume in the period.",
+        extract: (a) => a.trackerGets,
+    },
+    {
+        key: "trackerPosts",
+        label: "Tracker POSTs",
+        description: "Total tracker POST volume in the period.",
+        extract: (a) => a.trackerPosts,
+    },
+    {
+        key: "failedSyncs",
+        label: "Failed syncs",
+        description: "Sum of failed sync runs in the period.",
+        extract: (a) => a.failedSyncs,
+    },
+];
+
 const FitToBoundaries: React.FC<{
     geojson: GeoJSON.FeatureCollection | null;
 }> = ({ geojson }) => {
@@ -173,30 +267,63 @@ const FitToBoundaries: React.FC<{
                 map.fitBounds(bounds, { padding: [20, 20] });
             }
         } catch {
-            // ignore — keep current viewport
+            /* ignore */
         }
     }, [geojson, map]);
     return null;
 };
 
-/**
- * Operational map for the Admin Dashboard styled like DHIS2 Maps:
- * GeoJSON polygons replace the OpenStreetMap tile basemap, the layer
- * picker + legend float as an overlay control, attribution is hidden,
- * and only program-enrolled facilities are plotted.
- */
+function rampColor(value: number, min: number, max: number): string {
+    if (!isFinite(value) || max === min) return CHOROPLETH_RAMP[0];
+    const t = Math.max(0, Math.min(1, (value - min) / (max - min)));
+    const idx = Math.min(
+        CHOROPLETH_RAMP.length - 1,
+        Math.floor(t * CHOROPLETH_RAMP.length),
+    );
+    return CHOROPLETH_RAMP[idx];
+}
+
 export const AdminFacilityCoverageMap: React.FC<{
     facilities: FacilityRiskPoint[];
 }> = ({ facilities }) => {
     const { token } = theme.useToken();
-    const [layerKey, setLayerKey] = useState<LayerKey>("coverage");
+
+    // Controls
+    const [mode, setMode] = useState<DisplayMode>("both");
+    const [thematic, setThematic] = useState<ThematicKey>("coverage");
+    const [choroplethMetric, setChoroplethMetric] =
+        useState<ChoroplethMetric>("enrolledCount");
+    const [aggregationLevel, setAggregationLevel] = useState<number>(2);
+
     const [hoveredOu, setHoveredOu] = useState<string | undefined>();
+
+    // Data
     const {
         facilities: programFacilities,
         loading: facLoading,
         error: facError,
     } = useProgramFacilities();
-    const { boundaries, loading: boundariesLoading } = useOrgUnitBoundaries();
+    const { levels: orgUnitLevels } = useOrgUnitLevels();
+    const { boundaries, loading: boundariesLoading } = useOrgUnitBoundaries([
+        aggregationLevel,
+    ]);
+    const { counts: userCounts } = useUsersByOrgUnit();
+    const facilityLevel = orgUnitLevels.length
+        ? orgUnitLevels[orgUnitLevels.length - 1].level
+        : undefined;
+    const { totals: facilityTotals } =
+        useTotalFacilitiesPerAncestor(facilityLevel);
+
+    // Auto-pick the default aggregation level — second-from-root if
+    // available (typical "Region" in DHIS2 hierarchies).
+    useEffect(() => {
+        if (orgUnitLevels.length === 0) return;
+        const candidate =
+            orgUnitLevels.find((l) => l.level === 2)?.level ??
+            orgUnitLevels[Math.min(1, orgUnitLevels.length - 1)].level;
+        setAggregationLevel((prev) => prev || candidate);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [orgUnitLevels]);
 
     const riskById = useMemo(() => {
         const m = new Map<string, FacilityRiskPoint>();
@@ -220,16 +347,80 @@ export const AdminFacilityCoverageMap: React.FC<{
                 districtName: f.parentName,
                 latitude: f.latitude,
                 longitude: f.longitude,
+                ancestors: f.ancestors,
                 risk: riskById.get(f.id),
+                activeUserCount: userCounts.activeById.get(f.id) ?? 0,
             }));
-    }, [programFacilities, riskById]);
+    }, [programFacilities, riskById, userCounts]);
 
-    const activeLayer = LAYERS.find((l) => l.key === layerKey) ?? LAYERS[0];
+    // Aggregate per polygon (at the selected level).
+    const aggregates = useMemo(() => {
+        const map = new Map<string, PolygonAggregate>();
+        for (const b of boundaries) {
+            map.set(b.id, {
+                polygonId: b.id,
+                polygonName: b.name,
+                enrolledCount: 0,
+                totalFacilities: facilityTotals.countByAncestorId.get(b.id),
+                activeUsers: 0,
+                loggedInUsers: 0,
+                trackerGets: 0,
+                trackerPosts: 0,
+                failedSyncs: 0,
+            });
+        }
+        // Walk every enrolled facility once and tally on each matching ancestor.
+        for (const f of programFacilities) {
+            const ancestor = f.ancestors.find(
+                (a) => a.level === aggregationLevel,
+            );
+            if (!ancestor) continue;
+            const agg = map.get(ancestor.id);
+            if (!agg) continue;
+            agg.enrolledCount += 1;
+            const risk = riskById.get(f.id);
+            if (risk) {
+                agg.activeUsers += risk.activeUsers;
+                agg.loggedInUsers += risk.loggedInUsers ?? 0;
+                agg.trackerGets += risk.trackerGets;
+                agg.trackerPosts += risk.trackerPosts;
+                agg.failedSyncs += risk.failedSyncs;
+            }
+        }
+        return map;
+    }, [
+        boundaries,
+        programFacilities,
+        riskById,
+        aggregationLevel,
+        facilityTotals,
+    ]);
+
+    const choroplethSpec = useMemo(
+        () => CHOROPLETH_METRICS.find((m) => m.key === choroplethMetric)!,
+        [choroplethMetric],
+    );
+
+    const choroplethRange = useMemo(() => {
+        let min = Infinity;
+        let max = -Infinity;
+        for (const a of aggregates.values()) {
+            const v = choroplethSpec.extract(a);
+            if (typeof v !== "number") continue;
+            if (v < min) min = v;
+            if (v > max) max = v;
+        }
+        if (!isFinite(min)) return { min: 0, max: 0 };
+        return { min, max };
+    }, [aggregates, choroplethSpec]);
+
+    const activeThematic =
+        THEMATIC_LAYERS.find((l) => l.key === thematic) ?? THEMATIC_LAYERS[0];
 
     const legend = useMemo(() => {
         const buckets = new Map<string, { color: string; count: number }>();
         for (const f of plotted) {
-            const bin = activeLayer.bin(f);
+            const bin = activeThematic.bin(f);
             if (!bin) continue;
             const existing = buckets.get(bin.label);
             if (existing) existing.count += 1;
@@ -240,7 +431,7 @@ export const AdminFacilityCoverageMap: React.FC<{
             color: v.color,
             count: v.count,
         }));
-    }, [plotted, activeLayer]);
+    }, [plotted, activeThematic]);
 
     const featureCollection = useMemo<GeoJSON.FeatureCollection | null>(() => {
         if (boundaries.length === 0) return null;
@@ -261,6 +452,8 @@ export const AdminFacilityCoverageMap: React.FC<{
 
     const totalEnrolled = programFacilities.length;
     const plottedCount = plotted.length;
+    const showFacilities = mode === "facilities" || mode === "both";
+    const showChoropleth = mode === "choropleth" || mode === "both";
 
     if (facLoading && totalEnrolled === 0) {
         return (
@@ -287,23 +480,28 @@ export const AdminFacilityCoverageMap: React.FC<{
                 }}
             >
                 <Title level={5} style={{ margin: 0 }}>
-                    Facility map unavailable
+                    Coverage Map unavailable
                 </Title>
                 <Text type="secondary">{facError}</Text>
             </div>
         );
     }
 
+    const aggregationLevelLabel =
+        orgUnitLevels.find((l) => l.level === aggregationLevel)?.displayName ??
+        `Level ${aggregationLevel}`;
+
     return (
         <Flex vertical gap={token.marginSM}>
             <Flex align="center" justify="space-between" gap={token.marginSM} wrap>
                 <Title level={5} style={{ margin: 0 }}>
-                    Facility coverage map
+                    Coverage Map
                 </Title>
                 <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
                     {plottedCount.toLocaleString()} of{" "}
                     {totalEnrolled.toLocaleString()} enrolled facilities have
-                    coordinates · {boundaries.length.toLocaleString()} boundaries
+                    coordinates · {boundaries.length.toLocaleString()}{" "}
+                    {aggregationLevelLabel.toLowerCase()} boundaries
                 </Text>
             </Flex>
 
@@ -335,7 +533,7 @@ export const AdminFacilityCoverageMap: React.FC<{
                         <MapContainer
                             center={center}
                             zoom={6}
-                            scrollWheelZoom
+                            scrollWheelZoom={false}
                             attributionControl={false}
                             zoomControl={false}
                             style={{
@@ -351,27 +549,37 @@ export const AdminFacilityCoverageMap: React.FC<{
                                         geojson={featureCollection}
                                     />
                                     <GeoJSON
+                                        key={`${aggregationLevel}-${choroplethMetric}-${mode}`}
                                         data={featureCollection}
                                         style={(feature) => {
                                             const id = feature?.properties
                                                 ?.id as string | undefined;
-                                            const level = feature?.properties
-                                                ?.level as number | undefined;
+                                            const agg = id
+                                                ? aggregates.get(id)
+                                                : undefined;
                                             const isHovered = id === hoveredOu;
+                                            let fillColor = "#ffffff";
+                                            let fillOpacity = isHovered ? 0.35 : 0.15;
+                                            if (showChoropleth && agg) {
+                                                const v = choroplethSpec.extract(agg);
+                                                if (typeof v === "number") {
+                                                    fillColor = rampColor(
+                                                        v,
+                                                        choroplethRange.min,
+                                                        choroplethRange.max,
+                                                    );
+                                                    fillOpacity = isHovered
+                                                        ? 0.85
+                                                        : 0.7;
+                                                }
+                                            }
                                             return {
                                                 color: isHovered
                                                     ? "#1677ff"
                                                     : "#6b7280",
-                                                weight:
-                                                    isHovered
-                                                        ? 2.2
-                                                        : level && level <= 2
-                                                          ? 1.2
-                                                          : 0.7,
-                                                fillColor: "#ffffff",
-                                                fillOpacity: isHovered
-                                                    ? 0.35
-                                                    : 0.15,
+                                                weight: isHovered ? 2.2 : 1.0,
+                                                fillColor,
+                                                fillOpacity,
                                             };
                                         }}
                                         onEachFeature={(feature, layer) => {
@@ -379,6 +587,9 @@ export const AdminFacilityCoverageMap: React.FC<{
                                                 ?.id as string | undefined;
                                             const name = feature.properties
                                                 ?.name as string | undefined;
+                                            const agg = id
+                                                ? aggregates.get(id)
+                                                : undefined;
                                             layer.on({
                                                 mouseover: () => setHoveredOu(id),
                                                 mouseout: () =>
@@ -386,23 +597,16 @@ export const AdminFacilityCoverageMap: React.FC<{
                                                 click: (e) => {
                                                     const target = e.target as L.Layer & {
                                                         getBounds?: () => L.LatLngBounds;
+                                                        _map?: L.Map;
                                                     };
                                                     if (target.getBounds) {
                                                         try {
-                                                            (
-                                                                e.target as L.Layer
-                                                            ).addTo;
-                                                            const map = (
-                                                                e.target as L.Layer & {
-                                                                    _map?: L.Map;
-                                                                }
-                                                            )._map;
                                                             const bounds = target.getBounds();
                                                             if (
-                                                                map &&
+                                                                target._map &&
                                                                 bounds.isValid()
                                                             ) {
-                                                                map.fitBounds(
+                                                                target._map.fitBounds(
                                                                     bounds,
                                                                     {
                                                                         padding: [20, 20],
@@ -416,46 +620,77 @@ export const AdminFacilityCoverageMap: React.FC<{
                                                 },
                                             });
                                             if (name) {
-                                                layer.bindTooltip(name, {
-                                                    sticky: true,
-                                                    direction: "top",
-                                                    opacity: 0.9,
-                                                });
+                                                const lines: string[] = [name];
+                                                if (agg) {
+                                                    lines.push(
+                                                        `Enrolled: ${agg.enrolledCount}${
+                                                            agg.totalFacilities
+                                                                ? ` / ${agg.totalFacilities} (${Math.round((agg.enrolledCount / agg.totalFacilities) * 100)}%)`
+                                                                : ""
+                                                        }`,
+                                                    );
+                                                    if (showChoropleth) {
+                                                        const v =
+                                                            choroplethSpec.extract(
+                                                                agg,
+                                                            );
+                                                        if (
+                                                            typeof v === "number"
+                                                        ) {
+                                                            lines.push(
+                                                                `${choroplethSpec.label}: ${v.toLocaleString()}${
+                                                                    choroplethSpec.isRatio
+                                                                        ? "%"
+                                                                        : ""
+                                                                }`,
+                                                            );
+                                                        }
+                                                    }
+                                                }
+                                                layer.bindTooltip(
+                                                    lines.join("<br/>"),
+                                                    {
+                                                        sticky: true,
+                                                        direction: "top",
+                                                        opacity: 0.92,
+                                                    },
+                                                );
                                             }
                                         }}
                                     />
                                 </>
                             )}
 
-                            {plotted.map((f) => {
-                                const bin = activeLayer.bin(f);
-                                if (!bin) return null;
-                                return (
-                                    <CircleMarker
-                                        key={f.id}
-                                        center={[f.latitude, f.longitude]}
-                                        radius={7}
-                                        pathOptions={{
-                                            color: "#ffffff",
-                                            weight: 1.2,
-                                            fillColor: bin.color,
-                                            fillOpacity: 0.9,
-                                        }}
-                                    >
-                                        <Popup>
-                                            <PopupBody
-                                                facility={f}
-                                                binLabel={bin.label}
-                                            />
-                                        </Popup>
-                                    </CircleMarker>
-                                );
-                            })}
+                            {showFacilities &&
+                                plotted.map((f) => {
+                                    const bin = activeThematic.bin(f);
+                                    if (!bin) return null;
+                                    return (
+                                        <CircleMarker
+                                            key={f.id}
+                                            center={[f.latitude, f.longitude]}
+                                            radius={7}
+                                            pathOptions={{
+                                                color: "#ffffff",
+                                                weight: 1.2,
+                                                fillColor: bin.color,
+                                                fillOpacity: 0.9,
+                                            }}
+                                        >
+                                            <Popup>
+                                                <PopupBody
+                                                    facility={f}
+                                                    binLabel={bin.label}
+                                                />
+                                            </Popup>
+                                        </CircleMarker>
+                                    );
+                                })}
                         </MapContainer>
                     )
                 )}
 
-                {/* DHIS2-Maps-style overlay control: layer picker + legend */}
+                {/* DHIS2-Maps-style overlay control */}
                 <div
                     style={{
                         position: "absolute",
@@ -465,80 +700,166 @@ export const AdminFacilityCoverageMap: React.FC<{
                         border: `1px solid ${token.colorBorderSecondary}`,
                         boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
                         padding: token.paddingSM,
-                        maxWidth: 260,
+                        maxWidth: 280,
+                        maxHeight: "calc(100% - 24px)",
+                        overflowY: "auto",
                         zIndex: 1000,
                     }}
                 >
                     <Flex vertical gap={token.marginXS}>
-                        <Text strong>Thematic layer</Text>
-                        <Radio.Group
-                            value={layerKey}
-                            onChange={(e) => setLayerKey(e.target.value)}
-                        >
-                            <Flex vertical gap={2}>
-                                {LAYERS.map((l) => (
-                                    <Radio key={l.key} value={l.key}>
-                                        <Text
-                                            style={{
-                                                fontSize: token.fontSizeSM,
-                                            }}
-                                        >
-                                            {l.label}
-                                        </Text>
-                                    </Radio>
-                                ))}
-                            </Flex>
-                        </Radio.Group>
-                        <Text
-                            type="secondary"
-                            style={{ fontSize: token.fontSizeSM }}
-                        >
-                            {activeLayer.description}
-                        </Text>
-                        {legend.length > 0 && (
-                            <Flex vertical gap={2}>
+                        <Text strong>Display mode</Text>
+                        <Segmented
+                            block
+                            value={mode}
+                            onChange={(v) => setMode(v as DisplayMode)}
+                            options={[
+                                { value: "facilities", label: "Facilities" },
+                                { value: "choropleth", label: "Choropleth" },
+                                { value: "both", label: "Both" },
+                            ]}
+                        />
+
+                        <Text strong>Aggregate by</Text>
+                        <Select
+                            size="small"
+                            value={aggregationLevel}
+                            onChange={(v) => setAggregationLevel(v)}
+                            options={orgUnitLevels
+                                .filter(
+                                    (l) =>
+                                        l.level >= 2 &&
+                                        l.level !== facilityLevel,
+                                )
+                                .map((l) => ({
+                                    value: l.level,
+                                    label: `${l.displayName} (level ${l.level})`,
+                                }))}
+                        />
+
+                        {showChoropleth && (
+                            <>
+                                <Text strong>Choropleth metric</Text>
+                                <Select
+                                    size="small"
+                                    value={choroplethMetric}
+                                    onChange={(v) => setChoroplethMetric(v)}
+                                    options={CHOROPLETH_METRICS.map((c) => ({
+                                        value: c.key,
+                                        label: c.label,
+                                    }))}
+                                />
                                 <Text
-                                    strong
+                                    type="secondary"
                                     style={{ fontSize: token.fontSizeSM }}
                                 >
-                                    Legend
+                                    {choroplethSpec.description}
                                 </Text>
-                                {legend.map((b) => (
-                                    <Flex
-                                        key={b.label}
-                                        align="center"
-                                        gap={token.marginXS}
-                                    >
-                                        <span
-                                            style={{
-                                                display: "inline-block",
-                                                width: 10,
-                                                height: 10,
-                                                borderRadius: "50%",
-                                                background: b.color,
-                                                border: "1px solid rgba(0,0,0,0.15)",
-                                            }}
-                                        />
-                                        <Text
-                                            style={{
-                                                fontSize: token.fontSizeSM,
-                                                flex: 1,
-                                            }}
-                                        >
-                                            {b.label}
-                                        </Text>
-                                        <Text
-                                            type="secondary"
-                                            style={{
-                                                fontSize: token.fontSizeSM,
-                                            }}
-                                        >
-                                            {b.count}
-                                        </Text>
-                                    </Flex>
-                                ))}
-                            </Flex>
+                                <Flex
+                                    align="center"
+                                    gap={token.marginXS}
+                                    style={{ marginTop: token.marginXXS }}
+                                >
+                                    <Text style={{ fontSize: token.fontSizeSM }}>
+                                        {choroplethRange.min}
+                                        {choroplethSpec.isRatio ? "%" : ""}
+                                    </Text>
+                                    <div
+                                        style={{
+                                            flex: 1,
+                                            height: 10,
+                                            background: `linear-gradient(to right, ${CHOROPLETH_RAMP.join(
+                                                ",",
+                                            )})`,
+                                            borderRadius: 2,
+                                        }}
+                                    />
+                                    <Text style={{ fontSize: token.fontSizeSM }}>
+                                        {choroplethRange.max}
+                                        {choroplethSpec.isRatio ? "%" : ""}
+                                    </Text>
+                                </Flex>
+                            </>
                         )}
+
+                        {showFacilities && (
+                            <>
+                                <Text strong>Facility thematic</Text>
+                                <Radio.Group
+                                    value={thematic}
+                                    onChange={(e) => setThematic(e.target.value)}
+                                >
+                                    <Flex vertical gap={2}>
+                                        {THEMATIC_LAYERS.map((l) => (
+                                            <Radio key={l.key} value={l.key}>
+                                                <Text
+                                                    style={{
+                                                        fontSize:
+                                                            token.fontSizeSM,
+                                                    }}
+                                                >
+                                                    {l.label}
+                                                </Text>
+                                            </Radio>
+                                        ))}
+                                    </Flex>
+                                </Radio.Group>
+                                <Text
+                                    type="secondary"
+                                    style={{ fontSize: token.fontSizeSM }}
+                                >
+                                    {activeThematic.description}
+                                </Text>
+                                {legend.length > 0 && (
+                                    <Flex vertical gap={2}>
+                                        <Text
+                                            strong
+                                            style={{
+                                                fontSize: token.fontSizeSM,
+                                            }}
+                                        >
+                                            Facility legend
+                                        </Text>
+                                        {legend.map((b) => (
+                                            <Flex
+                                                key={b.label}
+                                                align="center"
+                                                gap={token.marginXS}
+                                            >
+                                                <span
+                                                    style={{
+                                                        display: "inline-block",
+                                                        width: 10,
+                                                        height: 10,
+                                                        borderRadius: "50%",
+                                                        background: b.color,
+                                                        border: "1px solid rgba(0,0,0,0.15)",
+                                                    }}
+                                                />
+                                                <Text
+                                                    style={{
+                                                        fontSize:
+                                                            token.fontSizeSM,
+                                                        flex: 1,
+                                                    }}
+                                                >
+                                                    {b.label}
+                                                </Text>
+                                                <Text
+                                                    type="secondary"
+                                                    style={{
+                                                        fontSize:
+                                                            token.fontSizeSM,
+                                                    }}
+                                                >
+                                                    {b.count}
+                                                </Text>
+                                            </Flex>
+                                        ))}
+                                    </Flex>
+                                )}
+                            </>
+                        )}
+
                         {(facLoading || boundariesLoading) && (
                             <Text
                                 type="secondary"
@@ -567,6 +888,7 @@ const PopupBody: React.FC<{
             <div style={{ marginBottom: 4 }}>
                 <strong>Layer value:</strong> {binLabel}
             </div>
+            <div>Users (DHIS2): {facility.activeUserCount}</div>
             {facility.risk ? (
                 <>
                     <div>Status: {facility.risk.status}</div>
