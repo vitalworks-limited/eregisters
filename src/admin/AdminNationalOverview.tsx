@@ -1,4 +1,4 @@
-import { ReloadOutlined, WarningOutlined } from "@ant-design/icons";
+import { PrinterOutlined, ReloadOutlined, WarningOutlined } from "@ant-design/icons";
 import { useDataEngine } from "@dhis2/app-runtime";
 import {
     Alert,
@@ -96,6 +96,46 @@ function bandLabel(band: string): string {
             return "No data";
     }
 }
+
+/** Print-only CSS — hides app chrome and lays out the dashboard for
+ *  multi-page A4/Letter output via the browser's Print → Save as PDF. */
+const PrintStyles: React.FC = () => (
+    <style>{`
+        @media print {
+            body { background: #fff !important; }
+            header, [role="banner"], nav, .ant-layout-sider,
+            .ant-pagination, .eregisters-print-hide,
+            .leaflet-control-container { display: none !important; }
+            .ant-layout-content,
+            .ant-layout, .ant-layout-content > * {
+                padding: 0 !important; margin: 0 !important;
+                box-shadow: none !important;
+            }
+            .eregisters-print-root {
+                width: 100% !important;
+                max-width: 1100px;
+                margin: 0 auto !important;
+                font-size: 12px;
+            }
+            .eregisters-print-root .ant-card,
+            .eregisters-print-root .ant-table-wrapper,
+            .eregisters-print-root .ant-progress {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            .eregisters-print-root .ant-row,
+            .eregisters-print-root .ant-col {
+                break-inside: avoid;
+            }
+            .eregisters-contributors-table .ant-pagination {
+                display: none !important;
+            }
+            /* Map keeps the legend overlay visible but hides leaflet zoom. */
+            .leaflet-container { height: 320px !important; }
+            a[href]:after { content: "" !important; }
+        }
+    `}</style>
+);
 
 export const AdminNationalOverview: React.FC<{
     /** When provided, restricts the org unit selector to this subtree id. */
@@ -233,7 +273,12 @@ export const AdminNationalOverview: React.FC<{
     );
 
     return (
-        <Flex vertical gap={token.marginSM}>
+        <Flex
+            vertical
+            gap={token.marginSM}
+            className="eregisters-print-root"
+        >
+            <PrintStyles />
             <Flex
                 align="center"
                 justify="space-between"
@@ -279,6 +324,12 @@ export const AdminNationalOverview: React.FC<{
                         loading={loading}
                     >
                         Refresh
+                    </Button>
+                    <Button
+                        icon={<PrinterOutlined />}
+                        onClick={() => window.print()}
+                    >
+                        Print / PDF
                     </Button>
                 </Flex>
             </Flex>

@@ -37,7 +37,14 @@ interface ContributorRow {
     /** Map<level, ancestorId> — used for cascading filters. */
     ancestorByLevel: Map<number, AncestorRef>;
     hasCoords: boolean;
-    /** Real DHIS2 user count (active = not disabled). */
+    /** Direct DHIS2 user assignment at this org unit only. */
+    directActiveUsers: number;
+    directTotalUsers: number;
+    /**
+     * Effective user reach — users assigned at this facility *or* at
+     * any ancestor (region/district/etc.). This is what determines
+     * who can actually log in and work at the facility in DHIS2.
+     */
     activeUserCount: number;
     totalUserCount: number;
     risk?: FacilityRiskPoint;
@@ -139,6 +146,7 @@ export const AdminTopContributorsTable: React.FC<{
         new Map(),
     );
     const [search, setSearch] = useState("");
+    const [showAll, setShowAll] = useState(false);
 
     const riskById = useMemo(() => {
         const m = new Map<string, FacilityRiskPoint>();
@@ -148,11 +156,22 @@ export const AdminTopContributorsTable: React.FC<{
 
     const merged: ContributorRow[] = useMemo(() => {
         const seen = new Set<string>();
+        const sumWithAncestors = (
+            facId: string,
+            ancestors: AncestorRef[],
+            source: Map<string, number>,
+        ) => {
+            let total = source.get(facId) ?? 0;
+            for (const a of ancestors) total += source.get(a.id) ?? 0;
+            return total;
+        };
         const out: ContributorRow[] = programFacilities.map((f) => {
             seen.add(f.id);
             const risk = riskById.get(f.id);
             const ancestorByLevel = new Map<number, AncestorRef>();
             for (const a of f.ancestors) ancestorByLevel.set(a.level, a);
+            const directActive = userCounts.activeById.get(f.id) ?? 0;
+            const directTotal = userCounts.totalById.get(f.id) ?? 0;
             return {
                 orgUnit: f.id,
                 name: f.displayName,
@@ -162,13 +181,25 @@ export const AdminTopContributorsTable: React.FC<{
                 hasCoords:
                     typeof f.latitude === "number" &&
                     typeof f.longitude === "number",
-                activeUserCount: userCounts.activeById.get(f.id) ?? 0,
-                totalUserCount: userCounts.totalById.get(f.id) ?? 0,
+                directActiveUsers: directActive,
+                directTotalUsers: directTotal,
+                activeUserCount: sumWithAncestors(
+                    f.id,
+                    f.ancestors,
+                    userCounts.activeById,
+                ),
+                totalUserCount: sumWithAncestors(
+                    f.id,
+                    f.ancestors,
+                    userCounts.totalById,
+                ),
                 risk,
             };
         });
         for (const r of rows) {
             if (seen.has(r.orgUnit)) continue;
+            const directActive = userCounts.activeById.get(r.orgUnit) ?? 0;
+            const directTotal = userCounts.totalById.get(r.orgUnit) ?? 0;
             out.push({
                 orgUnit: r.orgUnit,
                 name: r.name,
@@ -178,8 +209,10 @@ export const AdminTopContributorsTable: React.FC<{
                 hasCoords:
                     typeof r.latitude === "number" &&
                     typeof r.longitude === "number",
-                activeUserCount: userCounts.activeById.get(r.orgUnit) ?? 0,
-                totalUserCount: userCounts.totalById.get(r.orgUnit) ?? 0,
+                directActiveUsers: directActive,
+                directTotalUsers: directTotal,
+                activeUserCount: directActive,
+                totalUserCount: directTotal,
                 risk: r,
             });
         }
@@ -329,28 +362,47 @@ export const AdminTopContributorsTable: React.FC<{
         {
             title: "Users",
             key: "users",
-            width: 90,
+            width: 110,
             sorter: (a, b) => a.activeUserCount - b.activeUserCount,
-            render: (_, r) =>
-                r.totalUserCount === 0 ? (
-                    <Text type="secondary">—</Text>
-                ) : (
+            render: (_, r) => {
+                if (r.totalUserCount === 0)
+                    return <Text type="secondary">—</Text>;
+                const inheritedActive =
+                    r.activeUserCount - r.directActiveUsers;
+                const disabled = r.totalUserCount - r.activeUserCount;
+                return (
                     <Tooltip
-                        title={`${r.activeUserCount} active · ${
-                            r.totalUserCount - r.activeUserCount
-                        } disabled`}
+                        title={
+                            <>
+                                <div>
+                                    Direct at this facility:{" "}
+                                    <strong>{r.directActiveUsers}</strong>
+                                </div>
+                                <div>
+                                    Inherited from ancestors:{" "}
+                                    <strong>{inheritedActive}</strong>
+                                </div>
+                                {disabled > 0 && (
+                                    <div>Disabled (incl. ancestors): {disabled}</div>
+                                )}
+                            </>
+                        }
                     >
                         <Text>
                             {r.activeUserCount.toLocaleString()}
-                            {r.totalUserCount !== r.activeUserCount && (
-                                <Text type="secondary">
+                            {inheritedActive > 0 && (
+                                <Text
+                                    type="secondary"
+                                    style={{ fontSize: 11 }}
+                                >
                                     {" "}
-                                    / {r.totalUserCount.toLocaleString()}
+                                    ({r.directActiveUsers} direct)
                                 </Text>
                             )}
                         </Text>
                     </Tooltip>
-                ),
+                );
+            },
         },
         {
             title: "Logged in",
@@ -379,6 +431,9 @@ export const AdminTopContributorsTable: React.FC<{
             title: "GETs",
             key: "trackerGets",
             width: 80,
+            // Surface high-volume facilities first when the user hasn't
+            // explicitly chosen a sort.
+            defaultSortOrder: "descend",
             sorter: (a, b) =>
                 (a.risk?.trackerGets ?? -1) - (b.risk?.trackerGets ?? -1),
             render: (_, r) =>
@@ -459,6 +514,14 @@ export const AdminTopContributorsTable: React.FC<{
                         onChange={(e) => setSearch(e.target.value)}
                         allowClear
                         style={{ width: 200 }}
+                    />
+                    <Segmented
+                        value={showAll ? "all" : "paged"}
+                        onChange={(v) => setShowAll(v === "all")}
+                        options={[
+                            { value: "paged", label: "Paged" },
+                            { value: "all", label: "Show all" },
+                        ]}
                     />
                     <Button
                         icon={<DownloadOutlined />}
@@ -551,11 +614,21 @@ export const AdminTopContributorsTable: React.FC<{
                     loading={
                         (facLoading || usersLoading) && merged.length === 0
                     }
-                    pagination={{
-                        pageSize: 20,
-                        showSizeChanger: true,
-                        pageSizeOptions: ["20", "50", "100", "500"],
-                    }}
+                    className="eregisters-contributors-table"
+                    pagination={
+                        showAll
+                            ? false
+                            : {
+                                  pageSize: 20,
+                                  showSizeChanger: true,
+                                  pageSizeOptions: [
+                                      "20",
+                                      "50",
+                                      "100",
+                                      "500",
+                                  ],
+                              }
+                    }
                 />
             )}
         </Flex>
