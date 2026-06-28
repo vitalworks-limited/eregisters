@@ -60,6 +60,9 @@ importers:
       '@dhis2/cli-app-scripts':
         specifier: 12.11.0
         version: 12.11.0(@dhis2/data-engine@3.17.0)(@types/babel__core@7.20.5)(@types/node@25.8.0)(postcss@8.5.14)(react@19.2.6)(terser@5.47.1)(type-fest@0.21.3)(typescript@6.0.3)
+      '@playwright/test':
+        specifier: ^1.61.1
+        version: 1.61.1
       '@types/jest':
         specifier: ^30.0.0
         version: 30.0.0
@@ -1518,6 +1521,11 @@ packages:
   '@pkgjs/parseargs@0.11.0':
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
     engines: {node: '>=14'}
+
+  '@playwright/test@1.61.1':
+    resolution: {integrity: sha512-8nKv6+0RJSL9FE4jYOEGXnPeM/Hg12qZpmqzZjRh3qM0Y7c3z1mrOTfFLids72RDQYVh9WpLEfR5WdpNX4fkig==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   '@pmmmwh/react-refresh-webpack-plugin@0.5.17':
     resolution: {integrity: sha512-tXDyE1/jzFsHXjhRZQ3hMl0IVhYe5qula43LDWIhVfjp9G/nT5OQY5AORVOrkEGAUltBJOfOWeETbmhm6kHhuQ==}
@@ -3486,6 +3494,11 @@ packages:
   fs.realpath@1.0.0:
     resolution: {integrity: sha512-OO0pH2lK6a0hZnAdau5ItzHPI6pUlvI7jMVnxUQRtw4owF2wk8lOSabtGDCTP4Ggrg2MbGnWO9X8K1t4+fGMDw==}
 
+  fsevents@2.3.2:
+    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
+    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
+    os: [darwin]
+
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
@@ -4669,6 +4682,16 @@ packages:
   pkg-dir@4.2.0:
     resolution: {integrity: sha512-HRDzbaKjC+AOWVXxAU/x54COGeIv9eb+6CkDSQoNTt4XyWoIJvuPsXizxu/Fr23EiekbtZwmh1IcIG/l/a10GQ==}
     engines: {node: '>=8'}
+
+  playwright-core@1.61.1:
+    resolution: {integrity: sha512-h7Qlt6m4REp25qvIdvbDtVmD4LqVXfpRxhORv9L0jzETM05p4fuPJ3dKyuSXQxDSbXnmS79HAgi9589lGSpLkg==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  playwright@1.61.1:
+    resolution: {integrity: sha512-DWnY5o3YbLWK4GovuAVwpqL+1VwGNdUGrRr++8j8PtQQzvAVZUIMjKQ90fY689sEJZJBbZVw1rXaOKSTitkzPQ==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   possible-typed-array-names@1.1.0:
     resolution: {integrity: sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg==}
@@ -6839,181 +6862,181 @@ snapshots:
 
   '@bcoe/v8-coverage@0.2.3': {}
 
-  '@dhis2-ui/alert@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/alert@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/portal': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/portal': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
-      '@dhis2/ui-icons': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@dhis2/ui-icons': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/box@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/box@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/button@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/button@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/layer': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/loader': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/popper': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/layer': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/loader': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/popper': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
-      '@dhis2/ui-icons': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@dhis2/ui-icons': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/calendar@10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/calendar@10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/button': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/card': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/input': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/layer': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/popper': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/button': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/card': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/input': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/layer': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/popper': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/d2-i18n': 1.2.0
-      '@dhis2/multi-calendar-dates': 2.1.2(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@dhis2/multi-calendar-dates': 2.1.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
-      '@dhis2/ui-icons': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@dhis2/ui-icons': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/card@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/card@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/center@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/center@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/checkbox@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/checkbox@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/field': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/required': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/field': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/required': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/chip@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
-    dependencies:
-      '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
-      '@dhis2/ui-constants': 10.14.0
-      classnames: 2.5.1
-      prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
-      styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
-
-  '@dhis2-ui/cover@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/chip@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/css@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/cover@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/divider@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/css@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/field@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/divider@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/box': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/help': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/label': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/file-input@10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/field@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/button': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/field': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/label': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/loader': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/status-icon': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/box': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/help': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/label': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
+      '@dhis2/ui-constants': 10.14.0
+      classnames: 2.5.1
+      prop-types: 15.8.1
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+      styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
+
+  '@dhis2-ui/file-input@10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+    dependencies:
+      '@dhis2-ui/button': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/field': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/label': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/loader': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/status-icon': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/d2-i18n': 1.2.0
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
-      '@dhis2/ui-icons': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@dhis2/ui-icons': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
   '@dhis2-ui/header-bar@10.14.0(@dhis2/app-runtime@3.17.0(@dhis2/data-engine@3.17.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/box': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/button': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/card': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/center': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/divider': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/input': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/layer': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/loader': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/logo': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/menu': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/modal': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/box': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/button': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/card': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/center': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/divider': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/input': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/layer': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/loader': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/logo': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/menu': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/modal': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2-ui/user-avatar': 10.14.0(@dhis2/app-runtime@3.17.0(@dhis2/data-engine@3.17.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/app-runtime': 3.17.0(@dhis2/data-engine@3.17.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@dhis2/d2-i18n': 1.2.0
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
-      '@dhis2/ui-icons': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@dhis2/ui-icons': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       moment: 2.30.1
       prop-types: 15.8.1
@@ -7021,153 +7044,153 @@ snapshots:
       react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/help@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/help@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/input@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/input@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/box': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/field': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/loader': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/status-icon': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/box': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/field': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/loader': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/status-icon': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
-      '@dhis2/ui-icons': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@dhis2/ui-icons': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/intersection-detector@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/intersection-detector@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/label@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/label@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/required': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/required': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/layer@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/layer@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/portal': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/portal': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/legend@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/legend@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/required': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/required': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/loader@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/loader@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/logo@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/logo@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/menu@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/menu@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/card': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/divider': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/layer': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/popper': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/portal': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/card': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/divider': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/layer': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/popper': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/portal': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
-      '@dhis2/ui-icons': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@dhis2/ui-icons': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/modal@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/modal@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/card': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/center': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/layer': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/portal': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/card': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/center': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/layer': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/portal': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
-      '@dhis2/ui-icons': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@dhis2/ui-icons': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/node@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/node@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/loader': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/loader': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/notice-box@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/notice-box@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
-      '@dhis2/ui-icons': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@dhis2/ui-icons': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
   '@dhis2-ui/organisation-unit-tree@10.14.0(@dhis2/app-runtime@3.17.0(@dhis2/data-engine@3.17.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/button': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/checkbox': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/loader': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/node': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/button': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/checkbox': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/loader': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/node': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/app-runtime': 3.17.0(@dhis2/data-engine@3.17.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@dhis2/d2-i18n': 1.2.0
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
@@ -7178,143 +7201,143 @@ snapshots:
       react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/pagination@10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/pagination@10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/button': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/select': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/button': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/select': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/d2-i18n': 1.2.0
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
-      '@dhis2/ui-icons': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@dhis2/ui-icons': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/popover@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/popover@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/layer': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/popper': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/layer': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/popper': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/popper@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/popper@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       '@popperjs/core': 2.11.8
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
-      react-popper: 2.3.0(@popperjs/core@2.11.8)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+      react-popper: 2.3.0(@popperjs/core@2.11.8)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       resize-observer-polyfill: 1.5.1
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/portal@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/portal@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/radio@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/radio@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/required@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/required@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/segmented-control@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/segmented-control@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/select@10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/select@10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/box': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/button': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/card': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/checkbox': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/chip': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/field': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/input': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/layer': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/loader': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/popper': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/status-icon': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/tooltip': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/box': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/button': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/card': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/checkbox': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/chip': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/field': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/input': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/layer': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/loader': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/popper': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/status-icon': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/tooltip': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/d2-i18n': 1.2.0
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
-      '@dhis2/ui-icons': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@dhis2/ui-icons': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/selector-bar@10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/selector-bar@10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/button': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/card': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/layer': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/popper': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/button': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/card': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/layer': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/popper': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/d2-i18n': 1.2.0
       '@dhis2/ui-constants': 10.14.0
-      '@dhis2/ui-icons': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@dhis2/ui-icons': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
   '@dhis2-ui/sharing-dialog@10.14.0(@dhis2/app-runtime@3.17.0(@dhis2/data-engine@3.17.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/box': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/button': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/card': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/divider': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/input': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/layer': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/menu': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/modal': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/notice-box': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/popper': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/select': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/tab': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/tooltip': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/box': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/button': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/card': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/divider': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/input': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/layer': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/menu': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/modal': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/notice-box': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/popper': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/select': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/tab': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/tooltip': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2-ui/user-avatar': 10.14.0(@dhis2/app-runtime@3.17.0(@dhis2/data-engine@3.17.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/app-runtime': 3.17.0(@dhis2/data-engine@3.17.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@dhis2/d2-i18n': 1.2.0
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
-      '@dhis2/ui-icons': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@dhis2/ui-icons': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@react-hook/size': 2.1.2(react@18.3.1)
       classnames: 2.5.1
       prop-types: 15.8.1
@@ -7322,106 +7345,106 @@ snapshots:
       react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/status-icon@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/status-icon@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/loader': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/loader': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
-      '@dhis2/ui-icons': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@dhis2/ui-icons': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/switch@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/switch@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/field': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/required': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/field': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/required': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/tab@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/tab@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/tooltip': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/tooltip': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
-      '@dhis2/ui-icons': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@dhis2/ui-icons': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/table@10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/table@10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
       '@dhis2/d2-i18n': 1.2.0
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
-      '@dhis2/ui-icons': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@dhis2/ui-icons': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/tag@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/tag@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/text-area@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/text-area@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/box': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/field': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/loader': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/status-icon': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/box': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/field': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/loader': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/status-icon': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
-      '@dhis2/ui-icons': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@dhis2/ui-icons': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/tooltip@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/tooltip@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/popper': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/portal': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/popper': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/portal': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
-  '@dhis2-ui/transfer@10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2-ui/transfer@10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/button': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/field': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/input': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/intersection-detector': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/loader': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/tooltip': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/button': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/field': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/input': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/intersection-detector': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/loader': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/tooltip': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/d2-i18n': 1.2.0
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       '@dhis2/ui-constants': 10.14.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 4.0.1(@babel/core@7.29.0)(react@18.3.1)
 
   '@dhis2-ui/user-avatar@10.14.0(@dhis2/app-runtime@3.17.0(@dhis2/data-engine@3.17.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
@@ -7706,13 +7729,13 @@ snapshots:
 
   '@dhis2/data-engine@3.17.0': {}
 
-  '@dhis2/multi-calendar-dates@2.1.2(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
+  '@dhis2/multi-calendar-dates@2.1.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@dhis2/d2-i18n': 1.2.0
       '@js-temporal/polyfill': 0.4.3
       classnames: 2.5.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
 
   '@dhis2/prop-types@3.1.2(prop-types@15.8.1)':
     dependencies:
@@ -7729,85 +7752,85 @@ snapshots:
     dependencies:
       prop-types: 15.8.1
 
-  '@dhis2/ui-forms@10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
+  '@dhis2/ui-forms@10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/button': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/checkbox': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/field': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/file-input': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/input': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/radio': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/select': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/switch': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/text-area': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/button': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/checkbox': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/field': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/file-input': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/input': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/radio': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/select': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/switch': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/text-area': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/prop-types': 3.1.2(prop-types@15.8.1)
       classnames: 2.5.1
       final-form: 4.20.10
       prop-types: 15.8.1
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       react-final-form: 6.5.9(final-form@4.20.10)(react@18.3.1)
     transitivePeerDependencies:
       - '@dhis2/d2-i18n'
       - styled-jsx
 
-  '@dhis2/ui-icons@10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
+  '@dhis2/ui-icons@10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
 
   '@dhis2/ui@10.14.0(@dhis2/app-runtime@3.17.0(@dhis2/data-engine@3.17.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))':
     dependencies:
-      '@dhis2-ui/alert': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/box': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/button': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/calendar': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/card': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/center': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/checkbox': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/chip': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/cover': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/css': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/divider': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/field': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/file-input': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/alert': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/box': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/button': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/calendar': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/card': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/center': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/checkbox': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/chip': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/cover': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/css': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/divider': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/field': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/file-input': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2-ui/header-bar': 10.14.0(@dhis2/app-runtime@3.17.0(@dhis2/data-engine@3.17.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/help': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/input': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/intersection-detector': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/label': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/layer': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/legend': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/loader': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/logo': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/menu': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/modal': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/node': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/notice-box': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/help': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/input': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/intersection-detector': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/label': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/layer': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/legend': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/loader': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/logo': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/menu': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/modal': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/node': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/notice-box': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2-ui/organisation-unit-tree': 10.14.0(@dhis2/app-runtime@3.17.0(@dhis2/data-engine@3.17.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/pagination': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/popover': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/popper': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/portal': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/radio': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/required': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/segmented-control': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/select': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/selector-bar': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/pagination': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/popover': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/popper': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/portal': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/radio': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/required': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/segmented-control': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/select': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/selector-bar': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2-ui/sharing-dialog': 10.14.0(@dhis2/app-runtime@3.17.0(@dhis2/data-engine@3.17.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/switch': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/tab': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/table': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/tag': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/text-area': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/tooltip': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2-ui/transfer': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/switch': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/tab': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/table': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/tag': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/text-area': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/tooltip': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2-ui/transfer': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2-ui/user-avatar': 10.14.0(@dhis2/app-runtime@3.17.0(@dhis2/data-engine@3.17.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
       '@dhis2/app-runtime': 3.17.0(@dhis2/data-engine@3.17.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@dhis2/d2-i18n': 1.2.0
       '@dhis2/ui-constants': 10.14.0
-      '@dhis2/ui-forms': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
-      '@dhis2/ui-icons': 10.14.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@dhis2/ui-forms': 10.14.0(@dhis2/d2-i18n@1.2.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(styled-jsx@4.0.1(@babel/core@7.29.0)(react@19.2.6))
+      '@dhis2/ui-icons': 10.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       prop-types: 15.8.1
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
@@ -8127,6 +8150,10 @@ snapshots:
 
   '@pkgjs/parseargs@0.11.0':
     optional: true
+
+  '@playwright/test@1.61.1':
+    dependencies:
+      playwright: 1.61.1
 
   '@pmmmwh/react-refresh-webpack-plugin@0.5.17(react-refresh@0.11.0)(type-fest@0.21.3)(webpack@5.106.2(postcss@8.5.14))':
     dependencies:
@@ -10270,6 +10297,9 @@ snapshots:
 
   fs.realpath@1.0.0: {}
 
+  fsevents@2.3.2:
+    optional: true
+
   fsevents@2.3.3:
     optional: true
 
@@ -11697,6 +11727,14 @@ snapshots:
     dependencies:
       find-up: 4.1.0
 
+  playwright-core@1.61.1: {}
+
+  playwright@1.61.1:
+    dependencies:
+      playwright-core: 1.61.1
+    optionalDependencies:
+      fsevents: 2.3.2
+
   possible-typed-array-names@1.1.0: {}
 
   post-robot@10.0.46:
@@ -11837,11 +11875,11 @@ snapshots:
 
   react-is@19.2.6: {}
 
-  react-popper@2.3.0(@popperjs/core@2.11.8)(react-dom@19.2.6(react@19.2.6))(react@19.2.6):
+  react-popper@2.3.0(@popperjs/core@2.11.8)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@popperjs/core': 2.11.8
-      react: 19.2.6
-      react-dom: 19.2.6(react@19.2.6)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       react-fast-compare: 3.2.2
       warning: 4.0.3
 

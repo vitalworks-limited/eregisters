@@ -31,6 +31,9 @@ const ALL_FILES = listSourceFiles(SRC_DIR);
 /** Files allowed to mention the bad pattern (e.g. tests, telemetry, docs). */
 const ALLOWED_FILES = new Set<string>([
     path.resolve(SRC_DIR, "sync/config.ts"),
+    // The Admin Overview safe-query guard contains the regexes that
+    // *block* these patterns — flagging it would be self-referential.
+    path.resolve(SRC_DIR, "admin/adminSafeQueryGuard.ts"),
 ]);
 
 /**
