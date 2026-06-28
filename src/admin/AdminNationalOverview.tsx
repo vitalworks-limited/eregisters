@@ -313,7 +313,13 @@ export const AdminNationalOverview: React.FC<{
             )}
 
             {summary && (
-                <AdminTopContributorsTable rows={summary.topFacilities} />
+                <AdminTopContributorsTable
+                    rows={
+                        summary.facilityRiskMap.length > 0
+                            ? summary.facilityRiskMap
+                            : summary.topFacilities
+                    }
+                />
             )}
 
             {summary && health.penalties.length > 0 && (
