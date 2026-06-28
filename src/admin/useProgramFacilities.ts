@@ -80,6 +80,16 @@ function pickLngLat(geom: { type?: string; coordinates?: unknown } | undefined):
 }
 
 /**
+ * Module-level cache. The program's enrolled facilities don't change
+ * minute-to-minute and the response payload is the second-heaviest
+ * fetch the admin dashboard makes. Sharing one in-memory copy across
+ * tabs / route changes is the cheapest possible speed-up.
+ */
+let cachedFacilities: ProgramFacility[] | null = null;
+let cachedFetchedAt = 0;
+const CACHE_TTL_MS = 5 * 60_000;
+
+/**
  * Loads the facilities enrolled in the eRegisters program. Honours the
  * Admin Overview safe-query guard so any future refactor that touches
  * tracker endpoints is caught.
@@ -96,6 +106,14 @@ export function useProgramFacilities(): {
 
     useEffect(() => {
         let cancelled = false;
+        if (
+            cachedFacilities &&
+            Date.now() - cachedFetchedAt < CACHE_TTL_MS
+        ) {
+            setFacilities(cachedFacilities);
+            setLoading(false);
+            return;
+        }
         const resource = `programs/${PROGRAM_UID}`;
         try {
             assertAdminOverviewSafeRequest(`/api/${resource}`);
@@ -140,6 +158,8 @@ export function useProgramFacilities(): {
                         longitude: ll ? ll[0] : undefined,
                     };
                 });
+                cachedFacilities = next;
+                cachedFetchedAt = Date.now();
                 if (!cancelled) setFacilities(next);
             } catch (err) {
                 if (!cancelled) {

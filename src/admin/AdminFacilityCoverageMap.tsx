@@ -30,6 +30,7 @@ import {
 } from "react-leaflet";
 import { FacilityRiskPoint, HealthStatus } from "./summaryTypes";
 import { useOrgUnitBoundaries } from "./useOrgUnitBoundaries";
+import { useOrgUnitCountsByLevel } from "./useOrgUnitCountsByLevel";
 import { useOrgUnitGroupSets } from "./useOrgUnitGroupSets";
 import { useOrgUnitLevels } from "./useOrgUnitLevels";
 import {
@@ -451,8 +452,23 @@ export const AdminFacilityCoverageMap: React.FC<{
         }
         return best;
     }, [programFacilities]);
-    const { totals: facilityTotals } =
-        useTotalFacilitiesPerAncestor(facilityLevel);
+    // Only fetch the per-ancestor breakdown when it's actually needed
+    // (the Coverage % choropleth metric). Otherwise the dashboard
+    // skips the heaviest network call — ~8,000 facilities x ancestor
+    // arrays — and the headline "in system" chip falls back to the
+    // cheap count-only probe from useOrgUnitCountsByLevel.
+    const needsAncestorTotals = choroplethMetric === "coverageRatio";
+    const { totals: facilityTotals } = useTotalFacilitiesPerAncestor(
+        needsAncestorTotals ? facilityLevel : undefined,
+    );
+    const { counts: levelCountsForChip } = useOrgUnitCountsByLevel(
+        facilityLevel ? [facilityLevel] : [],
+    );
+    const totalFacilitiesAtLevel = needsAncestorTotals
+        ? facilityTotals.grandTotal
+        : (facilityLevel
+              ? levelCountsForChip.get(facilityLevel) ?? 0
+              : 0);
 
     // Auto-pick the default aggregation level — second-from-root if
     // available (typical "Region" in DHIS2 hierarchies).
@@ -683,7 +699,7 @@ export const AdminFacilityCoverageMap: React.FC<{
     // Coverage at the facility level — comparing program-assigned
     // org units to total org units at the same level. The number is
     // only meaningful when we know the program's facility level.
-    const grandTotal = facilityTotals.grandTotal;
+    const grandTotal = totalFacilitiesAtLevel;
     const facilityLevelLabel = facilityLevel
         ? orgUnitLevels.find((l) => l.level === facilityLevel)?.displayName
         : undefined;

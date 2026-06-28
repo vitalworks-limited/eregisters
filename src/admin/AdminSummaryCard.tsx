@@ -10,7 +10,12 @@ import { HealthStatus, SummaryMetric } from "./summaryTypes";
 
 const { Text } = Typography;
 
-function statusColor(s: HealthStatus, token: ReturnType<typeof theme.useToken>["token"]): string {
+export type CardVariant = "hero" | "status" | "operational";
+
+function statusColor(
+    s: HealthStatus,
+    token: ReturnType<typeof theme.useToken>["token"],
+): string {
     switch (s) {
         case "healthy":
             return token.colorSuccess;
@@ -59,9 +64,24 @@ function formatValue(metric: SummaryMetric): string {
 export const AdminSummaryCard: React.FC<{
     metric: SummaryMetric;
     onClick?: () => void;
-}> = ({ metric, onClick }) => {
+    /** Optional icon shown in a tinted square in the top-left. */
+    icon?: React.ReactNode;
+    variant?: CardVariant;
+}> = ({ metric, onClick, icon, variant = "operational" }) => {
     const { token } = theme.useToken();
     const color = statusColor(metric.status, token);
+    const isHero = variant === "hero";
+    const isStatus = variant === "status";
+
+    const valueSize = isHero ? 30 : isStatus ? 24 : 22;
+    const padding = isHero ? token.paddingLG : token.padding;
+
+    const accent = isHero ? token.colorPrimary : color;
+    const tint = isHero
+        ? `linear-gradient(135deg, ${token.colorPrimary}0F 0%, ${token.colorPrimary}05 100%)`
+        : isStatus
+          ? `linear-gradient(135deg, ${color}10 0%, ${color}04 100%)`
+          : token.colorBgContainer;
 
     return (
         <Flex
@@ -69,25 +89,47 @@ export const AdminSummaryCard: React.FC<{
             gap={token.marginXXS}
             onClick={onClick}
             style={{
-                background: token.colorBgContainer,
+                background: tint,
                 border: `1px solid ${token.colorBorderSecondary}`,
-                borderLeft: `3px solid ${color}`,
-                padding: token.padding,
+                borderTop: `3px solid ${accent}`,
+                borderRadius: 6,
+                padding,
                 cursor: onClick ? "pointer" : "default",
                 height: "100%",
+                position: "relative",
+                overflow: "hidden",
             }}
         >
             <Flex align="center" justify="space-between" gap={token.marginXS}>
-                <Text
-                    type="secondary"
-                    style={{
-                        fontSize: token.fontSizeSM,
-                        textTransform: "uppercase",
-                        letterSpacing: 0.4,
-                    }}
-                >
-                    {metric.label}
-                </Text>
+                <Flex align="center" gap={token.marginXS}>
+                    {icon && (
+                        <Flex
+                            align="center"
+                            justify="center"
+                            style={{
+                                width: isHero ? 36 : 28,
+                                height: isHero ? 36 : 28,
+                                borderRadius: 6,
+                                background: `${accent}1A`,
+                                color: accent,
+                                fontSize: isHero ? 18 : 14,
+                            }}
+                        >
+                            {icon}
+                        </Flex>
+                    )}
+                    <Text
+                        type="secondary"
+                        style={{
+                            fontSize: token.fontSizeSM,
+                            textTransform: "uppercase",
+                            letterSpacing: 0.4,
+                            fontWeight: 600,
+                        }}
+                    >
+                        {metric.label}
+                    </Text>
+                </Flex>
                 {metric.helpText && (
                     <Tooltip title={metric.helpText}>
                         <QuestionCircleOutlined
@@ -100,9 +142,9 @@ export const AdminSummaryCard: React.FC<{
                 <Text
                     strong
                     style={{
-                        fontSize: 26,
-                        lineHeight: 1.1,
-                        color,
+                        fontSize: valueSize,
+                        lineHeight: 1.05,
+                        color: metric.value === null ? token.colorTextTertiary : isHero ? token.colorTextHeading : color,
                     }}
                 >
                     {formatValue(metric)}
