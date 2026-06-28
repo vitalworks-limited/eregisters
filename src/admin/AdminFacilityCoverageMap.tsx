@@ -1,8 +1,26 @@
-import { Flex, Radio, Segmented, Select, Skeleton, theme, Typography } from "antd";
+import {
+    AimOutlined,
+    HomeOutlined,
+    TeamOutlined,
+} from "@ant-design/icons";
+import {
+    Button,
+    Divider,
+    Flex,
+    Progress,
+    Radio,
+    Segmented,
+    Select,
+    Skeleton,
+    Tag,
+    theme,
+    Tooltip,
+    Typography,
+} from "antd";
 import L from "leaflet";
 // @ts-expect-error — d2-app-scripts handles CSS via Vite; no TS types needed.
 import "leaflet/dist/leaflet.css";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
     CircleMarker,
     GeoJSON,
@@ -33,6 +51,10 @@ interface PlottedFacility {
     ancestors: AncestorRef[];
     risk?: FacilityRiskPoint;
     activeUserCount: number;
+    /** Users with `lastLogin` inside the configured recent window. */
+    recentLogins: number;
+    /** Resolved live logged-in count: summary value when present, else recentLogins. */
+    liveLoggedIn: number;
 }
 
 type DisplayMode = "facilities" | "choropleth" | "both";
@@ -93,14 +115,70 @@ const STATUS_COLOR: Record<HealthStatus, string> = {
     unknown: "#9ca3af",
 };
 
-const CHOROPLETH_RAMP = [
-    "#eef2ff",
-    "#c7d2fe",
-    "#93c5fd",
-    "#60a5fa",
-    "#3b82f6",
-    "#1d4ed8",
-];
+// ColorBrewer-style sequential palettes — modern, accessible contrast.
+const PALETTES: Record<string, { label: string; ramp: string[] }> = {
+    blue: {
+        label: "Blue",
+        ramp: [
+            "#eff6ff",
+            "#bfdbfe",
+            "#93c5fd",
+            "#60a5fa",
+            "#3b82f6",
+            "#1d4ed8",
+            "#1e3a8a",
+        ],
+    },
+    green: {
+        label: "Green",
+        ramp: [
+            "#f0fdf4",
+            "#bbf7d0",
+            "#86efac",
+            "#4ade80",
+            "#22c55e",
+            "#15803d",
+            "#14532d",
+        ],
+    },
+    purple: {
+        label: "Purple",
+        ramp: [
+            "#faf5ff",
+            "#e9d5ff",
+            "#c4b5fd",
+            "#a78bfa",
+            "#8b5cf6",
+            "#6d28d9",
+            "#4c1d95",
+        ],
+    },
+    diverging: {
+        label: "Risk (red → green)",
+        ramp: [
+            "#b91c1c",
+            "#dc2626",
+            "#f59e0b",
+            "#facc15",
+            "#84cc16",
+            "#16a34a",
+            "#15803d",
+        ],
+    },
+    warm: {
+        label: "Warm",
+        ramp: [
+            "#fff7ed",
+            "#fed7aa",
+            "#fdba74",
+            "#fb923c",
+            "#f97316",
+            "#c2410c",
+            "#7c2d12",
+        ],
+    },
+};
+type PaletteKey = keyof typeof PALETTES;
 
 function bandForCount(value: number, thresholds: [number, number, number]) {
     if (value === 0) return { label: "0", color: "#cbd5e1" };
@@ -129,11 +207,10 @@ const THEMATIC_LAYERS: ThematicSpec[] = [
         key: "active",
         label: "Active users (logged in now)",
         description:
-            "Facilities with users signed in right now (currently logged-in sessions).",
+            "Facilities with at least one user signed in recently. Falls back to DHIS2 lastLogin within the past hour when the summary doesn't include live session counts.",
         bin: (f) => {
-            const live = f.risk?.loggedInUsers ?? 0;
-            if (live <= 0) return null;
-            return bandForCount(live, [3, 10, 25]);
+            if (f.liveLoggedIn <= 0) return null;
+            return bandForCount(f.liveLoggedIn, [3, 10, 25]);
         },
     },
     {
@@ -273,14 +350,43 @@ const FitToBoundaries: React.FC<{
     return null;
 };
 
-function rampColor(value: number, min: number, max: number): string {
-    if (!isFinite(value) || max === min) return CHOROPLETH_RAMP[0];
+/** Exposes a `reset()` callback that flies the map back to the full bounds. */
+const ResetViewControl: React.FC<{
+    geojson: GeoJSON.FeatureCollection | null;
+    onReady: (resetFn: () => void) => void;
+}> = ({ geojson, onReady }) => {
+    const map = useMap();
+    useEffect(() => {
+        const reset = () => {
+            try {
+                if (!geojson || geojson.features.length === 0) return;
+                const layer = L.geoJSON(geojson);
+                const bounds = layer.getBounds();
+                if (bounds.isValid()) {
+                    map.flyToBounds(bounds, {
+                        padding: [20, 20],
+                        duration: 0.7,
+                    });
+                }
+            } catch {
+                /* ignore */
+            }
+        };
+        onReady(reset);
+    }, [geojson, map, onReady]);
+    return null;
+};
+
+function rampColor(
+    value: number,
+    min: number,
+    max: number,
+    ramp: string[],
+): string {
+    if (!isFinite(value) || max === min) return ramp[0];
     const t = Math.max(0, Math.min(1, (value - min) / (max - min)));
-    const idx = Math.min(
-        CHOROPLETH_RAMP.length - 1,
-        Math.floor(t * CHOROPLETH_RAMP.length),
-    );
-    return CHOROPLETH_RAMP[idx];
+    const idx = Math.min(ramp.length - 1, Math.floor(t * ramp.length));
+    return ramp[idx];
 }
 
 export const AdminFacilityCoverageMap: React.FC<{
@@ -296,6 +402,9 @@ export const AdminFacilityCoverageMap: React.FC<{
     const [aggregationLevel, setAggregationLevel] = useState<number>(2);
 
     const [hoveredOu, setHoveredOu] = useState<string | undefined>();
+    const resetViewRef = useRef<(() => void) | null>(null);
+    const [palette, setPalette] = useState<PaletteKey>("blue");
+    const [showValues, setShowValues] = useState(false);
 
     // Data
     const {
@@ -341,16 +450,25 @@ export const AdminFacilityCoverageMap: React.FC<{
                     typeof f.latitude === "number" &&
                     typeof f.longitude === "number",
             )
-            .map((f) => ({
-                id: f.id,
-                name: f.displayName,
-                districtName: f.parentName,
-                latitude: f.latitude,
-                longitude: f.longitude,
-                ancestors: f.ancestors,
-                risk: riskById.get(f.id),
-                activeUserCount: userCounts.activeById.get(f.id) ?? 0,
-            }));
+            .map((f) => {
+                const recentLogins = userCounts.recentLoginsById.get(f.id) ?? 0;
+                const risk = riskById.get(f.id);
+                const summaryLive = risk?.loggedInUsers ?? 0;
+                return {
+                    id: f.id,
+                    name: f.displayName,
+                    districtName: f.parentName,
+                    latitude: f.latitude,
+                    longitude: f.longitude,
+                    ancestors: f.ancestors,
+                    risk,
+                    activeUserCount: userCounts.activeById.get(f.id) ?? 0,
+                    recentLogins,
+                    // Real DHIS2 lastLogin wins when present — otherwise the
+                    // summary's cached loggedInUsers value carries it.
+                    liveLoggedIn: Math.max(summaryLive, recentLogins),
+                };
+            });
     }, [programFacilities, riskById, userCounts]);
 
     // Aggregate per polygon (at the selected level).
@@ -379,9 +497,16 @@ export const AdminFacilityCoverageMap: React.FC<{
             if (!agg) continue;
             agg.enrolledCount += 1;
             const risk = riskById.get(f.id);
+            const recentLogins =
+                userCounts.recentLoginsById.get(f.id) ?? 0;
+            // Prefer the summary's loggedInUsers when present, fall back to
+            // DHIS2 lastLogin so the count is never silently zero in prod.
+            agg.loggedInUsers += Math.max(
+                risk?.loggedInUsers ?? 0,
+                recentLogins,
+            );
             if (risk) {
                 agg.activeUsers += risk.activeUsers;
-                agg.loggedInUsers += risk.loggedInUsers ?? 0;
                 agg.trackerGets += risk.trackerGets;
                 agg.trackerPosts += risk.trackerPosts;
                 agg.failedSyncs += risk.failedSyncs;
@@ -392,6 +517,7 @@ export const AdminFacilityCoverageMap: React.FC<{
         boundaries,
         programFacilities,
         riskById,
+        userCounts,
         aggregationLevel,
         facilityTotals,
     ]);
@@ -491,27 +617,98 @@ export const AdminFacilityCoverageMap: React.FC<{
         orgUnitLevels.find((l) => l.level === aggregationLevel)?.displayName ??
         `Level ${aggregationLevel}`;
 
+    // Global coverage = enrolled / total system facilities.
+    const grandTotal = facilityTotals.grandTotal;
+    const coveragePct =
+        grandTotal > 0
+            ? Math.round((totalEnrolled / grandTotal) * 1000) / 10
+            : undefined;
+
     return (
         <Flex vertical gap={token.marginSM}>
             <Flex align="center" justify="space-between" gap={token.marginSM} wrap>
-                <Title level={5} style={{ margin: 0 }}>
-                    Coverage Map
-                </Title>
-                <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-                    {plottedCount.toLocaleString()} of{" "}
-                    {totalEnrolled.toLocaleString()} enrolled facilities have
-                    coordinates · {boundaries.length.toLocaleString()}{" "}
-                    {aggregationLevelLabel.toLowerCase()} boundaries
-                </Text>
+                <Flex vertical gap={2}>
+                    <Title level={5} style={{ margin: 0 }}>
+                        Coverage Map
+                    </Title>
+                    <Text
+                        type="secondary"
+                        style={{ fontSize: token.fontSizeSM }}
+                    >
+                        Plotted at <Text strong>{aggregationLevelLabel}</Text>{" "}
+                        level · {boundaries.length.toLocaleString()} boundaries ·{" "}
+                        {plottedCount.toLocaleString()} of{" "}
+                        {totalEnrolled.toLocaleString()} enrolled facilities
+                        have coordinates
+                    </Text>
+                </Flex>
+                <Flex gap={token.marginXS} wrap>
+                    <Tag
+                        color="blue"
+                        style={{
+                            margin: 0,
+                            padding: "4px 10px",
+                            fontSize: token.fontSize,
+                        }}
+                    >
+                        <HomeOutlined />{" "}
+                        <Text strong>{totalEnrolled.toLocaleString()}</Text>{" "}
+                        enrolled
+                    </Tag>
+                    <Tag
+                        style={{
+                            margin: 0,
+                            padding: "4px 10px",
+                            fontSize: token.fontSize,
+                        }}
+                    >
+                        <TeamOutlined />{" "}
+                        <Text strong>{grandTotal.toLocaleString()}</Text>{" "}
+                        in system
+                    </Tag>
+                    {typeof coveragePct === "number" && (
+                        <Tag
+                            color={
+                                coveragePct >= 70
+                                    ? "green"
+                                    : coveragePct >= 40
+                                      ? "gold"
+                                      : "orange"
+                            }
+                            style={{
+                                margin: 0,
+                                padding: "4px 10px",
+                                fontSize: token.fontSize,
+                            }}
+                        >
+                            <Text strong>{coveragePct}%</Text> coverage
+                        </Tag>
+                    )}
+                </Flex>
             </Flex>
+
+            {typeof coveragePct === "number" && (
+                <Progress
+                    percent={coveragePct}
+                    showInfo={false}
+                    strokeColor={{
+                        from: "#3b82f6",
+                        to: "#1d4ed8",
+                    }}
+                    railColor={token.colorFillTertiary}
+                    style={{ marginBlock: -token.marginXXS }}
+                />
+            )}
 
             <div
                 style={{
                     position: "relative",
-                    background: "#f5f7fa",
+                    background: "#f8fafc",
                     border: `1px solid ${token.colorBorderSecondary}`,
+                    borderRadius: 4,
                     height: "min(72vh, 720px)",
                     overflow: "hidden",
+                    boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.02)",
                 }}
             >
                 {plotted.length === 0 && boundaries.length === 0 ? (
@@ -548,8 +745,14 @@ export const AdminFacilityCoverageMap: React.FC<{
                                     <FitToBoundaries
                                         geojson={featureCollection}
                                     />
+                                    <ResetViewControl
+                                        geojson={featureCollection}
+                                        onReady={(fn) => {
+                                            resetViewRef.current = fn;
+                                        }}
+                                    />
                                     <GeoJSON
-                                        key={`${aggregationLevel}-${choroplethMetric}-${mode}`}
+                                        key={`${aggregationLevel}-${choroplethMetric}-${mode}-${palette}-${showValues}`}
                                         data={featureCollection}
                                         style={(feature) => {
                                             const id = feature?.properties
@@ -567,6 +770,7 @@ export const AdminFacilityCoverageMap: React.FC<{
                                                         v,
                                                         choroplethRange.min,
                                                         choroplethRange.max,
+                                                        PALETTES[palette].ramp,
                                                     );
                                                     fillOpacity = isHovered
                                                         ? 0.85
@@ -620,41 +824,55 @@ export const AdminFacilityCoverageMap: React.FC<{
                                                 },
                                             });
                                             if (name) {
-                                                const lines: string[] = [name];
-                                                if (agg) {
-                                                    lines.push(
-                                                        `Enrolled: ${agg.enrolledCount}${
-                                                            agg.totalFacilities
-                                                                ? ` / ${agg.totalFacilities} (${Math.round((agg.enrolledCount / agg.totalFacilities) * 100)}%)`
-                                                                : ""
-                                                        }`,
+                                                const v =
+                                                    agg && showChoropleth
+                                                        ? choroplethSpec.extract(
+                                                              agg,
+                                                          )
+                                                        : undefined;
+
+                                                if (
+                                                    showValues &&
+                                                    showChoropleth &&
+                                                    typeof v === "number"
+                                                ) {
+                                                    // Permanent on-map label
+                                                    // showing the metric value.
+                                                    const labelText = `${v.toLocaleString()}${choroplethSpec.isRatio ? "%" : ""}`;
+                                                    layer.bindTooltip(
+                                                        `<div style="background:rgba(255,255,255,0.92);padding:2px 6px;border-radius:3px;font-weight:600;font-size:11px;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,0.08);">${labelText}</div>`,
+                                                        {
+                                                            permanent: true,
+                                                            direction: "center",
+                                                            className:
+                                                                "coverage-map-value-label",
+                                                            opacity: 1,
+                                                        },
                                                     );
-                                                    if (showChoropleth) {
-                                                        const v =
-                                                            choroplethSpec.extract(
-                                                                agg,
-                                                            );
-                                                        if (
-                                                            typeof v === "number"
-                                                        ) {
-                                                            lines.push(
-                                                                `${choroplethSpec.label}: ${v.toLocaleString()}${
-                                                                    choroplethSpec.isRatio
-                                                                        ? "%"
-                                                                        : ""
-                                                                }`,
-                                                            );
-                                                        }
-                                                    }
+                                                } else {
+                                                    // Rich hover tooltip.
+                                                    const enrolledLine = agg
+                                                        ? `<div style="color:#4b5563;font-size:11px;margin-top:2px;">Enrolled: <strong>${agg.enrolledCount.toLocaleString()}</strong>${
+                                                              agg.totalFacilities
+                                                                  ? ` / ${agg.totalFacilities.toLocaleString()} <span style="color:#9ca3af;">(${Math.round((agg.enrolledCount / agg.totalFacilities) * 100)}%)</span>`
+                                                                  : ""
+                                                          }</div>`
+                                                        : "";
+                                                    const metricLine =
+                                                        typeof v === "number"
+                                                            ? `<div style="color:#1d4ed8;font-size:11px;margin-top:2px;">${choroplethSpec.label}: <strong>${v.toLocaleString()}${choroplethSpec.isRatio ? "%" : ""}</strong></div>`
+                                                            : "";
+                                                    layer.bindTooltip(
+                                                        `<div style="font-weight:600;font-size:12px;">${name}</div>${enrolledLine}${metricLine}`,
+                                                        {
+                                                            sticky: true,
+                                                            direction: "top",
+                                                            opacity: 0.95,
+                                                            className:
+                                                                "coverage-map-tooltip",
+                                                        },
+                                                    );
                                                 }
-                                                layer.bindTooltip(
-                                                    lines.join("<br/>"),
-                                                    {
-                                                        sticky: true,
-                                                        direction: "top",
-                                                        opacity: 0.92,
-                                                    },
-                                                );
                                             }
                                         }}
                                     />
@@ -690,6 +908,24 @@ export const AdminFacilityCoverageMap: React.FC<{
                     )
                 )}
 
+                {/* Reset view button — floats top-right next to ZoomControl */}
+                {featureCollection && (
+                    <Tooltip title="Reset view to full extent">
+                        <Button
+                            size="small"
+                            icon={<AimOutlined />}
+                            onClick={() => resetViewRef.current?.()}
+                            style={{
+                                position: "absolute",
+                                top: 96,
+                                right: 12,
+                                zIndex: 1000,
+                                boxShadow: "0 2px 6px rgba(0,0,0,0.12)",
+                            }}
+                        />
+                    </Tooltip>
+                )}
+
                 {/* DHIS2-Maps-style overlay control */}
                 <div
                     style={{
@@ -698,9 +934,10 @@ export const AdminFacilityCoverageMap: React.FC<{
                         left: 12,
                         background: token.colorBgContainer,
                         border: `1px solid ${token.colorBorderSecondary}`,
-                        boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                        borderRadius: 6,
                         padding: token.paddingSM,
-                        maxWidth: 280,
+                        maxWidth: 290,
                         maxHeight: "calc(100% - 24px)",
                         overflowY: "auto",
                         zIndex: 1000,
@@ -738,6 +975,7 @@ export const AdminFacilityCoverageMap: React.FC<{
 
                         {showChoropleth && (
                             <>
+                                <Divider style={{ margin: "4px 0" }} />
                                 <Text strong>Choropleth metric</Text>
                                 <Select
                                     size="small"
@@ -748,6 +986,66 @@ export const AdminFacilityCoverageMap: React.FC<{
                                         label: c.label,
                                     }))}
                                 />
+                                <Flex
+                                    align="center"
+                                    justify="space-between"
+                                    gap={token.marginXS}
+                                >
+                                    <Text style={{ fontSize: token.fontSizeSM }}>
+                                        Palette
+                                    </Text>
+                                    <Select
+                                        size="small"
+                                        value={palette}
+                                        onChange={(v) => setPalette(v)}
+                                        style={{ flex: 1 }}
+                                        options={Object.entries(PALETTES).map(
+                                            ([key, p]) => ({
+                                                value: key,
+                                                label: (
+                                                    <Flex
+                                                        align="center"
+                                                        gap={6}
+                                                    >
+                                                        <span
+                                                            style={{
+                                                                display:
+                                                                    "inline-block",
+                                                                width: 60,
+                                                                height: 8,
+                                                                borderRadius: 2,
+                                                                background: `linear-gradient(to right, ${p.ramp.join(
+                                                                    ",",
+                                                                )})`,
+                                                            }}
+                                                        />
+                                                        <span>{p.label}</span>
+                                                    </Flex>
+                                                ),
+                                            }),
+                                        )}
+                                    />
+                                </Flex>
+                                <Flex
+                                    align="center"
+                                    justify="space-between"
+                                    gap={token.marginXS}
+                                >
+                                    <Text style={{ fontSize: token.fontSizeSM }}>
+                                        Show values on map
+                                    </Text>
+                                    <Segmented
+                                        size="small"
+                                        value={showValues ? "on" : "off"}
+                                        onChange={(v) =>
+                                            setShowValues(v === "on")
+                                        }
+                                        options={[
+                                            { value: "off", label: "Off" },
+                                            { value: "on", label: "On" },
+                                        ]}
+                                    />
+                                </Flex>
                                 <Text
                                     type="secondary"
                                     style={{ fontSize: token.fontSizeSM }}
@@ -767,7 +1065,7 @@ export const AdminFacilityCoverageMap: React.FC<{
                                         style={{
                                             flex: 1,
                                             height: 10,
-                                            background: `linear-gradient(to right, ${CHOROPLETH_RAMP.join(
+                                            background: `linear-gradient(to right, ${PALETTES[palette].ramp.join(
                                                 ",",
                                             )})`,
                                             borderRadius: 2,
@@ -889,6 +1187,9 @@ const PopupBody: React.FC<{
                 <strong>Layer value:</strong> {binLabel}
             </div>
             <div>Users (DHIS2): {facility.activeUserCount}</div>
+            <div>
+                Logged in (DHIS2 lastLogin): <strong>{facility.recentLogins}</strong>
+            </div>
             {facility.risk ? (
                 <>
                     <div>Status: {facility.risk.status}</div>
