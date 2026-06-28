@@ -102,6 +102,36 @@ function bandLabel(band: string): string {
  *  multi-page A4/Letter output via the browser's Print → Save as PDF. */
 const PrintStyles: React.FC = () => (
     <style>{`
+        /* Compact, professional table styling triggered while the PDF
+         * exporter is capturing the dashboard. Drops cell padding so a
+         * 1,000-row table actually fits, sharpens the borders, and
+         * shrinks the type without making it unreadable. */
+        .eregisters-print-table .ant-table-thead > tr > th,
+        .eregisters-print-table .ant-table-tbody > tr > td {
+            padding: 4px 8px !important;
+            font-size: 11px !important;
+            line-height: 1.35 !important;
+            white-space: nowrap;
+        }
+        .eregisters-print-table .ant-table-thead > tr > th {
+            background: #f1f5f9 !important;
+            color: #0f172a !important;
+            font-weight: 600 !important;
+            border-bottom: 1px solid #cbd5e1 !important;
+        }
+        .eregisters-print-table .ant-table-tbody > tr:hover > td {
+            background: transparent !important;
+        }
+        .eregisters-print-table .ant-table-tbody > tr > td {
+            border-bottom: 1px solid #e2e8f0 !important;
+        }
+        .eregisters-print-table .ant-tag {
+            font-size: 10px !important;
+            padding: 0 6px !important;
+            line-height: 16px !important;
+            border-radius: 3px !important;
+        }
+
         @media print {
             body { background: #fff !important; }
             header, [role="banner"], nav, .ant-layout-sider,
@@ -124,14 +154,9 @@ const PrintStyles: React.FC = () => (
                 page-break-inside: avoid;
                 break-inside: avoid;
             }
-            .eregisters-print-root .ant-row,
-            .eregisters-print-root .ant-col {
-                break-inside: avoid;
-            }
             .eregisters-contributors-table .ant-pagination {
                 display: none !important;
             }
-            /* Map keeps the legend overlay visible but hides leaflet zoom. */
             .leaflet-container { height: 320px !important; }
             a[href]:after { content: "" !important; }
         }
@@ -341,6 +366,10 @@ export const AdminNationalOverview: React.FC<{
                         loading={generatingPdf}
                         onClick={async () => {
                             setGeneratingPdf(true);
+                            // Give React a beat to re-render the table
+                            // in print mode (no pagination, no toolbar)
+                            // before html2canvas snapshots the DOM.
+                            await new Promise((r) => setTimeout(r, 200));
                             try {
                                 await downloadDashboardPdf(
                                     "[data-pdf-root]",
@@ -471,6 +500,7 @@ export const AdminNationalOverview: React.FC<{
                 <div data-pdf-section="map">
                     <AdminFacilityCoverageMap
                         facilities={summary.facilityRiskMap}
+                        printMode={generatingPdf}
                     />
                 </div>
             )}
@@ -483,6 +513,7 @@ export const AdminNationalOverview: React.FC<{
                                 ? summary.facilityRiskMap
                                 : summary.topFacilities
                         }
+                        printMode={generatingPdf}
                     />
                 </div>
             )}

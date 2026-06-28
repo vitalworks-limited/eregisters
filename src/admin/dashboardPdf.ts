@@ -4,15 +4,14 @@ import { APP_VERSION, BUILD_HASH } from "../version";
 
 /**
  * Render the National Dashboard to a multi-page A4 PDF with a branded
- * header on every page. Uses html2canvas-pro (the maintained fork that
- * understands modern colour syntax like `oklch()` so antd v6 styles
- * don't break) to rasterise each section at 2x scale, then drops them
- * into jsPDF — keeping the layout pixel-faithful while still producing
- * sensible multi-page output.
+ * header on every page.
  *
- * Sections are identified by `[data-pdf-section]` attributes on the
- * DOM. Each one renders on its own page; large sections (the table)
- * are split across pages automatically.
+ * Layout strategy: each `[data-pdf-section]` element is captured at 2x
+ * scale via html2canvas-pro, then the canvas is sliced into A4-sized
+ * tiles in image space (no PDF clipping). Each tile lands on its own
+ * page, so sections cannot overlap and tall sections (the contributors
+ * table) split cleanly across pages. Every page gets a branded header
+ * and a footer regardless of section.
  */
 
 const A4_WIDTH_MM = 210;
@@ -60,11 +59,11 @@ async function drawHeader(
         try {
             pdf.addImage(logo, "PNG", margin, margin, 16, 16);
         } catch {
-            // ignore CORS failures
+            /* ignore CORS failures */
         }
     }
-    pdf.setFillColor(29, 78, 216); // antd blue
-    pdf.rect(margin + 18, margin, CONTENT_WIDTH_MM - 18, 2, "F");
+    pdf.setFillColor(29, 78, 216);
+    pdf.rect(margin + 18, margin, CONTENT_WIDTH_MM - 18, 1.5, "F");
 
     pdf.setFontSize(13);
     pdf.setTextColor(15, 23, 42);
@@ -96,20 +95,29 @@ function drawFooter(pdf: jsPDF, pageNum: number, pageTotal: number) {
         PAGE_MARGIN_MM,
         y,
     );
-    pdf.text(`Page ${pageNum} of ${pageTotal}`, A4_WIDTH_MM - PAGE_MARGIN_MM, y, {
-        align: "right",
-    });
+    pdf.text(
+        `Page ${pageNum} of ${pageTotal}`,
+        A4_WIDTH_MM - PAGE_MARGIN_MM,
+        y,
+        { align: "right" },
+    );
+}
+
+interface SectionPage {
+    dataUrl: string;
+    /** millimetres */
+    heightMm: number;
 }
 
 /**
- * Captures a single DOM node at high quality. Returns the image plus
- * its on-page mm height (preserving aspect ratio against the page
- * content width). Returns `null` if the node has no size yet.
+ * Snapshots a DOM node at 2x scale, then slices the canvas into A4-page
+ * tiles. Returns one image per PDF page. The image width is fixed at
+ * CONTENT_WIDTH_MM; the height of the last tile may be shorter.
  */
-async function captureSection(
+async function captureSectionAsPages(
     node: HTMLElement,
-): Promise<{ dataUrl: string; widthMm: number; heightMm: number } | null> {
-    if (!node || node.offsetWidth === 0 || node.offsetHeight === 0) return null;
+): Promise<SectionPage[]> {
+    if (!node || node.offsetWidth === 0 || node.offsetHeight === 0) return [];
     const canvas = await html2canvas(node, {
         scale: 2,
         backgroundColor: "#ffffff",
@@ -117,22 +125,61 @@ async function captureSection(
         logging: false,
         windowWidth: Math.max(node.scrollWidth, 1280),
     });
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
-    const heightMm =
+    const totalHeightMm =
         (canvas.height / canvas.width) * CONTENT_WIDTH_MM;
-    return { dataUrl, widthMm: CONTENT_WIDTH_MM, heightMm };
+    // How many image pixels correspond to one full content page.
+    const pxPerMm = canvas.width / CONTENT_WIDTH_MM;
+    const pagePxHeight = Math.floor(CONTENT_HEIGHT_MM * pxPerMm);
+
+    if (totalHeightMm <= CONTENT_HEIGHT_MM) {
+        return [
+            {
+                dataUrl: canvas.toDataURL("image/jpeg", 0.92),
+                heightMm: totalHeightMm,
+            },
+        ];
+    }
+
+    const pages: SectionPage[] = [];
+    let sourceY = 0;
+    while (sourceY < canvas.height) {
+        const sliceH = Math.min(pagePxHeight, canvas.height - sourceY);
+        const tile = document.createElement("canvas");
+        tile.width = canvas.width;
+        tile.height = sliceH;
+        const ctx = tile.getContext("2d");
+        if (!ctx) break;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, tile.width, tile.height);
+        ctx.drawImage(
+            canvas,
+            0,
+            sourceY,
+            canvas.width,
+            sliceH,
+            0,
+            0,
+            canvas.width,
+            sliceH,
+        );
+        pages.push({
+            dataUrl: tile.toDataURL("image/jpeg", 0.92),
+            heightMm: (sliceH / canvas.width) * CONTENT_WIDTH_MM,
+        });
+        sourceY += sliceH;
+    }
+    return pages;
 }
 
 /**
- * Builds and downloads the PDF. The dashboard root should be wrapped in
- * an element tagged `data-pdf-root`, with each major section tagged
- * `data-pdf-section`. The function will:
+ * Builds and downloads the PDF.
  *
- *   1. Find every section in document order.
- *   2. Snapshot each at 2x scale.
- *   3. Place them on consecutive A4 pages, splitting tall sections
- *      across multiple pages so the table never gets clipped.
- *   4. Draw a branded header + footer on every page.
+ * Workflow:
+ *   1. Find every `[data-pdf-section]` under `rootSelector`.
+ *   2. For each, capture + slice into A4-page-sized image tiles.
+ *   3. Each tile lands on its own PDF page (new section ⇒ new page,
+ *      and tall sections cascade onto consecutive pages).
+ *   4. Draw the branded header + footer on every page.
  */
 export async function downloadDashboardPdf(
     rootSelector: string,
@@ -145,7 +192,6 @@ export async function downloadDashboardPdf(
         root.querySelectorAll<HTMLElement>("[data-pdf-section]"),
     );
     if (sections.length === 0) {
-        // Fall back to capturing the whole root as one piece.
         sections.push(root);
     }
 
@@ -159,72 +205,31 @@ export async function downloadDashboardPdf(
     const logo = await loadImage(UGANDA_LOGO_URL);
 
     let pageNumber = 0;
-    const headerBottomY = PAGE_MARGIN_MM + HEADER_HEIGHT_MM;
-    let cursorY = headerBottomY;
-    let newPage = true;
-
-    const startPage = async () => {
-        if (pageNumber > 0) pdf.addPage();
-        pageNumber += 1;
-        await drawHeader(pdf, logo, title, meta);
-        cursorY = headerBottomY;
-        newPage = false;
-    };
 
     for (const node of sections) {
-        const captured = await captureSection(node);
-        if (!captured) continue;
-        const { dataUrl, widthMm } = captured;
-        let { heightMm } = captured;
-
-        let sliceStart = 0;
-        const naturalAspect = heightMm / widthMm;
-
-        while (sliceStart < heightMm - 0.01) {
-            const available = CONTENT_HEIGHT_MM - (cursorY - headerBottomY);
-            if (available < 30 || newPage) {
-                await startPage();
-            }
-            const remaining = heightMm - sliceStart;
-            const drawHeightMm = Math.min(remaining, CONTENT_HEIGHT_MM);
-
-            // jsPDF can't crop an image, so we use the addImage's
-            // source rect via canvas slicing. Simpler: place the
-            // image at a negative y offset and clip with a rect.
-            pdf.saveGraphicsState();
-            const clipY = cursorY;
-            const clipH = Math.min(drawHeightMm, CONTENT_HEIGHT_MM);
-            pdf.rect(
-                PAGE_MARGIN_MM,
-                clipY,
-                CONTENT_WIDTH_MM,
-                clipH,
-                undefined,
-            );
-            pdf.clip();
-            pdf.discardPath();
+        const pages = await captureSectionAsPages(node);
+        if (pages.length === 0) continue;
+        for (const tile of pages) {
+            if (pageNumber > 0) pdf.addPage();
+            pageNumber += 1;
+            await drawHeader(pdf, logo, title, meta);
             pdf.addImage(
-                dataUrl,
+                tile.dataUrl,
                 "JPEG",
                 PAGE_MARGIN_MM,
-                clipY - sliceStart,
+                PAGE_MARGIN_MM + HEADER_HEIGHT_MM,
                 CONTENT_WIDTH_MM,
-                heightMm,
+                tile.heightMm,
                 undefined,
                 "FAST",
             );
-            pdf.restoreGraphicsState();
-
-            cursorY += clipH + 6;
-            sliceStart += clipH;
-            if (sliceStart < heightMm) {
-                newPage = true;
-            }
-            // Touch naturalAspect once to silence the unused-var lint.
-            void naturalAspect;
         }
-        // small gap between sections on the same page
-        newPage = newPage || cursorY > headerBottomY + CONTENT_HEIGHT_MM - 30;
+    }
+
+    // Empty doc — fall back to a single blank page so we don't crash.
+    if (pageNumber === 0) {
+        pageNumber += 1;
+        await drawHeader(pdf, logo, title, meta);
     }
 
     const totalPages = pageNumber;

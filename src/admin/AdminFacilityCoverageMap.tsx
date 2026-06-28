@@ -393,7 +393,14 @@ function rampColor(
 
 export const AdminFacilityCoverageMap: React.FC<{
     facilities: FacilityRiskPoint[];
-}> = ({ facilities }) => {
+    /**
+     * When true (set by the PDF exporter before snapshotting), the
+     * map hides the floating control panel so it doesn't cover the
+     * map area and renders the legend as a normal block below the
+     * map for a clean print layout.
+     */
+    printMode?: boolean;
+}> = ({ facilities, printMode = false }) => {
     const { token } = theme.useToken();
 
     // Controls
@@ -990,8 +997,9 @@ export const AdminFacilityCoverageMap: React.FC<{
                     </Tooltip>
                 )}
 
-                {/* DHIS2-Maps-style overlay control */}
-                <div
+                {/* DHIS2-Maps-style overlay control — hidden in print so
+                 *  it doesn't cover the map area in the PDF snapshot. */}
+                {!printMode && <div
                     style={{
                         position: "absolute",
                         top: 12,
@@ -1186,11 +1194,13 @@ export const AdminFacilityCoverageMap: React.FC<{
                             </Text>
                         )}
                     </Flex>
-                </div>
+                </div>}
 
                 {/* Right-side legend panel — separate from filters so
-                 *  it can be glanced at without scrolling the controls. */}
-                {(showFacilities && legend.length > 0) || showChoropleth ? (
+                 *  it can be glanced at without scrolling the controls.
+                 *  Skipped in print mode in favour of a static legend
+                 *  block rendered BELOW the map. */}
+                {!printMode && ((showFacilities && legend.length > 0) || showChoropleth) ? (
                     <div
                         style={{
                             position: "absolute",
@@ -1307,6 +1317,82 @@ export const AdminFacilityCoverageMap: React.FC<{
                     </div>
                 ) : null}
             </div>
+
+            {/* Print legend — only rendered while a PDF capture is in
+             *  flight. Sits as a normal block below the map so it never
+             *  overlaps the snapshot. */}
+            {printMode && ((showFacilities && legend.length > 0) || showChoropleth) && (
+                <div
+                    style={{
+                        border: `1px solid ${token.colorBorderSecondary}`,
+                        borderRadius: 4,
+                        padding: token.paddingSM,
+                        background: token.colorBgContainer,
+                    }}
+                >
+                    <Flex gap={token.paddingLG} wrap>
+                        {showChoropleth && (
+                            <Flex vertical gap={4} style={{ minWidth: 200 }}>
+                                <Text strong style={{ fontSize: token.fontSizeSM }}>
+                                    {choroplethSpec.label}
+                                </Text>
+                                <Flex align="center" gap={token.marginXS}>
+                                    <Text style={{ fontSize: token.fontSizeSM }}>
+                                        {choroplethRange.min}
+                                        {choroplethSpec.isRatio ? "%" : ""}
+                                    </Text>
+                                    <div
+                                        style={{
+                                            flex: 1,
+                                            height: 10,
+                                            background: `linear-gradient(to right, ${PALETTES[palette].ramp.join(",")})`,
+                                            borderRadius: 2,
+                                        }}
+                                    />
+                                    <Text style={{ fontSize: token.fontSizeSM }}>
+                                        {choroplethRange.max}
+                                        {choroplethSpec.isRatio ? "%" : ""}
+                                    </Text>
+                                </Flex>
+                            </Flex>
+                        )}
+                        {showFacilities && legend.length > 0 && (
+                            <Flex vertical gap={3} style={{ minWidth: 240 }}>
+                                <Text strong style={{ fontSize: token.fontSizeSM }}>
+                                    {groupSetId ? activeThematic.label : "Facility legend"}
+                                </Text>
+                                <Flex wrap gap={`${token.marginXXS}px ${token.marginSM}px`}>
+                                    {legend.map((b) => (
+                                        <Flex
+                                            key={b.label}
+                                            align="center"
+                                            gap={6}
+                                            style={{ minWidth: 150 }}
+                                        >
+                                            <span
+                                                style={{
+                                                    display: "inline-block",
+                                                    width: 10,
+                                                    height: 10,
+                                                    borderRadius: "50%",
+                                                    background: b.color,
+                                                    border: "1px solid rgba(0,0,0,0.15)",
+                                                }}
+                                            />
+                                            <Text style={{ fontSize: token.fontSizeSM, flex: 1 }}>
+                                                {b.label}
+                                            </Text>
+                                            <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                                                {b.count.toLocaleString()}
+                                            </Text>
+                                        </Flex>
+                                    ))}
+                                </Flex>
+                            </Flex>
+                        )}
+                    </Flex>
+                </div>
+            )}
         </Flex>
     );
 };

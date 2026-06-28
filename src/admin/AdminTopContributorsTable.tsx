@@ -127,7 +127,14 @@ function downloadCsv(rows: ContributorRow[]): void {
 
 export const AdminTopContributorsTable: React.FC<{
     rows: FacilityRiskPoint[];
-}> = ({ rows }) => {
+    /**
+     * When true (set by the PDF exporter before snapshotting), the
+     * table renders without pagination, drops the toolbar, and uses
+     * a tighter cell padding so every program-enrolled facility ends
+     * up in the printed report.
+     */
+    printMode?: boolean;
+}> = ({ rows, printMode = false }) => {
     const { token } = theme.useToken();
     const { facilities: programFacilities, loading: facLoading } =
         useProgramFacilities();
@@ -518,7 +525,7 @@ export const AdminTopContributorsTable: React.FC<{
                         {filtered.length.toLocaleString()} shown
                     </Text>
                 </Flex>
-                <Flex gap={token.marginXS} wrap>
+                {!printMode && <Flex gap={token.marginXS} wrap>
                     <Input
                         placeholder="Search facility"
                         prefix={<SearchOutlined />}
@@ -542,10 +549,10 @@ export const AdminTopContributorsTable: React.FC<{
                     >
                         Export CSV
                     </Button>
-                </Flex>
+                </Flex>}
             </Flex>
 
-            <Flex gap={token.marginXS} wrap>
+            {!printMode && <Flex gap={token.marginXS} wrap>
                 <Select
                     value={statusFilter}
                     onChange={(v) => setStatusFilter(v)}
@@ -600,7 +607,7 @@ export const AdminTopContributorsTable: React.FC<{
                         { value: "no", label: "Missing coords" },
                     ]}
                 />
-            </Flex>
+            </Flex>}
 
             {filtered.length === 0 ? (
                 <Empty
@@ -626,9 +633,13 @@ export const AdminTopContributorsTable: React.FC<{
                     loading={
                         (facLoading || usersLoading) && merged.length === 0
                     }
-                    className="eregisters-contributors-table"
+                    className={
+                        printMode
+                            ? "eregisters-contributors-table eregisters-print-table"
+                            : "eregisters-contributors-table"
+                    }
                     pagination={
-                        showAll
+                        printMode || showAll
                             ? false
                             : {
                                   pageSize: 20,
