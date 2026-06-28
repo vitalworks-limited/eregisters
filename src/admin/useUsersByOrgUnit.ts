@@ -38,6 +38,15 @@ interface UsersResponse {
 
 const DEFAULT_RECENT_WINDOW_MINUTES = 60;
 
+/**
+ * In-memory cache keyed by the recent-login window so navigating
+ * between admin tabs doesn't re-fetch every DHIS2 user record. The
+ * full users payload is the slowest call on the dashboard.
+ */
+let cachedCounts: UsersByOrgUnit | null = null;
+let cachedFetchedAt = 0;
+const CACHE_TTL_MS = 5 * 60_000;
+
 export function useUsersByOrgUnit(
     recentWindowMinutes: number = DEFAULT_RECENT_WINDOW_MINUTES,
 ): {
@@ -57,6 +66,15 @@ export function useUsersByOrgUnit(
 
     useEffect(() => {
         let cancelled = false;
+        if (
+            cachedCounts &&
+            cachedCounts.recentWindowMinutes === recentWindowMinutes &&
+            Date.now() - cachedFetchedAt < CACHE_TTL_MS
+        ) {
+            setCounts(cachedCounts);
+            setLoading(false);
+            return;
+        }
         const resource = "users";
         try {
             assertAdminOverviewSafeRequest(
@@ -105,13 +123,15 @@ export function useUsersByOrgUnit(
                         }
                     }
                 }
-                if (!cancelled)
-                    setCounts({
-                        totalById: total,
-                        activeById: active,
-                        recentLoginsById: recent,
-                        recentWindowMinutes,
-                    });
+                const next: UsersByOrgUnit = {
+                    totalById: total,
+                    activeById: active,
+                    recentLoginsById: recent,
+                    recentWindowMinutes,
+                };
+                cachedCounts = next;
+                cachedFetchedAt = Date.now();
+                if (!cancelled) setCounts(next);
             } catch (err) {
                 if (!cancelled) {
                     setError(

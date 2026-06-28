@@ -1,4 +1,25 @@
-import { PrinterOutlined, ReloadOutlined, WarningOutlined } from "@ant-design/icons";
+import {
+    AlertOutlined,
+    BankOutlined,
+    BarChartOutlined,
+    BugOutlined,
+    CloudDownloadOutlined,
+    CloudUploadOutlined,
+    ClusterOutlined,
+    DashboardOutlined,
+    DatabaseOutlined,
+    HddOutlined,
+    HeartOutlined,
+    MedicineBoxOutlined,
+    PrinterOutlined,
+    ReloadOutlined,
+    RocketOutlined,
+    SignalFilled,
+    TeamOutlined,
+    ThunderboltOutlined,
+    UserOutlined,
+    WarningOutlined,
+} from "@ant-design/icons";
 import { useCurrentUserInfo, useDataEngine } from "@dhis2/app-runtime";
 import {
     Alert,
@@ -50,23 +71,56 @@ const PERIOD_OPTIONS: { value: PeriodType; label: string }[] = [
 
 const MIN_REFRESH_INTERVAL_MS = 60_000;
 
-const CARD_ORDER: (keyof OverviewCards)[] = [
+/**
+ * Tiered card layout. Hero cards anchor the dashboard with the
+ * headline counts; status cards carry the band-coloured health
+ * indicators; operational cards are the dense detail row at the
+ * bottom. Each card gets a tinted icon for quick scanning instead
+ * of the wall-of-identical-tiles look the dashboard had before.
+ */
+const HERO_CARDS: (keyof OverviewCards)[] = [
     "facilitiesUsingERegistry",
     "registeredUsers",
-    "activeUsers",
     "registeredClients",
     "totalEncounters",
+];
+const STATUS_CARDS: (keyof OverviewCards)[] = [
     "syncHealth",
     "systemPressure",
+    "appVersionStatus",
+    "operationalAlerts",
+];
+const OPERATIONAL_CARDS: (keyof OverviewCards)[] = [
+    "activeUsers",
     "trackerGets",
     "trackerPosts",
     "slowRequests",
     "responseVolumeMb",
     "unsafePatternCount",
-    "appVersionStatus",
     "jobBacklog",
-    "operationalAlerts",
 ];
+
+const CARD_ICONS: Record<keyof OverviewCards, React.ReactNode> = {
+    facilitiesUsingERegistry: <BankOutlined />,
+    registeredUsers: <TeamOutlined />,
+    activeUsers: <UserOutlined />,
+    registeredClients: <MedicineBoxOutlined />,
+    totalEncounters: <BarChartOutlined />,
+    syncHealth: <HeartOutlined />,
+    systemPressure: <DashboardOutlined />,
+    trackerGets: <CloudDownloadOutlined />,
+    trackerPosts: <CloudUploadOutlined />,
+    slowRequests: <ThunderboltOutlined />,
+    responseVolumeMb: <HddOutlined />,
+    unsafePatternCount: <BugOutlined />,
+    appVersionStatus: <RocketOutlined />,
+    jobBacklog: <ClusterOutlined />,
+    operationalAlerts: <AlertOutlined />,
+};
+// Silence unused-import warnings — the icons set is the source of
+// truth for what's rendered.
+void DatabaseOutlined;
+void SignalFilled;
 
 function bandTagColor(band: string): string {
     switch (band) {
@@ -446,18 +500,56 @@ export const AdminNationalOverview: React.FC<{
             )}
 
             {summary && (
-                <Row
-                    gutter={[token.marginSM, token.marginSM]}
+                <Flex
+                    vertical
+                    gap={token.marginSM}
                     data-pdf-section="cards"
                 >
-                    {CARD_ORDER.map((key) => (
-                        <Col key={key} xs={24} sm={12} md={8} lg={6} xl={6}>
-                            <AdminSummaryCard
-                                metric={(cards ?? summary.cards)[key]}
-                            />
-                        </Col>
-                    ))}
-                </Row>
+                    {/* Hero row — national headline numbers */}
+                    <Row gutter={[token.marginSM, token.marginSM]}>
+                        {HERO_CARDS.map((key) => (
+                            <Col key={key} xs={24} sm={12} lg={6}>
+                                <AdminSummaryCard
+                                    metric={(cards ?? summary.cards)[key]}
+                                    icon={CARD_ICONS[key]}
+                                    variant="hero"
+                                />
+                            </Col>
+                        ))}
+                    </Row>
+
+                    {/* Status row — health indicators */}
+                    <Row gutter={[token.marginSM, token.marginSM]}>
+                        {STATUS_CARDS.map((key) => (
+                            <Col key={key} xs={24} sm={12} lg={6}>
+                                <AdminSummaryCard
+                                    metric={(cards ?? summary.cards)[key]}
+                                    icon={CARD_ICONS[key]}
+                                    variant="status"
+                                />
+                            </Col>
+                        ))}
+                    </Row>
+
+                    {/* Operational row — denser detail metrics */}
+                    <Row gutter={[token.marginSM, token.marginSM]}>
+                        {OPERATIONAL_CARDS.map((key) => (
+                            <Col
+                                key={key}
+                                xs={12}
+                                sm={8}
+                                md={6}
+                                lg={Math.floor(24 / OPERATIONAL_CARDS.length)}
+                            >
+                                <AdminSummaryCard
+                                    metric={(cards ?? summary.cards)[key]}
+                                    icon={CARD_ICONS[key]}
+                                    variant="operational"
+                                />
+                            </Col>
+                        ))}
+                    </Row>
+                </Flex>
             )}
 
             {summary && deliveredBy === "no-data" && (
