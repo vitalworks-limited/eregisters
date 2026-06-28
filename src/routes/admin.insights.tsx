@@ -1,8 +1,7 @@
 import {
     BarChartOutlined,
     CheckCircleOutlined,
-    DownloadOutlined,
-    FileMarkdownOutlined,
+    EyeOutlined,
     ReloadOutlined,
 } from "@ant-design/icons";
 import { useDataEngine } from "@dhis2/app-runtime";
@@ -10,7 +9,6 @@ import { eq, useLiveQuery } from "@tanstack/react-db";
 import { createRoute } from "@tanstack/react-router";
 import {
     Alert,
-    App,
     Button,
     Col,
     Empty,
@@ -22,6 +20,7 @@ import {
 } from "antd";
 import dayjs from "dayjs";
 import React, { useEffect, useMemo, useState } from "react";
+import { BundleDrawer } from "../admin/BundleDrawer";
 import { bandColor, computeHealthScore } from "../admin/healthScore";
 import {
     generateInsights,
@@ -29,11 +28,6 @@ import {
     SEVERITY_COLOR,
     SEVERITY_LABEL,
 } from "../admin/insightsEngine";
-import {
-    buildTroubleshootingBundle,
-    downloadBundleAsJson,
-    downloadBundleAsMarkdown,
-} from "../admin/troubleshootingBundle";
 import {
     enrollmentsCollection,
     eventsCollection,
@@ -130,7 +124,7 @@ function AdminInsights() {
     const { token } = theme.useToken();
     const engine = useDataEngine();
     const { orgUnit } = useMetadata();
-    const { message } = App.useApp();
+    const [bundleOpen, setBundleOpen] = useState(false);
 
     const [telemetry, setTelemetry] = useState<SyncTelemetry[]>([]);
     const [syncConfig, setSyncConfig] = useState<SyncConfig>(DEFAULT_SYNC_CONFIG);
@@ -233,8 +227,8 @@ function AdminInsights() {
         return out;
     }, [insights]);
 
-    const downloadJson = async () => {
-        const bundle = await buildTroubleshootingBundle({
+    const bundleInputs = useMemo(
+        () => ({
             syncConfig,
             killSwitch,
             facility: { id: orgUnit?.id, name: orgUnit?.name },
@@ -246,28 +240,20 @@ function AdminInsights() {
             lastDataPull,
             lastDataPush,
             lastMetadataPull,
-        });
-        downloadBundleAsJson(bundle);
-        message.success("Troubleshooting bundle downloaded (JSON)");
-    };
-
-    const downloadMd = async () => {
-        const bundle = await buildTroubleshootingBundle({
+        }),
+        [
             syncConfig,
             killSwitch,
-            facility: { id: orgUnit?.id, name: orgUnit?.name },
-            pending: {
-                trackedEntities: pendingTrackedEntities.length,
-                enrollments: pendingEnrollments.length,
-                events: pendingEvents.length,
-            },
+            orgUnit?.id,
+            orgUnit?.name,
+            pendingTrackedEntities.length,
+            pendingEnrollments.length,
+            pendingEvents.length,
             lastDataPull,
             lastDataPush,
             lastMetadataPull,
-        });
-        downloadBundleAsMarkdown(bundle);
-        message.success("Troubleshooting bundle downloaded (Markdown)");
-    };
+        ],
+    );
 
     return (
         <Flex vertical gap={token.marginSM}>
@@ -283,16 +269,11 @@ function AdminInsights() {
                 </Flex>
                 <Flex gap={token.marginXS} wrap>
                     <Button
-                        icon={<DownloadOutlined />}
-                        onClick={downloadJson}
+                        icon={<EyeOutlined />}
+                        onClick={() => setBundleOpen(true)}
+                        type="primary"
                     >
-                        Bundle (JSON)
-                    </Button>
-                    <Button
-                        icon={<FileMarkdownOutlined />}
-                        onClick={downloadMd}
-                    >
-                        Bundle (Markdown)
+                        View bundle
                     </Button>
                     <Button
                         icon={<ReloadOutlined />}
@@ -471,6 +452,11 @@ function AdminInsights() {
                     ))}
                 </Flex>
             )}
+            <BundleDrawer
+                open={bundleOpen}
+                onClose={() => setBundleOpen(false)}
+                inputs={bundleInputs}
+            />
         </Flex>
     );
 }

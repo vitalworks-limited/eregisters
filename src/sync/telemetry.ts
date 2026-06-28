@@ -24,6 +24,8 @@ export interface SyncFailure {
     message: string;
 }
 
+export type SyncTrigger = "manual" | "scheduled";
+
 export interface SyncTelemetry {
     syncId: string;
     userUid?: string;
@@ -33,6 +35,12 @@ export interface SyncTelemetry {
     startedAt: string;
     finishedAt?: string;
     mode: SyncMode;
+    /**
+     * How the sync was initiated. `manual` covers the sync popover and
+     * admin-page buttons; `scheduled` covers the timer, app-start
+     * bootstrap, and network-reconnect flows.
+     */
+    trigger?: SyncTrigger;
     pagesPulled?: number;
     trackedEntitiesPulled?: number;
     eventsPulled?: number;
@@ -40,6 +48,36 @@ export interface SyncTelemetry {
     trackerPosts?: number;
     asyncJobsCreated?: number;
     failures?: SyncFailure[];
+}
+
+/**
+ * One-shot trigger marker.
+ *
+ * Why: the state machine fans out a single user event into multiple
+ * actors (data-pull, events-pull, etc.). Rather than threading
+ * `trigger` through every transition, UI dispatchers call
+ * `markNextSyncManual()` immediately before `syncActor.send(...)`. The
+ * actor consumes it via `consumeNextSyncTrigger()` at the top of its
+ * run, so the very next sync flow is labelled `manual` even if it's
+ * queued. Anything fired by the scheduler doesn't call the marker and
+ * defaults to `scheduled`.
+ */
+let pendingManualTrigger = false;
+let pendingManualTriggerExpiresAt = 0;
+const MANUAL_TRIGGER_TTL_MS = 30_000;
+
+export function markNextSyncManual(): void {
+    pendingManualTrigger = true;
+    pendingManualTriggerExpiresAt = Date.now() + MANUAL_TRIGGER_TTL_MS;
+}
+
+export function consumeNextSyncTrigger(): SyncTrigger {
+    if (pendingManualTrigger && Date.now() < pendingManualTriggerExpiresAt) {
+        pendingManualTrigger = false;
+        return "manual";
+    }
+    pendingManualTrigger = false;
+    return "scheduled";
 }
 
 class TelemetryDatabase extends Dexie {

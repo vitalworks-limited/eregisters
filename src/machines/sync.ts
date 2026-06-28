@@ -53,7 +53,7 @@ import {
 import { submitEventDeletes } from "../sync/deletes";
 import { acquireSyncLock, buildOwnerId, releaseSyncLock } from "../sync/lock";
 import { getSyncDelayMs } from "../sync/scheduler";
-import { SyncTelemetryBuilder } from "../sync/telemetry";
+import { consumeNextSyncTrigger, SyncTelemetryBuilder } from "../sync/telemetry";
 import { isSyncBlockedByUpdate } from "../update/syncGuard";
 import { probeProgramVersion } from "../sync/programVersionProbe";
 import {
@@ -470,6 +470,7 @@ const syncMachine = setup({
                 const telemetry = new SyncTelemetryBuilder("data-pull", {
                     orgUnitUid: orgUnit,
                     userUid: user,
+                    trigger: consumeNextSyncTrigger(),
                 });
 
                 try {

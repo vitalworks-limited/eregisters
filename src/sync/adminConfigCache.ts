@@ -1,6 +1,7 @@
 import type { useDataEngine } from "@dhis2/app-runtime";
 import {
     adminConfig,
+    BroadcastConfig,
     DEFAULT_KILL_SWITCH,
     DEFAULT_SYNC_CONFIG,
     KillSwitch,
@@ -18,14 +19,35 @@ import {
 interface Snapshot {
     syncConfig: SyncConfig;
     killSwitch: KillSwitch;
+    broadcast?: BroadcastConfig;
     loadedAt: number;
 }
+
+type Listener = (snap: Snapshot) => void;
 
 const KEY = "eregisters.adminConfigCache";
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 let snapshot: Snapshot | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+const listeners = new Set<Listener>();
+
+export function subscribeAdminConfig(listener: Listener): () => void {
+    listeners.add(listener);
+    return () => {
+        listeners.delete(listener);
+    };
+}
+
+function emit(snap: Snapshot) {
+    for (const l of listeners) {
+        try {
+            l(snap);
+        } catch {
+            // never break the poll loop on listener errors
+        }
+    }
+}
 
 function readPersisted(): Snapshot | null {
     if (typeof window === "undefined") return null;
@@ -62,16 +84,19 @@ export function getCachedAdminConfig(): Snapshot {
 export async function refreshAdminConfig(
     engine: ReturnType<typeof useDataEngine>,
 ): Promise<Snapshot> {
-    const [syncConfig, killSwitch] = await Promise.all([
+    const [syncConfig, killSwitch, broadcast] = await Promise.all([
         adminConfig.getSyncConfig(engine),
         adminConfig.getKillSwitch(engine),
+        adminConfig.getBroadcast(engine),
     ]);
     snapshot = {
         syncConfig,
         killSwitch,
+        broadcast: broadcast ?? undefined,
         loadedAt: Date.now(),
     };
     persist(snapshot);
+    emit(snapshot);
     return snapshot;
 }
 

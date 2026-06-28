@@ -36,8 +36,42 @@ export interface SyncConfig {
      * dataStore. Local telemetry still works for the support download.
      */
     telemetryEnabled: boolean;
-    /** Optional banner shown to all users while non-empty. */
+    /** Optional banner/modal shown to all users while non-empty. */
     notice?: string;
+    /**
+     * How the notice surfaces in the client.
+     * - `banner` (default): slim dismissible bar at the top of the app.
+     * - `modal`: blocking-style popover until the user clicks the action.
+     */
+    noticeMode?: "banner" | "modal";
+    /**
+     * When true, the modal has no close X and the mask cannot dismiss
+     * it — the user must click the action button to acknowledge.
+     * Only applies when `noticeMode === "modal"`.
+     */
+    noticeRequiresAck?: boolean;
+    /**
+     * Label for the action button. Defaults to a kind-specific label.
+     */
+    noticeActionLabel?: string;
+    /**
+     * URL opened in a new tab when `noticeAction === "openLink"`.
+     */
+    noticeActionHref?: string;
+    /**
+     * What the action button does when clicked. `dismiss` simply closes
+     * the notice (default). The other kinds run safe in-app operations
+     * before closing — e.g. refresh the bundle, save the active draft,
+     * or kick a manual sync.
+     */
+    noticeAction?:
+        | "dismiss"
+        | "openLink"
+        | "refresh"
+        | "saveRefresh"
+        | "syncMetadata"
+        | "syncData"
+        | "syncAll";
     /** Last updated timestamp (set by the writer). */
     updatedAt?: string;
     /** Username of the writer. */

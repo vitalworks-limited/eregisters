@@ -15,6 +15,7 @@ import { eq, useLiveQuery } from "@tanstack/react-db";
 import { useConfig } from "@dhis2/app-runtime";
 import { AppNav } from "../components/app-nav";
 import { MetadataLoadingStrip } from "../components/metadata-loading-strip";
+import { AdminNoticeBanner } from "../components/admin-notice-banner";
 import { OfflineBanner } from "../components/offline-banner";
 import { OnlineIndicator } from "../components/online-indicator";
 import { OrgUnitChip } from "../components/org-unit-chip";
@@ -242,6 +243,7 @@ function LayoutWithDrafts() {
                 Skip to main content
             </a>
             <OfflineBanner />
+            <AdminNoticeBanner />
             <header role="banner">{brandBar}</header>
             <Drawer
                 title="Navigation"

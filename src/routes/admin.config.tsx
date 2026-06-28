@@ -12,7 +12,9 @@ import {
     Checkbox,
     Col,
     Flex,
+    Input,
     InputNumber,
+    Radio,
     Row,
     Select,
     Switch,
@@ -199,6 +201,13 @@ function AdminConfig() {
     const [killSwitch, setKillSwitch] = useState<KillSwitch>(DEFAULT_KILL_SWITCH);
     const [killReason, setKillReason] = useState("");
     const [notice, setNotice] = useState("");
+    const [noticeMode, setNoticeMode] = useState<"banner" | "modal">("banner");
+    const [noticeRequiresAck, setNoticeRequiresAck] = useState(false);
+    const [noticeActionLabel, setNoticeActionLabel] = useState("");
+    const [noticeActionHref, setNoticeActionHref] = useState("");
+    const [noticeAction, setNoticeAction] = useState<
+        NonNullable<SyncConfig["noticeAction"]>
+    >("dismiss");
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
 
@@ -213,6 +222,11 @@ function AdminConfig() {
             setKillSwitch(ks);
             setKillReason(ks.reason ?? "");
             setNotice(sc.notice ?? "");
+            setNoticeMode(sc.noticeMode === "modal" ? "modal" : "banner");
+            setNoticeRequiresAck(Boolean(sc.noticeRequiresAck));
+            setNoticeActionLabel(sc.noticeActionLabel ?? "");
+            setNoticeActionHref(sc.noticeActionHref ?? "");
+            setNoticeAction(sc.noticeAction ?? "dismiss");
         } finally {
             setLoading(false);
         }
@@ -225,9 +239,27 @@ function AdminConfig() {
     const saveAll = async () => {
         setSaving(true);
         try {
+            const trimmedNotice = notice.trim();
             const sc: SyncConfig = {
                 ...syncConfig,
-                notice: notice.trim() || undefined,
+                notice: trimmedNotice || undefined,
+                noticeMode: trimmedNotice ? noticeMode : undefined,
+                noticeRequiresAck:
+                    trimmedNotice && noticeMode === "modal"
+                        ? noticeRequiresAck
+                        : undefined,
+                noticeActionLabel:
+                    trimmedNotice && noticeActionLabel.trim()
+                        ? noticeActionLabel.trim()
+                        : undefined,
+                noticeActionHref:
+                    trimmedNotice && noticeActionHref.trim()
+                        ? noticeActionHref.trim()
+                        : undefined,
+                noticeAction:
+                    trimmedNotice && noticeAction !== "dismiss"
+                        ? noticeAction
+                        : undefined,
                 updatedAt: new Date().toISOString(),
                 updatedBy: userInfo?.username ?? userInfo?.name,
             };
@@ -261,6 +293,11 @@ function AdminConfig() {
         setKillSwitch(DEFAULT_KILL_SWITCH);
         setKillReason("");
         setNotice("");
+        setNoticeMode("banner");
+        setNoticeRequiresAck(false);
+        setNoticeActionLabel("");
+        setNoticeActionHref("");
+        setNoticeAction("dismiss");
     };
 
     return (
@@ -432,24 +469,179 @@ function AdminConfig() {
             </Card>
 
             <Card title="In-app notice" loading={loading}>
-                <Paragraph type="secondary" style={{ marginBottom: token.marginSM }}>
-                    Optional banner shown to all users in the sync popover.
-                </Paragraph>
-                <textarea
-                    value={notice}
-                    placeholder="e.g. Pilot phase — please report issues to the help desk"
-                    onChange={(e) => setNotice(e.target.value)}
-                    rows={3}
-                    style={{
-                        width: "100%",
-                        border: `1px solid ${token.colorBorderSecondary}`,
-                        padding: `${token.paddingXS}px ${token.paddingSM}px`,
-                        background: token.colorBgContainer,
-                        color: token.colorTextBase,
-                        fontSize: token.fontSize,
-                        fontFamily: token.fontFamily,
-                    }}
-                />
+                <Flex vertical gap={token.marginSM}>
+                    <Paragraph type="secondary" style={{ margin: 0 }}>
+                        Shown to every signed-in user until they
+                        acknowledge it. Use the broadcast page instead
+                        when you need to force a build update.
+                    </Paragraph>
+                    <textarea
+                        value={notice}
+                        placeholder="e.g. Pilot phase — please report issues to the help desk"
+                        onChange={(e) => setNotice(e.target.value)}
+                        rows={3}
+                        style={{
+                            width: "100%",
+                            border: `1px solid ${token.colorBorderSecondary}`,
+                            padding: `${token.paddingXS}px ${token.paddingSM}px`,
+                            background: token.colorBgContainer,
+                            color: token.colorTextBase,
+                            fontSize: token.fontSize,
+                            fontFamily: token.fontFamily,
+                        }}
+                    />
+
+                    <Flex vertical gap={token.marginXXS}>
+                        <Text strong>How should it appear?</Text>
+                        <Radio.Group
+                            value={noticeMode}
+                            onChange={(e) => setNoticeMode(e.target.value)}
+                            optionType="button"
+                            options={[
+                                { value: "banner", label: "Slim banner" },
+                                { value: "modal", label: "Popover dialog" },
+                            ]}
+                        />
+                        <Text
+                            type="secondary"
+                            style={{ fontSize: token.fontSizeSM }}
+                        >
+                            Banner sits above the app bar and can be
+                            dismissed with an X. Popover blocks the page
+                            until the user clicks the action button.
+                        </Text>
+                    </Flex>
+
+                    <Flex vertical gap={token.marginXXS}>
+                        <Text strong>What should the action button do?</Text>
+                        <Select
+                            value={noticeAction}
+                            onChange={(v) => setNoticeAction(v)}
+                            options={[
+                                {
+                                    value: "dismiss",
+                                    label: "Just acknowledge (close)",
+                                },
+                                {
+                                    value: "openLink",
+                                    label: "Open a link in a new tab",
+                                },
+                                {
+                                    value: "refresh",
+                                    label: "Refresh the app",
+                                },
+                                {
+                                    value: "saveRefresh",
+                                    label:
+                                        "Save current draft, then refresh",
+                                },
+                                {
+                                    value: "syncMetadata",
+                                    label: "Sync metadata",
+                                },
+                                {
+                                    value: "syncData",
+                                    label: "Sync data (pull changes)",
+                                },
+                                {
+                                    value: "syncAll",
+                                    label:
+                                        "Run all safely (save · metadata · pull · push)",
+                                },
+                            ]}
+                            style={{ minWidth: 320 }}
+                        />
+                        <Text
+                            type="secondary"
+                            style={{ fontSize: token.fontSizeSM }}
+                        >
+                            "Run all safely" attempts a draft save first
+                            and runs each step in order. Each sync step
+                            is recorded as a Manual run in the sync
+                            telemetry.
+                        </Text>
+                    </Flex>
+
+                    <Row gutter={[token.marginSM, token.marginSM]}>
+                        <Col xs={24} md={12}>
+                            <Flex vertical gap={token.marginXXS}>
+                                <Text type="secondary">
+                                    Action button label
+                                </Text>
+                                <Input
+                                    value={noticeActionLabel}
+                                    placeholder="Default for this action"
+                                    onChange={(e) =>
+                                        setNoticeActionLabel(e.target.value)
+                                    }
+                                    maxLength={40}
+                                />
+                                <Text
+                                    type="secondary"
+                                    style={{ fontSize: token.fontSizeSM }}
+                                >
+                                    Defaults to a sensible label per
+                                    action (e.g. "Refresh app").
+                                </Text>
+                            </Flex>
+                        </Col>
+                        {noticeAction === "openLink" && (
+                            <Col xs={24} md={12}>
+                                <Flex vertical gap={token.marginXXS}>
+                                    <Text type="secondary">URL to open</Text>
+                                    <Input
+                                        value={noticeActionHref}
+                                        placeholder="https://…"
+                                        onChange={(e) =>
+                                            setNoticeActionHref(e.target.value)
+                                        }
+                                        allowClear
+                                    />
+                                    <Text
+                                        type="secondary"
+                                        style={{ fontSize: token.fontSizeSM }}
+                                    >
+                                        Opens in a new tab. The click
+                                        still counts as acknowledgement.
+                                    </Text>
+                                </Flex>
+                            </Col>
+                        )}
+                    </Row>
+
+                    {noticeMode === "modal" && (
+                        <Flex
+                            align="center"
+                            justify="space-between"
+                            gap={token.marginSM}
+                        >
+                            <Flex vertical gap={token.marginXXS}>
+                                <Text strong>Block the page until acknowledged</Text>
+                                <Text
+                                    type="secondary"
+                                    style={{ fontSize: token.fontSizeSM }}
+                                >
+                                    No close X, the backdrop is locked,
+                                    and the Esc key is ignored. The
+                                    action button is the only way out.
+                                </Text>
+                            </Flex>
+                            <Switch
+                                checked={noticeRequiresAck}
+                                onChange={setNoticeRequiresAck}
+                            />
+                        </Flex>
+                    )}
+
+                    {noticeMode === "modal" && noticeRequiresAck && (
+                        <Alert
+                            type="warning"
+                            showIcon
+                            message="Hard-stop modal"
+                            description="The user can't capture data or navigate until they click the action button. Reserve this for compliance-grade notices."
+                        />
+                    )}
+                </Flex>
             </Card>
 
             {syncConfig.updatedAt && (

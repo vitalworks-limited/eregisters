@@ -235,14 +235,17 @@ function AdminSyncMonitor() {
             title: "Started",
             dataIndex: "startedAt",
             key: "startedAt",
-            width: 180,
+            width: 170,
             render: (v: string) => (
-                <Flex vertical gap={0}>
-                    <Text>{dayjs(v).format("MMM D, HH:mm:ss")}</Text>
-                    <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-                        {dayjs(v).fromNow()}
+                <Text style={{ whiteSpace: "nowrap" }}>
+                    {dayjs(v).format("MMM D, HH:mm")}
+                    <Text
+                        type="secondary"
+                        style={{ marginLeft: 6, fontSize: token.fontSizeSM }}
+                    >
+                        · {dayjs(v).fromNow(true)} ago
                     </Text>
-                </Flex>
+                </Text>
             ),
         },
         {
@@ -251,6 +254,29 @@ function AdminSyncMonitor() {
             key: "mode",
             width: 130,
             render: (m: string) => <Tag>{m}</Tag>,
+        },
+        {
+            title: "Trigger",
+            dataIndex: "trigger",
+            key: "trigger",
+            width: 110,
+            render: (t?: string) =>
+                t === "manual" ? (
+                    <Tag color="purple">Manual</Tag>
+                ) : t === "scheduled" ? (
+                    <Tag color="blue">Scheduled</Tag>
+                ) : (
+                    <Tag>—</Tag>
+                ),
+            filters: [
+                { text: "Manual", value: "manual" },
+                { text: "Scheduled", value: "scheduled" },
+                { text: "Unknown", value: "_none" },
+            ],
+            onFilter: (value, record) => {
+                if (value === "_none") return !record.trigger;
+                return record.trigger === value;
+            },
         },
         {
             title: "Duration",
@@ -428,8 +454,13 @@ function AdminSyncMonitor() {
                         columns={columns}
                         dataSource={rows}
                         rowKey="syncId"
-                        pagination={{ pageSize: 20, hideOnSinglePage: false }}
-                        size="middle"
+                        pagination={{
+                            pageSize: 20,
+                            showSizeChanger: true,
+                            pageSizeOptions: ["20", "50", "100"],
+                            hideOnSinglePage: false,
+                        }}
+                        size="small"
                         expandable={{
                             expandedRowRender: (record) => (
                                 <Flex vertical gap={token.marginXS}>

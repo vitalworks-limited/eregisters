@@ -16,6 +16,9 @@ export const SAFE_REFRESH_MESSAGE =
 export const UNSAVED_DATA_MESSAGE =
     "A new eRegisters version is available. Please save or discard the current form to apply the update safely.";
 
+export const FORCED_REFRESH_MESSAGE =
+    "Administrator initiated an urgent app update. The app will reload now — any in-progress draft was saved automatically.";
+
 export interface SafeRefreshOptions {
     /** Returns true if the user has unsaved form data in memory. */
     hasUnsavedData?: () => boolean | Promise<boolean>;
@@ -31,6 +34,12 @@ export interface SafeRefreshOptions {
     cleanCaches?: () => Promise<void> | void;
     /** Optional logger. */
     logger?: (message: string, extra?: unknown) => void;
+    /**
+     * Severity hint from the admin broadcast.
+     * - `info` (default): defer when unsaved drafts cannot be saved.
+     * - `forced`: still attempt to save drafts, but reload regardless.
+     */
+    severity?: "info" | "forced";
 }
 
 export interface SafeRefreshResult {
@@ -143,12 +152,23 @@ export async function startSafeRefreshFlow(
             drafted = false;
         }
         if (!drafted) {
-            notifyBlocking(UNSAVED_DATA_MESSAGE);
-            return { reloaded: false, deferredForUnsavedData: true };
+            if (options.severity === "forced") {
+                // Admin escalated the broadcast — surface the warning
+                // but still proceed with the reload below.
+                logger?.("[safe-refresh] forced reload despite unsaved data");
+                notifyBlocking(FORCED_REFRESH_MESSAGE);
+            } else {
+                notifyBlocking(UNSAVED_DATA_MESSAGE);
+                return { reloaded: false, deferredForUnsavedData: true };
+            }
         }
     }
 
-    notify(SAFE_REFRESH_MESSAGE);
+    notify(
+        options.severity === "forced"
+            ? FORCED_REFRESH_MESSAGE
+            : SAFE_REFRESH_MESSAGE,
+    );
     try {
         await Promise.resolve(cleanCaches());
     } catch (err) {

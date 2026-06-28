@@ -59,6 +59,7 @@ import { useMetadata } from "../hooks/useMetadata";
 import { useModalState } from "../hooks/useModalState";
 import { EventContext, TrackedEntityContext } from "../machines";
 import { SyncContext } from "../machines/sync";
+import { markNextSyncManual } from "../sync/telemetry";
 import {
     FlattenedEnrollment,
     FlattenedEvent,
@@ -281,6 +282,7 @@ function TrackedEntityComponent() {
                                             record.event,
                                         );
                                     if (markedDeleted.length > 0) {
+                                        markNextSyncManual();
                                         syncActor.send({ type: "PUSH_DATA" });
                                     }
                                 } catch (error) {

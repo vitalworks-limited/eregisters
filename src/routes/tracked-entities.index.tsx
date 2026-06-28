@@ -31,6 +31,7 @@ import { TrackedEntitiesRoute } from "./tracked-entities";
 import { useMetadata } from "../hooks/useMetadata";
 import { trackedEntitiesCollection } from "../collections";
 import { SyncContext } from "../machines/sync";
+import { markNextSyncManual } from "../sync/telemetry";
 
 const { Text } = Typography;
 
@@ -234,9 +235,10 @@ function TrackedEntitiesSearch() {
                         totalLocalClients === 0 ? (
                             <Button
                                 type="primary"
-                                onClick={() =>
-                                    syncActor.send({ type: "FULL_DATA_SYNC" })
-                                }
+                                onClick={() => {
+                                    markNextSyncManual();
+                                    syncActor.send({ type: "FULL_DATA_SYNC" });
+                                }}
                             >
                                 Pull data now
                             </Button>
@@ -261,17 +263,19 @@ function TrackedEntitiesSearch() {
                         totalLocalClients === 0 ? (
                             <Button
                                 type="primary"
-                                onClick={() =>
-                                    syncActor.send({ type: "FULL_DATA_SYNC" })
-                                }
+                                onClick={() => {
+                                    markNextSyncManual();
+                                    syncActor.send({ type: "FULL_DATA_SYNC" });
+                                }}
                             >
                                 Pull data now
                             </Button>
                         ) : (
                             <Button
-                                onClick={() =>
-                                    syncActor.send({ type: "START_DATA_SYNC" })
-                                }
+                                onClick={() => {
+                                    markNextSyncManual();
+                                    syncActor.send({ type: "START_DATA_SYNC" });
+                                }}
                             >
                                 Pull changes
                             </Button>

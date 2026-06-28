@@ -27,6 +27,7 @@ import {
     isMetadataSyncLoading,
 } from "../machines/sync-metadata-mode";
 import { downloadBackupBundle } from "../sync/exportBackup";
+import { markNextSyncManual } from "../sync/telemetry";
 
 dayjs.extend(relativeTime);
 
@@ -156,7 +157,10 @@ export const SyncPopover: React.FC<Props> = ({ pendingCount, compact = false }) 
             <Button
                 icon={<CloudDownloadOutlined />}
                 loading={syncingData}
-                onClick={() => syncActor.send({ type: "START_DATA_SYNC" })}
+                onClick={() => {
+                    markNextSyncManual();
+                    syncActor.send({ type: "START_DATA_SYNC" });
+                }}
                 block
                 style={{ justifyContent: "flex-start" }}
             >
@@ -166,7 +170,10 @@ export const SyncPopover: React.FC<Props> = ({ pendingCount, compact = false }) 
             <Button
                 icon={<ReloadOutlined />}
                 loading={syncingMetadata}
-                onClick={() => syncActor.send({ type: "START_METADATA_SYNC" })}
+                onClick={() => {
+                    markNextSyncManual();
+                    syncActor.send({ type: "START_METADATA_SYNC" });
+                }}
                 block
                 style={{ justifyContent: "flex-start" }}
             >
@@ -176,7 +183,10 @@ export const SyncPopover: React.FC<Props> = ({ pendingCount, compact = false }) 
             <Button
                 icon={<CloudUploadOutlined />}
                 loading={pushingData}
-                onClick={() => syncActor.send({ type: "PUSH_DATA" })}
+                onClick={() => {
+                    markNextSyncManual();
+                    syncActor.send({ type: "PUSH_DATA" });
+                }}
                 type={pendingCount > 0 ? "primary" : "default"}
                 block
                 style={{ justifyContent: "flex-start" }}
@@ -189,9 +199,10 @@ export const SyncPopover: React.FC<Props> = ({ pendingCount, compact = false }) 
                 <Button
                     danger
                     block
-                    onClick={() =>
-                        syncActor.send({ type: "FULL_METADATA_SYNC" })
-                    }
+                    onClick={() => {
+                        markNextSyncManual();
+                        syncActor.send({ type: "FULL_METADATA_SYNC" });
+                    }}
                 >
                     Retry metadata sync
                 </Button>

@@ -5,6 +5,7 @@ import {
     DatabaseOutlined,
     CloudUploadOutlined,
     FileSearchOutlined,
+    NotificationOutlined,
     TeamOutlined,
     ThunderboltOutlined,
 } from "@ant-design/icons";
@@ -63,6 +64,12 @@ export const ADMIN_NAV: NavItem[] = [
         label: "Config",
         icon: <ControlOutlined />,
         activeWhen: (p) => p.startsWith("/admin/config"),
+    },
+    {
+        to: "/admin/broadcast",
+        label: "Broadcast",
+        icon: <NotificationOutlined />,
+        activeWhen: (p) => p.startsWith("/admin/broadcast"),
     },
     {
         to: "/admin/insights",

@@ -387,15 +387,15 @@ function AdminDataCapture() {
             key: "lastActive",
             render: (v?: string) =>
                 v ? (
-                    <Flex vertical gap={0}>
-                        <Text>{dayjs(v).format("MMM D, HH:mm")}</Text>
+                    <Text style={{ whiteSpace: "nowrap" }}>
+                        {dayjs(v).format("MMM D, HH:mm")}
                         <Text
                             type="secondary"
-                            style={{ fontSize: token.fontSizeSM }}
+                            style={{ marginLeft: 6, fontSize: token.fontSizeSM }}
                         >
-                            {dayjs(v).fromNow()}
+                            · {dayjs(v).fromNow(true)} ago
                         </Text>
-                    </Flex>
+                    </Text>
                 ) : (
                     <Text type="secondary">—</Text>
                 ),
@@ -552,9 +552,13 @@ function AdminDataCapture() {
                         columns={columns}
                         dataSource={filteredUsers}
                         rowKey="key"
-                        size="middle"
+                        size="small"
                         loading={loading}
-                        pagination={{ pageSize: 20, showSizeChanger: true }}
+                        pagination={{
+                            pageSize: 20,
+                            showSizeChanger: true,
+                            pageSizeOptions: ["20", "50", "100"],
+                        }}
                     />
                 </div>
             </Flex>

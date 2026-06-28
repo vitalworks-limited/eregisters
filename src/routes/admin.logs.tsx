@@ -405,14 +405,17 @@ function AdminLogs() {
             title: "When",
             dataIndex: "at",
             key: "at",
-            width: 180,
+            width: 170,
             render: (v: string) => (
-                <Flex vertical gap={0}>
-                    <Text>{dayjs(v).format("MMM D, HH:mm:ss")}</Text>
-                    <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-                        {dayjs(v).fromNow()}
+                <Text style={{ whiteSpace: "nowrap" }}>
+                    {dayjs(v).format("MMM D, HH:mm")}
+                    <Text
+                        type="secondary"
+                        style={{ marginLeft: 6, fontSize: token.fontSizeSM }}
+                    >
+                        · {dayjs(v).fromNow(true)} ago
                     </Text>
-                </Flex>
+                </Text>
             ),
         },
         {
@@ -622,17 +625,20 @@ function AdminLogs() {
                         Recent activity
                     </Title>
                     <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-                        Showing {Math.min(allRows.length, 25)} of{" "}
-                        {allRows.length}
+                        {allRows.length} rows
                     </Text>
                 </Flex>
                 <Table
                     columns={columns}
-                    dataSource={allRows.slice(0, 25)}
+                    dataSource={allRows}
                     rowKey="id"
-                    size="middle"
+                    size="small"
                     loading={loading}
-                    pagination={false}
+                    pagination={{
+                        pageSize: 20,
+                        showSizeChanger: true,
+                        pageSizeOptions: ["20", "50", "100"],
+                    }}
                 />
             </div>
         </Flex>

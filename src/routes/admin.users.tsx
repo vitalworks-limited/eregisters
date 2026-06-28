@@ -248,12 +248,15 @@ function AdminUsers() {
                 (b.lastLogin ? dayjs(b.lastLogin).valueOf() : 0),
             render: (v?: string) =>
                 v ? (
-                    <Flex vertical gap={0}>
-                        <Text>{dayjs(v).format("MMM D, YYYY · HH:mm")}</Text>
-                        <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-                            {dayjs(v).fromNow()}
+                    <Text style={{ whiteSpace: "nowrap" }}>
+                        {dayjs(v).format("MMM D, HH:mm")}
+                        <Text
+                            type="secondary"
+                            style={{ marginLeft: 6, fontSize: token.fontSizeSM }}
+                        >
+                            · {dayjs(v).fromNow(true)} ago
                         </Text>
-                    </Flex>
+                    </Text>
                 ) : (
                     <Tag color="default">Never</Tag>
                 ),
@@ -506,9 +509,13 @@ function AdminUsers() {
                             columns={columns}
                             dataSource={filtered}
                             rowKey="id"
-                            size="middle"
+                            size="small"
                             loading={loading}
-                            pagination={{ pageSize: 20, showSizeChanger: true }}
+                            pagination={{
+                                pageSize: 20,
+                                showSizeChanger: true,
+                                pageSizeOptions: ["20", "50", "100"],
+                            }}
                             locale={{
                                 emptyText: (
                                     <Flex

@@ -268,15 +268,18 @@ function AdminQueue() {
             title: "Created",
             dataIndex: "createdAt",
             key: "createdAt",
-            width: 200,
+            width: 180,
             render: (v?: string) =>
                 v ? (
-                    <Flex vertical gap={0}>
-                        <Text>{dayjs(v).format("MMM D, HH:mm")}</Text>
-                        <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-                            {dayjs(v).fromNow()}
+                    <Text style={{ whiteSpace: "nowrap" }}>
+                        {dayjs(v).format("MMM D, HH:mm")}
+                        <Text
+                            type="secondary"
+                            style={{ marginLeft: 6, fontSize: token.fontSizeSM }}
+                        >
+                            · {dayjs(v).fromNow(true)} ago
                         </Text>
-                    </Flex>
+                    </Text>
                 ) : (
                     <Text type="secondary">—</Text>
                 ),
@@ -455,8 +458,12 @@ function AdminQueue() {
                     columns={columns}
                     dataSource={rows}
                     rowKey={(r) => `${r.type}-${r.id}`}
-                    size="middle"
-                    pagination={{ pageSize: 20, showSizeChanger: true }}
+                    size="small"
+                    pagination={{
+                        pageSize: 20,
+                        showSizeChanger: true,
+                        pageSizeOptions: ["20", "50", "100"],
+                    }}
                 />
             </div>
         </Flex>

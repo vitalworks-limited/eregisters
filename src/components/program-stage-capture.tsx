@@ -23,6 +23,7 @@ import { useMetadata } from "../hooks/useMetadata";
 import { useModalState } from "../hooks/useModalState";
 import { EventContext } from "../machines";
 import { SyncContext } from "../machines/sync";
+import { markNextSyncManual } from "../sync/telemetry";
 import {
     FlattenedEnrollment,
     FlattenedEvent,
@@ -157,6 +158,7 @@ export const ProgramStageCapture: React.FC<{
                                 const { markedDeleted } =
                                     await deleteEventWithChildren(record.event);
                                 if (markedDeleted.length > 0) {
+                                    markNextSyncManual();
                                     syncActor.send({ type: "PUSH_DATA" });
                                 }
                                 message.success("Event deleted");
