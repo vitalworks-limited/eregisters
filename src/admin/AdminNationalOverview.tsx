@@ -1,5 +1,5 @@
 import { PrinterOutlined, ReloadOutlined, WarningOutlined } from "@ant-design/icons";
-import { useDataEngine } from "@dhis2/app-runtime";
+import { useCurrentUserInfo, useDataEngine } from "@dhis2/app-runtime";
 import {
     Alert,
     Button,
@@ -149,8 +149,16 @@ export const AdminNationalOverview: React.FC<{
     );
     const [summary, setSummary] = useState<AdminOverviewSummary | undefined>();
     const [loading, setLoading] = useState(false);
+    // Fall back to the signed-in user's first org unit when no scope
+    // is passed by the parent — otherwise the live tracker count
+    // probes (clients + events) have nothing to anchor on and Total
+    // Encounters stays blank.
+    const userInfo = useCurrentUserInfo() as
+        | { organisationUnits?: Array<{ id?: string }> }
+        | undefined;
+    const userRootOrgUnitId = userInfo?.organisationUnits?.[0]?.id;
     const { totals: liveTotals } = useProgramTotals(
-        scopeRootOrgUnit?.id,
+        scopeRootOrgUnit?.id ?? userRootOrgUnitId,
     );
     const { facilities: programFacilities } = useProgramFacilities();
     const { counts: userCounts } = useUsersByOrgUnit();
@@ -348,7 +356,7 @@ export const AdminNationalOverview: React.FC<{
                 <Flex align="center" gap={token.marginSM} wrap>
                     <AdminCacheStatusBadge cache={summary.cache} />
                     {deliveredBy === "fixture" && (
-                        <Tag color="purple">Development fixture</Tag>
+                        <Tag color="default">Summary feed not configured</Tag>
                     )}
                     {deliveredBy === "no-data" && (
                         <Tag color="default">No summary data</Tag>
@@ -358,6 +366,34 @@ export const AdminNationalOverview: React.FC<{
                     )}
                 </Flex>
             )}
+
+            {summary &&
+                (deliveredBy === "fixture" ||
+                    deliveredBy === "no-data") && (
+                    <Alert
+                        type="info"
+                        showIcon
+                        title="Operational cards awaiting summary pipeline"
+                        description={
+                            <>
+                                Sync Health, System Pressure, Tracker GETs /
+                                POSTs, Slow Requests, Response Volume, Unsafe
+                                Sync Patterns, App Version Status, Job Backlog
+                                and Operational Alerts come from a server-side
+                                summarizer that publishes JSON to{" "}
+                                <Text code>
+                                    dataStore/eregisters-admin-monitoring/overview/
+                                    {`{period}/{orgUnit}/{scope}`}
+                                </Text>
+                                . Until that pipeline is enabled they will show{" "}
+                                <Text strong>No data</Text>. The five
+                                metadata-backed cards above (facilities, users,
+                                clients, encounters) are read live from DHIS2 and
+                                will populate automatically.
+                            </>
+                        }
+                    />
+                )}
 
             {!summary && loading && (
                 <Skeleton active paragraph={{ rows: 6 }} />

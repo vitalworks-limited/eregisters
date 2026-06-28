@@ -376,27 +376,39 @@ export const AdminTopContributorsTable: React.FC<{
                             <>
                                 <div>
                                     Direct at this facility:{" "}
-                                    <strong>{r.directActiveUsers}</strong>
+                                    <strong>
+                                        {r.directActiveUsers}
+                                    </strong>
                                 </div>
                                 <div>
                                     Inherited from ancestors:{" "}
                                     <strong>{inheritedActive}</strong>
                                 </div>
+                                <div>
+                                    Effective total (direct + inherited):{" "}
+                                    <strong>
+                                        {r.activeUserCount}
+                                    </strong>
+                                </div>
                                 {disabled > 0 && (
-                                    <div>Disabled (incl. ancestors): {disabled}</div>
+                                    <div>
+                                        Disabled (incl. ancestors): {disabled}
+                                    </div>
                                 )}
                             </>
                         }
                     >
                         <Text>
-                            {r.activeUserCount.toLocaleString()}
+                            <Text strong>
+                                {r.directActiveUsers.toLocaleString()}
+                            </Text>
                             {inheritedActive > 0 && (
                                 <Text
                                     type="secondary"
                                     style={{ fontSize: 11 }}
                                 >
                                     {" "}
-                                    ({r.directActiveUsers} direct)
+                                    ({inheritedActive.toLocaleString()})
                                 </Text>
                             )}
                         </Text>
