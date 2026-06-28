@@ -7,7 +7,6 @@ import {
     Button,
     Divider,
     Flex,
-    Progress,
     Radio,
     Segmented,
     Select,
@@ -417,9 +416,29 @@ export const AdminFacilityCoverageMap: React.FC<{
         aggregationLevel,
     ]);
     const { counts: userCounts } = useUsersByOrgUnit();
-    const facilityLevel = orgUnitLevels.length
-        ? orgUnitLevels[orgUnitLevels.length - 1].level
-        : undefined;
+    // Derive the "facility level" from where the program is actually
+    // assigned, not from the highest level in the metadata. Otherwise
+    // an instance with 8 662 facilities at L4 and 89 admin areas at L6
+    // ends up comparing apples to oranges.
+    const facilityLevel = useMemo(() => {
+        if (programFacilities.length === 0) return undefined;
+        const tally = new Map<number, number>();
+        for (const f of programFacilities) {
+            if (typeof f.level === "number") {
+                tally.set(f.level, (tally.get(f.level) ?? 0) + 1);
+            }
+        }
+        if (tally.size === 0) return undefined;
+        let best: number | undefined;
+        let bestCount = -1;
+        for (const [lvl, count] of tally) {
+            if (count > bestCount) {
+                best = lvl;
+                bestCount = count;
+            }
+        }
+        return best;
+    }, [programFacilities]);
     const { totals: facilityTotals } =
         useTotalFacilitiesPerAncestor(facilityLevel);
 
@@ -617,11 +636,19 @@ export const AdminFacilityCoverageMap: React.FC<{
         orgUnitLevels.find((l) => l.level === aggregationLevel)?.displayName ??
         `Level ${aggregationLevel}`;
 
-    // Global coverage = enrolled / total system facilities.
+    // Coverage at the facility level — comparing program-assigned
+    // org units to total org units at the same level. The number is
+    // only meaningful when we know the program's facility level.
     const grandTotal = facilityTotals.grandTotal;
+    const facilityLevelLabel = facilityLevel
+        ? orgUnitLevels.find((l) => l.level === facilityLevel)?.displayName
+        : undefined;
     const coveragePct =
-        grandTotal > 0
-            ? Math.round((totalEnrolled / grandTotal) * 1000) / 10
+        facilityLevel !== undefined && grandTotal > 0
+            ? Math.min(
+                  100,
+                  Math.round((totalEnrolled / grandTotal) * 1000) / 10,
+              )
             : undefined;
 
     return (
@@ -642,63 +669,63 @@ export const AdminFacilityCoverageMap: React.FC<{
                         have coordinates
                     </Text>
                 </Flex>
-                <Flex gap={token.marginXS} wrap>
-                    <Tag
-                        color="blue"
-                        style={{
-                            margin: 0,
-                            padding: "4px 10px",
-                            fontSize: token.fontSize,
-                        }}
-                    >
-                        <HomeOutlined />{" "}
-                        <Text strong>{totalEnrolled.toLocaleString()}</Text>{" "}
-                        enrolled
-                    </Tag>
-                    <Tag
-                        style={{
-                            margin: 0,
-                            padding: "4px 10px",
-                            fontSize: token.fontSize,
-                        }}
-                    >
-                        <TeamOutlined />{" "}
-                        <Text strong>{grandTotal.toLocaleString()}</Text>{" "}
-                        in system
-                    </Tag>
-                    {typeof coveragePct === "number" && (
+                <Flex gap={token.marginXS} wrap align="center">
+                    <Tooltip title="Org units assigned to the eRegisters program (from /programs/{id}.organisationUnits).">
                         <Tag
-                            color={
-                                coveragePct >= 70
-                                    ? "green"
-                                    : coveragePct >= 40
-                                      ? "gold"
-                                      : "orange"
-                            }
+                            color="blue"
                             style={{
                                 margin: 0,
                                 padding: "4px 10px",
                                 fontSize: token.fontSize,
                             }}
                         >
-                            <Text strong>{coveragePct}%</Text> coverage
+                            <HomeOutlined />{" "}
+                            <Text strong>{totalEnrolled.toLocaleString()}</Text>{" "}
+                            program-assigned
                         </Tag>
+                    </Tooltip>
+                    {facilityLevelLabel && grandTotal > 0 && (
+                        <Tooltip
+                            title={`Total org units at ${facilityLevelLabel} level in this DHIS2 instance.`}
+                        >
+                            <Tag
+                                style={{
+                                    margin: 0,
+                                    padding: "4px 10px",
+                                    fontSize: token.fontSize,
+                                }}
+                            >
+                                <TeamOutlined />{" "}
+                                <Text strong>{grandTotal.toLocaleString()}</Text>{" "}
+                                {facilityLevelLabel.toLowerCase()} in system
+                            </Tag>
+                        </Tooltip>
+                    )}
+                    {typeof coveragePct === "number" && (
+                        <Tooltip
+                            title={`Program-assigned ÷ total ${facilityLevelLabel?.toLowerCase()} org units.`}
+                        >
+                            <Tag
+                                color={
+                                    coveragePct >= 70
+                                        ? "green"
+                                        : coveragePct >= 40
+                                          ? "gold"
+                                          : "orange"
+                                }
+                                style={{
+                                    margin: 0,
+                                    padding: "4px 10px",
+                                    fontSize: token.fontSize,
+                                }}
+                            >
+                                <Text strong>{coveragePct}%</Text>{" "}
+                                {facilityLevelLabel?.toLowerCase()} coverage
+                            </Tag>
+                        </Tooltip>
                     )}
                 </Flex>
             </Flex>
-
-            {typeof coveragePct === "number" && (
-                <Progress
-                    percent={coveragePct}
-                    showInfo={false}
-                    strokeColor={{
-                        from: "#3b82f6",
-                        to: "#1d4ed8",
-                    }}
-                    railColor={token.colorFillTertiary}
-                    style={{ marginBlock: -token.marginXXS }}
-                />
-            )}
 
             <div
                 style={{

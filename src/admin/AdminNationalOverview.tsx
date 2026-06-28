@@ -15,6 +15,7 @@ import {
 } from "antd";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminCacheStatusBadge } from "./AdminCacheStatusBadge";
+import { AdminCoverageBreakdown } from "./AdminCoverageBreakdown";
 import { AdminFacilityCoverageMap } from "./AdminFacilityCoverageMap";
 import { AdminSummaryCard } from "./AdminSummaryCard";
 import { AdminTopContributorsTable } from "./AdminTopContributorsTable";
@@ -354,6 +355,8 @@ export const AdminNationalOverview: React.FC<{
                     }
                 />
             )}
+
+            <AdminCoverageBreakdown />
 
             {summary && (
                 <AdminFacilityCoverageMap
