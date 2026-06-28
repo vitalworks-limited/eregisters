@@ -24,6 +24,7 @@ import {
     MONITORING_NAMESPACE,
     OverviewQuery,
 } from "./adminSummaryService";
+import { downloadDashboardPdf } from "./dashboardPdf";
 import { calculateAdminOverviewHealth } from "./overviewHealth";
 import {
     AdminOverviewSummary,
@@ -149,6 +150,7 @@ export const AdminNationalOverview: React.FC<{
     );
     const [summary, setSummary] = useState<AdminOverviewSummary | undefined>();
     const [loading, setLoading] = useState(false);
+    const [generatingPdf, setGeneratingPdf] = useState(false);
     // Fall back to the signed-in user's first org unit when no scope
     // is passed by the parent — otherwise the live tracker count
     // probes (clients + events) have nothing to anchor on and Total
@@ -285,6 +287,7 @@ export const AdminNationalOverview: React.FC<{
             vertical
             gap={token.marginSM}
             className="eregisters-print-root"
+            data-pdf-root
         >
             <PrintStyles />
             <Flex
@@ -335,9 +338,29 @@ export const AdminNationalOverview: React.FC<{
                     </Button>
                     <Button
                         icon={<PrinterOutlined />}
-                        onClick={() => window.print()}
+                        loading={generatingPdf}
+                        onClick={async () => {
+                            setGeneratingPdf(true);
+                            try {
+                                await downloadDashboardPdf(
+                                    "[data-pdf-root]",
+                                    "eRegisters National Operational Overview",
+                                    {
+                                        periodLabel: PERIOD_OPTIONS.find(
+                                            (p) => p.value === period,
+                                        )?.label,
+                                        scopeLabel: `Scope: ${orgUnit.name} · ${orgUnit.scope}`,
+                                        healthBand: bandLabel(health.band),
+                                    },
+                                );
+                            } catch (err) {
+                                console.error("[pdf]", err);
+                            } finally {
+                                setGeneratingPdf(false);
+                            }
+                        }}
                     >
-                        Print / PDF
+                        Download PDF
                     </Button>
                 </Flex>
             </Flex>
@@ -352,15 +375,9 @@ export const AdminNationalOverview: React.FC<{
                 />
             )}
 
-            {summary && (
+            {summary && deliveredBy === "datastore" && (
                 <Flex align="center" gap={token.marginSM} wrap>
                     <AdminCacheStatusBadge cache={summary.cache} />
-                    {deliveredBy === "fixture" && (
-                        <Tag color="default">Summary feed not configured</Tag>
-                    )}
-                    {deliveredBy === "no-data" && (
-                        <Tag color="default">No summary data</Tag>
-                    )}
                     {summary.cache.isStale && (
                         <Tag color="orange">Stale cache</Tag>
                     )}
@@ -400,7 +417,10 @@ export const AdminNationalOverview: React.FC<{
             )}
 
             {summary && (
-                <Row gutter={[token.marginSM, token.marginSM]}>
+                <Row
+                    gutter={[token.marginSM, token.marginSM]}
+                    data-pdf-section="cards"
+                >
                     {CARD_ORDER.map((key) => (
                         <Col key={key} xs={24} sm={12} md={8} lg={6} xl={6}>
                             <AdminSummaryCard
@@ -443,22 +463,28 @@ export const AdminNationalOverview: React.FC<{
                 />
             )}
 
-            <AdminCoverageBreakdown />
+            <div data-pdf-section="breakdown">
+                <AdminCoverageBreakdown />
+            </div>
 
             {summary && (
-                <AdminFacilityCoverageMap
-                    facilities={summary.facilityRiskMap}
-                />
+                <div data-pdf-section="map">
+                    <AdminFacilityCoverageMap
+                        facilities={summary.facilityRiskMap}
+                    />
+                </div>
             )}
 
             {summary && (
-                <AdminTopContributorsTable
-                    rows={
-                        summary.facilityRiskMap.length > 0
-                            ? summary.facilityRiskMap
-                            : summary.topFacilities
-                    }
-                />
+                <div data-pdf-section="table">
+                    <AdminTopContributorsTable
+                        rows={
+                            summary.facilityRiskMap.length > 0
+                                ? summary.facilityRiskMap
+                                : summary.topFacilities
+                        }
+                    />
+                </div>
             )}
 
             {summary && health.penalties.length > 0 && (
