@@ -1,23 +1,22 @@
-import { Flex, Radio, Skeleton, Spin, theme, Typography } from "antd";
+import { Flex, Radio, Skeleton, theme, Typography } from "antd";
+import L from "leaflet";
 // @ts-expect-error — d2-app-scripts handles CSS via Vite; no TS types needed.
 import "leaflet/dist/leaflet.css";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
     CircleMarker,
+    GeoJSON,
     MapContainer,
     Popup,
-    TileLayer,
+    useMap,
+    ZoomControl,
 } from "react-leaflet";
 import { FacilityRiskPoint, HealthStatus } from "./summaryTypes";
+import { useOrgUnitBoundaries } from "./useOrgUnitBoundaries";
 import { ProgramFacility, useProgramFacilities } from "./useProgramFacilities";
 
 const { Text, Title } = Typography;
 
-/**
- * Plottable facility merged from program metadata + the cached
- * operational summary. Only facilities enrolled in the eRegisters
- * program are ever passed to the map.
- */
 interface PlottedFacility {
     id: string;
     name: string;
@@ -25,7 +24,6 @@ interface PlottedFacility {
     regionName?: string;
     latitude: number;
     longitude: number;
-    /** Operational data from the summary; absent when no summary yet. */
     risk?: FacilityRiskPoint;
 }
 
@@ -44,7 +42,6 @@ interface LayerSpec {
     key: LayerKey;
     label: string;
     description: string;
-    /** Returns the categorical bin for the legend, or null to hide the marker. */
     bin: (f: PlottedFacility) => { label: string; color: string } | null;
 }
 
@@ -83,11 +80,12 @@ const LAYERS: LayerSpec[] = [
         key: "active",
         label: "Active users",
         description:
-            "Facilities with one or more users signed in during the selected period.",
-        bin: (f) =>
-            f.risk
-                ? bandForCount(f.risk.activeUsers, [3, 10, 25])
-                : { label: "No summary", color: "#9ca3af" },
+            "Facilities with users signed in right now (currently logged-in sessions).",
+        bin: (f) => {
+            const live = f.risk?.loggedInUsers ?? 0;
+            if (live <= 0) return null;
+            return bandForCount(live, [3, 10, 25]);
+        },
     },
     {
         key: "noData",
@@ -135,14 +133,12 @@ const LAYERS: LayerSpec[] = [
         label: "Slow requests",
         description: "Facilities with slow requests above the threshold.",
         bin: (f) =>
-            f.risk
-                ? bandForCount(f.risk.slowRequests, [5, 15, 40])
-                : null,
+            f.risk ? bandForCount(f.risk.slowRequests, [5, 15, 40]) : null,
     },
     {
         key: "failed",
         label: "Failed syncs",
-        description: "Facilities with at least one failed sync in the period.",
+        description: "Facilities with at least one failed sync.",
         bin: (f) =>
             f.risk && f.risk.failedSyncs > 0
                 ? bandForCount(f.risk.failedSyncs, [1, 3, 5])
@@ -160,32 +156,54 @@ const LAYERS: LayerSpec[] = [
 ];
 
 /**
- * Operational map for the Admin Dashboard, styled close to DHIS2 Maps:
- * one active categorical layer at a time, uniform circle markers, a
- * side legend listing the bins, and only program-enrolled facilities
- * plotted.
+ * Fits the map viewport to the GeoJSON bounding box once boundaries
+ * load. Re-running on level changes keeps the view tidy when the user
+ * toggles regions vs. districts later.
+ */
+const FitToBoundaries: React.FC<{
+    geojson: GeoJSON.FeatureCollection | null;
+}> = ({ geojson }) => {
+    const map = useMap();
+    useEffect(() => {
+        if (!geojson || geojson.features.length === 0) return;
+        try {
+            const layer = L.geoJSON(geojson);
+            const bounds = layer.getBounds();
+            if (bounds.isValid()) {
+                map.fitBounds(bounds, { padding: [20, 20] });
+            }
+        } catch {
+            // ignore — keep current viewport
+        }
+    }, [geojson, map]);
+    return null;
+};
+
+/**
+ * Operational map for the Admin Dashboard styled like DHIS2 Maps:
+ * GeoJSON polygons replace the OpenStreetMap tile basemap, the layer
+ * picker + legend float as an overlay control, attribution is hidden,
+ * and only program-enrolled facilities are plotted.
  */
 export const AdminFacilityCoverageMap: React.FC<{
     facilities: FacilityRiskPoint[];
 }> = ({ facilities }) => {
     const { token } = theme.useToken();
     const [layerKey, setLayerKey] = useState<LayerKey>("coverage");
+    const [hoveredOu, setHoveredOu] = useState<string | undefined>();
     const {
         facilities: programFacilities,
         loading: facLoading,
         error: facError,
     } = useProgramFacilities();
+    const { boundaries, loading: boundariesLoading } = useOrgUnitBoundaries();
 
-    // Index the risk summary by org-unit for O(1) lookup as we merge.
     const riskById = useMemo(() => {
         const m = new Map<string, FacilityRiskPoint>();
         for (const r of facilities) m.set(r.orgUnit, r);
         return m;
     }, [facilities]);
 
-    // Merge: program metadata is the authoritative list, summary
-    // contributes operational counts when available. Plot only points
-    // with real coordinates.
     const plotted: PlottedFacility[] = useMemo(() => {
         return programFacilities
             .filter(
@@ -196,22 +214,18 @@ export const AdminFacilityCoverageMap: React.FC<{
                     typeof f.latitude === "number" &&
                     typeof f.longitude === "number",
             )
-            .map((f) => {
-                const risk = riskById.get(f.id);
-                return {
-                    id: f.id,
-                    name: f.displayName,
-                    districtName: f.parentName,
-                    latitude: f.latitude,
-                    longitude: f.longitude,
-                    risk,
-                };
-            });
+            .map((f) => ({
+                id: f.id,
+                name: f.displayName,
+                districtName: f.parentName,
+                latitude: f.latitude,
+                longitude: f.longitude,
+                risk: riskById.get(f.id),
+            }));
     }, [programFacilities, riskById]);
 
     const activeLayer = LAYERS.find((l) => l.key === layerKey) ?? LAYERS[0];
 
-    // Compute the unique legend bins for the active layer + count per bin.
     const legend = useMemo(() => {
         const buckets = new Map<string, { color: string; count: number }>();
         for (const f of plotted) {
@@ -228,18 +242,22 @@ export const AdminFacilityCoverageMap: React.FC<{
         }));
     }, [plotted, activeLayer]);
 
-    // Center on the centroid of plotted facilities; default to Uganda.
-    const center: [number, number] = useMemo(() => {
-        if (plotted.length === 0) return [1.3733, 32.2903];
-        const lat =
-            plotted.reduce((s, p) => s + p.latitude, 0) / plotted.length;
-        const lng =
-            plotted.reduce((s, p) => s + p.longitude, 0) / plotted.length;
-        return [lat, lng];
-    }, [plotted]);
+    const featureCollection = useMemo<GeoJSON.FeatureCollection | null>(() => {
+        if (boundaries.length === 0) return null;
+        return {
+            type: "FeatureCollection",
+            features: boundaries.map((b) => ({
+                type: "Feature",
+                properties: { id: b.id, name: b.name, level: b.level },
+                geometry: b.geometry,
+            })),
+        };
+    }, [boundaries]);
 
     const [mounted, setMounted] = useState(false);
     useEffect(() => setMounted(true), []);
+
+    const center: [number, number] = [1.3733, 32.2903];
 
     const totalEnrolled = programFacilities.length;
     const plottedCount = plotted.length;
@@ -251,7 +269,7 @@ export const AdminFacilityCoverageMap: React.FC<{
                     background: token.colorBgContainer,
                     border: `1px solid ${token.colorBorderSecondary}`,
                     padding: token.paddingLG,
-                    minHeight: 300,
+                    minHeight: 480,
                 }}
             >
                 <Skeleton active />
@@ -278,189 +296,258 @@ export const AdminFacilityCoverageMap: React.FC<{
 
     return (
         <Flex vertical gap={token.marginSM}>
-            <Flex
-                align="center"
-                justify="space-between"
-                gap={token.marginSM}
-                wrap
-            >
+            <Flex align="center" justify="space-between" gap={token.marginSM} wrap>
                 <Title level={5} style={{ margin: 0 }}>
                     Facility coverage map
                 </Title>
-                <Text
-                    type="secondary"
-                    style={{ fontSize: token.fontSizeSM }}
-                >
+                <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
                     {plottedCount.toLocaleString()} of{" "}
-                    {totalEnrolled.toLocaleString()} enrolled facilities
-                    have coordinates
+                    {totalEnrolled.toLocaleString()} enrolled facilities have
+                    coordinates · {boundaries.length.toLocaleString()} boundaries
                 </Text>
             </Flex>
 
             <div
                 style={{
-                    background: token.colorBgContainer,
+                    position: "relative",
+                    background: "#f5f7fa",
                     border: `1px solid ${token.colorBorderSecondary}`,
-                    display: "grid",
-                    gridTemplateColumns: "minmax(220px, 260px) 1fr",
-                    minHeight: 460,
+                    height: "min(72vh, 720px)",
+                    overflow: "hidden",
                 }}
             >
-                {/* Side panel — layer picker + legend, à la DHIS2 Maps */}
-                <Flex
-                    vertical
-                    gap={token.marginSM}
-                    style={{
-                        padding: token.paddingSM,
-                        borderInlineEnd: `1px solid ${token.colorBorderSecondary}`,
-                        background: token.colorFillTertiary,
-                    }}
-                >
-                    <Text strong>Thematic layer</Text>
-                    <Radio.Group
-                        value={layerKey}
-                        onChange={(e) => setLayerKey(e.target.value)}
+                {plotted.length === 0 && boundaries.length === 0 ? (
+                    <Flex
+                        vertical
+                        align="center"
+                        justify="center"
+                        gap={token.marginXS}
+                        style={{ height: "100%", padding: token.paddingLG }}
                     >
-                        <Flex vertical gap={4}>
-                            {LAYERS.map((l) => (
-                                <Radio key={l.key} value={l.key}>
-                                    <Text style={{ fontSize: token.fontSizeSM }}>
-                                        {l.label}
-                                    </Text>
-                                </Radio>
-                            ))}
-                        </Flex>
-                    </Radio.Group>
-                    <Text
-                        type="secondary"
-                        style={{ fontSize: token.fontSizeSM }}
-                    >
-                        {activeLayer.description}
-                    </Text>
-
-                    {legend.length > 0 && (
-                        <Flex vertical gap={4}>
-                            <Text strong style={{ fontSize: token.fontSizeSM }}>
-                                Legend
-                            </Text>
-                            {legend.map((b) => (
-                                <Flex
-                                    key={b.label}
-                                    align="center"
-                                    gap={token.marginXS}
-                                >
-                                    <span
-                                        style={{
-                                            display: "inline-block",
-                                            width: 10,
-                                            height: 10,
-                                            borderRadius: "50%",
-                                            background: b.color,
-                                            border: "1px solid rgba(0,0,0,0.15)",
+                        <Text type="secondary" style={{ textAlign: "center" }}>
+                            None of the {totalEnrolled.toLocaleString()}{" "}
+                            program-enrolled facilities have coordinates, and no
+                            org-unit boundaries are available.
+                        </Text>
+                    </Flex>
+                ) : (
+                    mounted && (
+                        <MapContainer
+                            center={center}
+                            zoom={6}
+                            scrollWheelZoom
+                            attributionControl={false}
+                            zoomControl={false}
+                            style={{
+                                height: "100%",
+                                width: "100%",
+                                background: "#f5f7fa",
+                            }}
+                        >
+                            <ZoomControl position="topright" />
+                            {featureCollection && (
+                                <>
+                                    <FitToBoundaries
+                                        geojson={featureCollection}
+                                    />
+                                    <GeoJSON
+                                        data={featureCollection}
+                                        style={(feature) => {
+                                            const id = feature?.properties
+                                                ?.id as string | undefined;
+                                            const level = feature?.properties
+                                                ?.level as number | undefined;
+                                            const isHovered = id === hoveredOu;
+                                            return {
+                                                color: isHovered
+                                                    ? "#1677ff"
+                                                    : "#6b7280",
+                                                weight:
+                                                    isHovered
+                                                        ? 2.2
+                                                        : level && level <= 2
+                                                          ? 1.2
+                                                          : 0.7,
+                                                fillColor: "#ffffff",
+                                                fillOpacity: isHovered
+                                                    ? 0.35
+                                                    : 0.15,
+                                            };
+                                        }}
+                                        onEachFeature={(feature, layer) => {
+                                            const id = feature.properties
+                                                ?.id as string | undefined;
+                                            const name = feature.properties
+                                                ?.name as string | undefined;
+                                            layer.on({
+                                                mouseover: () => setHoveredOu(id),
+                                                mouseout: () =>
+                                                    setHoveredOu(undefined),
+                                                click: (e) => {
+                                                    const target = e.target as L.Layer & {
+                                                        getBounds?: () => L.LatLngBounds;
+                                                    };
+                                                    if (target.getBounds) {
+                                                        try {
+                                                            (
+                                                                e.target as L.Layer
+                                                            ).addTo;
+                                                            const map = (
+                                                                e.target as L.Layer & {
+                                                                    _map?: L.Map;
+                                                                }
+                                                            )._map;
+                                                            const bounds = target.getBounds();
+                                                            if (
+                                                                map &&
+                                                                bounds.isValid()
+                                                            ) {
+                                                                map.fitBounds(
+                                                                    bounds,
+                                                                    {
+                                                                        padding: [20, 20],
+                                                                    },
+                                                                );
+                                                            }
+                                                        } catch {
+                                                            /* ignore */
+                                                        }
+                                                    }
+                                                },
+                                            });
+                                            if (name) {
+                                                layer.bindTooltip(name, {
+                                                    sticky: true,
+                                                    direction: "top",
+                                                    opacity: 0.9,
+                                                });
+                                            }
                                         }}
                                     />
-                                    <Text
-                                        style={{
-                                            fontSize: token.fontSizeSM,
-                                            flex: 1,
+                                </>
+                            )}
+
+                            {plotted.map((f) => {
+                                const bin = activeLayer.bin(f);
+                                if (!bin) return null;
+                                return (
+                                    <CircleMarker
+                                        key={f.id}
+                                        center={[f.latitude, f.longitude]}
+                                        radius={7}
+                                        pathOptions={{
+                                            color: "#ffffff",
+                                            weight: 1.2,
+                                            fillColor: bin.color,
+                                            fillOpacity: 0.9,
                                         }}
                                     >
-                                        {b.label}
-                                    </Text>
-                                    <Text
-                                        type="secondary"
-                                        style={{ fontSize: token.fontSizeSM }}
-                                    >
-                                        {b.count}
-                                    </Text>
-                                </Flex>
-                            ))}
-                        </Flex>
-                    )}
-                </Flex>
+                                        <Popup>
+                                            <PopupBody
+                                                facility={f}
+                                                binLabel={bin.label}
+                                            />
+                                        </Popup>
+                                    </CircleMarker>
+                                );
+                            })}
+                        </MapContainer>
+                    )
+                )}
 
-                {/* Map canvas */}
-                <div style={{ minHeight: 460, position: "relative" }}>
-                    {plotted.length === 0 ? (
-                        <Flex
-                            vertical
-                            align="center"
-                            justify="center"
-                            gap={token.marginXS}
-                            style={{ height: "100%", padding: token.paddingLG }}
+                {/* DHIS2-Maps-style overlay control: layer picker + legend */}
+                <div
+                    style={{
+                        position: "absolute",
+                        top: 12,
+                        left: 12,
+                        background: token.colorBgContainer,
+                        border: `1px solid ${token.colorBorderSecondary}`,
+                        boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+                        padding: token.paddingSM,
+                        maxWidth: 260,
+                        zIndex: 1000,
+                    }}
+                >
+                    <Flex vertical gap={token.marginXS}>
+                        <Text strong>Thematic layer</Text>
+                        <Radio.Group
+                            value={layerKey}
+                            onChange={(e) => setLayerKey(e.target.value)}
                         >
-                            <Text type="secondary" style={{ textAlign: "center" }}>
-                                None of the {totalEnrolled.toLocaleString()}{" "}
-                                program-enrolled facilities have coordinates
-                                set in their org-unit metadata.
-                            </Text>
-                            <Text
-                                type="secondary"
-                                style={{
-                                    fontSize: token.fontSizeSM,
-                                    textAlign: "center",
-                                }}
-                            >
-                                Add geometry to the org units (in DHIS2
-                                Maintenance) and refresh.
-                            </Text>
-                        </Flex>
-                    ) : (
-                        mounted && (
-                            <MapContainer
-                                center={center}
-                                zoom={plotted.length > 1 ? 7 : 10}
-                                style={{ height: 460, width: "100%" }}
-                                scrollWheelZoom={false}
-                            >
-                                <TileLayer
-                                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                />
-                                {plotted.map((f) => {
-                                    const bin = activeLayer.bin(f);
-                                    if (!bin) return null;
-                                    return (
-                                        <CircleMarker
-                                            key={f.id}
-                                            center={[f.latitude, f.longitude]}
-                                            radius={7}
-                                            pathOptions={{
-                                                color: "#ffffff",
-                                                weight: 1.2,
-                                                fillColor: bin.color,
-                                                fillOpacity: 0.85,
+                            <Flex vertical gap={2}>
+                                {LAYERS.map((l) => (
+                                    <Radio key={l.key} value={l.key}>
+                                        <Text
+                                            style={{
+                                                fontSize: token.fontSizeSM,
                                             }}
                                         >
-                                            <Popup>
-                                                <PopupBody
-                                                    facility={f}
-                                                    binLabel={bin.label}
-                                                />
-                                            </Popup>
-                                        </CircleMarker>
-                                    );
-                                })}
-                                {facLoading && (
-                                    <div
-                                        style={{
-                                            position: "absolute",
-                                            top: 8,
-                                            right: 8,
-                                            background:
-                                                "rgba(255,255,255,0.85)",
-                                            padding: "2px 8px",
-                                            borderRadius: 12,
-                                            fontSize: 12,
-                                            zIndex: 1000,
-                                        }}
+                                            {l.label}
+                                        </Text>
+                                    </Radio>
+                                ))}
+                            </Flex>
+                        </Radio.Group>
+                        <Text
+                            type="secondary"
+                            style={{ fontSize: token.fontSizeSM }}
+                        >
+                            {activeLayer.description}
+                        </Text>
+                        {legend.length > 0 && (
+                            <Flex vertical gap={2}>
+                                <Text
+                                    strong
+                                    style={{ fontSize: token.fontSizeSM }}
+                                >
+                                    Legend
+                                </Text>
+                                {legend.map((b) => (
+                                    <Flex
+                                        key={b.label}
+                                        align="center"
+                                        gap={token.marginXS}
                                     >
-                                        <Spin size="small" /> loading…
-                                    </div>
-                                )}
-                            </MapContainer>
-                        )
-                    )}
+                                        <span
+                                            style={{
+                                                display: "inline-block",
+                                                width: 10,
+                                                height: 10,
+                                                borderRadius: "50%",
+                                                background: b.color,
+                                                border: "1px solid rgba(0,0,0,0.15)",
+                                            }}
+                                        />
+                                        <Text
+                                            style={{
+                                                fontSize: token.fontSizeSM,
+                                                flex: 1,
+                                            }}
+                                        >
+                                            {b.label}
+                                        </Text>
+                                        <Text
+                                            type="secondary"
+                                            style={{
+                                                fontSize: token.fontSizeSM,
+                                            }}
+                                        >
+                                            {b.count}
+                                        </Text>
+                                    </Flex>
+                                ))}
+                            </Flex>
+                        )}
+                        {(facLoading || boundariesLoading) && (
+                            <Text
+                                type="secondary"
+                                style={{ fontSize: token.fontSizeSM }}
+                            >
+                                Loading data…
+                            </Text>
+                        )}
+                    </Flex>
                 </div>
             </div>
         </Flex>
@@ -483,7 +570,12 @@ const PopupBody: React.FC<{
             {facility.risk ? (
                 <>
                     <div>Status: {facility.risk.status}</div>
-                    <div>Active users: {facility.risk.activeUsers}</div>
+                    <div>
+                        Active users (period): {facility.risk.activeUsers}
+                    </div>
+                    <div>
+                        Logged in now: {facility.risk.loggedInUsers ?? 0}
+                    </div>
                     <div>Tracker GETs: {facility.risk.trackerGets}</div>
                     <div>Tracker POSTs: {facility.risk.trackerPosts}</div>
                     <div>Slow requests: {facility.risk.slowRequests}</div>

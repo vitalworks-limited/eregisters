@@ -16,7 +16,6 @@ import {
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminCacheStatusBadge } from "./AdminCacheStatusBadge";
 import { AdminFacilityCoverageMap } from "./AdminFacilityCoverageMap";
-import { AdminOperationalAlertsPanel } from "./AdminOperationalAlertsPanel";
 import { AdminSummaryCard } from "./AdminSummaryCard";
 import { AdminTopContributorsTable } from "./AdminTopContributorsTable";
 import {
@@ -295,15 +294,6 @@ export const AdminNationalOverview: React.FC<{
                         </>
                     }
                 />
-            )}
-
-            {summary && (
-                <Flex vertical gap={token.marginXS}>
-                    <Title level={5} style={{ margin: 0 }}>
-                        Operational alerts
-                    </Title>
-                    <AdminOperationalAlertsPanel alerts={summary.alerts} />
-                </Flex>
             )}
 
             {summary && (

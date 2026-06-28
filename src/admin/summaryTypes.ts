@@ -104,6 +104,13 @@ export interface FacilityRiskPoint {
     longitude?: number;
     status: HealthStatus;
     activeUsers: number;
+    /**
+     * Users currently signed in at this facility right now. Used by
+     * the Dashboard map's "Active users" layer so only sessions that
+     * are live show up, not anyone who touched the app earlier in the
+     * period.
+     */
+    loggedInUsers?: number;
     trackerGets: number;
     trackerPosts: number;
     failedSyncs: number;

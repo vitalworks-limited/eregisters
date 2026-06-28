@@ -22,6 +22,9 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import React, { useEffect, useMemo, useState } from "react";
+import { AdminOperationalAlertsPanel } from "../admin/AdminOperationalAlertsPanel";
+import { fetchOverviewSummary } from "../admin/adminSummaryService";
+import { AdminAlert } from "../admin/summaryTypes";
 import { MiniSparkline, StageBarChart } from "../components/charts";
 import { useMetadata } from "../hooks/useMetadata";
 import {
@@ -256,6 +259,29 @@ function AdminLogs() {
     const [trackerRows, setTrackerRows] = useState<Row[]>([]);
     const [loading, setLoading] = useState(false);
     const [trackerError, setTrackerError] = useState<string | null>(null);
+    const [alerts, setAlerts] = useState<AdminAlert[]>([]);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const r = await fetchOverviewSummary(engine, {
+                    period: "THIS_YEAR",
+                    orgUnit: {
+                        id: "NATIONAL",
+                        name: "National",
+                        scope: "NATIONAL",
+                    },
+                });
+                if (!cancelled) setAlerts(r.summary.alerts);
+            } catch {
+                if (!cancelled) setAlerts([]);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [engine]);
 
     const load = async (force = false) => {
         setLoading(true);
@@ -452,6 +478,13 @@ function AdminLogs() {
 
     return (
         <Flex vertical gap={token.marginSM}>
+            <Flex vertical gap={token.marginXS}>
+                <Title level={5} style={{ margin: 0 }}>
+                    Operational alerts
+                </Title>
+                <AdminOperationalAlertsPanel alerts={alerts} />
+            </Flex>
+
             <Flex align="center" justify="space-between" gap={token.marginSM} wrap>
                 <Flex vertical gap={token.marginXXS}>
                     <Title level={5} style={{ margin: 0 }}>
