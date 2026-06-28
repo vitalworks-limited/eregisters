@@ -1,6 +1,5 @@
 import {
     FilterOutlined,
-    PlusOutlined,
     SearchOutlined,
 } from "@ant-design/icons";
 import { and, eq, not, useLiveSuspenseQuery } from "@tanstack/react-db";
@@ -26,6 +25,7 @@ import { ClientSchema } from "../schemas";
 import { trackedEntitiesCollection } from "../collections";
 import { useMetadata } from "../hooks/useMetadata";
 import { usePatientRegistration } from "../hooks/usePatientRegistration";
+import { PatientRegistrationContext } from "../hooks/usePatientRegistrationTrigger";
 import { RootRoute } from "./__root";
 
 const { Content } = Layout;
@@ -219,13 +219,6 @@ function TrackedEntities() {
                         Search the registry or register a new client.
                     </Text>
                 </Flex>
-                <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={openRegistration}
-                >
-                    Register new patient
-                </Button>
             </Flex>
 
             <div
@@ -313,7 +306,9 @@ function TrackedEntities() {
                 gutter={[token.marginSM, token.marginSM]}
                 style={{ flex: 1, minHeight: 0 }}
             >
-                <Outlet />
+                <PatientRegistrationContext.Provider value={openRegistration}>
+                    <Outlet />
+                </PatientRegistrationContext.Provider>
             </Row>
 
             <Drawer

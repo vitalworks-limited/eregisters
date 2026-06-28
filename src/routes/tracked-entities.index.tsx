@@ -1,6 +1,7 @@
 import {
     DashboardOutlined,
     MoreOutlined,
+    PlusOutlined,
     UserOutlined,
 } from "@ant-design/icons";
 import {
@@ -32,6 +33,9 @@ import { useMetadata } from "../hooks/useMetadata";
 import { trackedEntitiesCollection } from "../collections";
 import { SyncContext } from "../machines/sync";
 import { markNextSyncManual } from "../sync/telemetry";
+import { useOnlineSearchCount } from "../hooks/useOnlineSearchCount";
+import { useOnlineStatus } from "../hooks/useOnlineStatus";
+import { usePatientRegistrationTrigger } from "../hooks/usePatientRegistrationTrigger";
 
 const { Text } = Typography;
 
@@ -72,6 +76,8 @@ function TrackedEntitiesSearch() {
         [id],
     );
     const totalLocalClients = facilityTotal.length;
+    const online = useOnlineStatus();
+    const openRegistration = usePatientRegistrationTrigger();
 
     const globalQuery =
         typeof search?._q === "string" && search._q.trim()
@@ -135,6 +141,17 @@ function TrackedEntitiesSearch() {
         },
         [globalQuery, fieldFilters, searchableAttrIds, id],
     );
+
+    // Online-side search: ask the server if it knows anyone matching
+    // the query so users on freshly-installed devices can find a
+    // patient without doing a full pull first.
+    const serverSearch = useOnlineSearchCount({
+        program: program?.id,
+        orgUnit: id,
+        query: globalQuery ?? "",
+        online,
+        enabled: !!globalQuery,
+    });
 
     const actionMenu: MenuProps = {
         items: [
@@ -227,25 +244,42 @@ function TrackedEntitiesSearch() {
                     title={
                         totalLocalClients === 0
                             ? "No patients on this device yet"
-                            : "Search to find a patient"
+                            : "Search before registering"
                     }
                     description={
                         totalLocalClients === 0
-                            ? "Pull data from the server to bring this facility's existing patients onto this device, or register a new patient using the button above."
-                            : `Enter a name, NIN, phone, or village above. The search matches across every searchable field on the program. ${totalLocalClients} patient${totalLocalClients === 1 ? "" : "s"} on this device.`
+                            ? "Pull data from the server, or search the registry first — a patient may already exist before you register them again."
+                            : `Enter a name, NIN, phone, or village above to find an existing record. ${totalLocalClients} patient${totalLocalClients === 1 ? "" : "s"} on this device. Search first to avoid duplicates.`
                     }
                     action={
-                        totalLocalClients === 0 ? (
-                            <Button
-                                type="primary"
-                                onClick={() => {
-                                    markNextSyncManual();
-                                    syncActor.send({ type: "FULL_DATA_SYNC" });
-                                }}
-                            >
-                                Pull data now
-                            </Button>
-                        ) : undefined
+                        <Flex gap={8} wrap justify="center">
+                            {totalLocalClients === 0 && (
+                                <Button
+                                    type="primary"
+                                    onClick={() => {
+                                        markNextSyncManual();
+                                        syncActor.send({
+                                            type: "FULL_DATA_SYNC",
+                                        });
+                                    }}
+                                >
+                                    Pull data now
+                                </Button>
+                            )}
+                            {openRegistration && (
+                                <Button
+                                    type={
+                                        totalLocalClients === 0
+                                            ? "default"
+                                            : "primary"
+                                    }
+                                    icon={<PlusOutlined />}
+                                    onClick={openRegistration}
+                                >
+                                    Register new patient
+                                </Button>
+                            )}
+                        </Flex>
                     }
                 />
             </Col>
@@ -253,52 +287,127 @@ function TrackedEntitiesSearch() {
     }
 
     if (currentTrackedEntities.length === 0) {
+        const serverHasResults =
+            online && !!globalQuery && serverSearch.total > 0;
         return (
             <Col span={24} style={{ display: "flex" }}>
                 <EmptyState
-                    title="No matches"
+                    title={
+                        serverHasResults ? "On the server" : "No matches"
+                    }
                     description={
-                        totalLocalClients === 0
-                            ? "There are no patients on this device yet. Pull data from the server first, or register a new patient."
-                            : `Your search didn't match any of the ${totalLocalClients} patient${totalLocalClients === 1 ? "" : "s"} on this device. Try a shorter term, check spelling, or pull recent server changes.`
+                        serverHasResults
+                            ? `Server has ${serverSearch.total.toLocaleString()} matching patient${serverSearch.total === 1 ? "" : "s"} for "${globalQuery}" that aren't yet on this device. Pull to load them.`
+                            : totalLocalClients === 0
+                              ? "There are no patients on this device yet. Pull data from the server first, or register a new patient."
+                              : `Your search didn't match any of the ${totalLocalClients} patient${totalLocalClients === 1 ? "" : "s"} on this device. Try a shorter term, check spelling, or pull recent server changes.`
                     }
                     action={
-                        totalLocalClients === 0 ? (
-                            <Button
-                                type="primary"
-                                onClick={() => {
-                                    markNextSyncManual();
-                                    syncActor.send({ type: "FULL_DATA_SYNC" });
-                                }}
-                            >
-                                Pull data now
-                            </Button>
-                        ) : (
-                            <Button
-                                onClick={() => {
-                                    markNextSyncManual();
-                                    // Match the sync popover: if the
-                                    // device has no watermark yet,
-                                    // escalate to a full pull so the
-                                    // button actually fetches data.
-                                    syncActor.send({
-                                        type: lastDataPull
-                                            ? "START_DATA_SYNC"
-                                            : "FULL_DATA_SYNC",
-                                    });
-                                }}
-                            >
-                                Pull changes
-                            </Button>
-                        )
+                        <Flex gap={8} wrap justify="center">
+                            {totalLocalClients === 0 || serverHasResults ? (
+                                <Button
+                                    type="primary"
+                                    onClick={() => {
+                                        markNextSyncManual();
+                                        syncActor.send({
+                                            type: "FULL_DATA_SYNC",
+                                        });
+                                    }}
+                                >
+                                    Pull data now
+                                </Button>
+                            ) : (
+                                <Button
+                                    onClick={() => {
+                                        markNextSyncManual();
+                                        syncActor.send({
+                                            type: lastDataPull
+                                                ? "START_DATA_SYNC"
+                                                : "FULL_DATA_SYNC",
+                                        });
+                                    }}
+                                >
+                                    Pull changes
+                                </Button>
+                            )}
+                            {openRegistration && (
+                                <Button
+                                    type={
+                                        serverHasResults
+                                            ? "default"
+                                            : "primary"
+                                    }
+                                    icon={<PlusOutlined />}
+                                    onClick={openRegistration}
+                                >
+                                    Register new patient
+                                </Button>
+                            )}
+                        </Flex>
                     }
                 />
             </Col>
         );
     }
 
+    const serverHasMore =
+        online &&
+        !!globalQuery &&
+        serverSearch.total > currentTrackedEntities.length;
+
     return (
         <Col span={24}>
+            {serverHasMore && (
+                <div
+                    style={{
+                        background: `${token.colorInfo}10`,
+                        border: `1px solid ${token.colorInfo}40`,
+                        padding: `${token.paddingSM}px ${token.padding}px`,
+                        marginBottom: token.marginSM,
+                    }}
+                >
+                    <Flex
+                        align="center"
+                        justify="space-between"
+                        gap={token.marginSM}
+                        wrap
+                    >
+                        <Text style={{ color: token.colorInfoText }}>
+                            Server has{" "}
+                            <Text strong>
+                                {serverSearch.total.toLocaleString()}
+                            </Text>{" "}
+                            matching patient
+                            {serverSearch.total === 1 ? "" : "s"} for{" "}
+                            <Text code>{globalQuery}</Text>
+                            {currentTrackedEntities.length > 0 && (
+                                <>
+                                    {" "}
+                                    — {currentTrackedEntities.length} on this
+                                    device,{" "}
+                                    {serverSearch.total -
+                                        currentTrackedEntities.length}{" "}
+                                    not yet pulled.
+                                </>
+                            )}
+                        </Text>
+                        <Button
+                            type="primary"
+                            size="small"
+                            onClick={() => {
+                                markNextSyncManual();
+                                syncActor.send({
+                                    type: lastDataPull
+                                        ? "START_DATA_SYNC"
+                                        : "FULL_DATA_SYNC",
+                                });
+                            }}
+                        >
+                            Pull now
+                        </Button>
+                    </Flex>
+                </div>
+            )}
             <div
                 style={{
                     background: token.colorBgContainer,
@@ -317,6 +426,16 @@ function TrackedEntitiesSearch() {
                         {currentTrackedEntities.length} result
                         {currentTrackedEntities.length === 1 ? "" : "s"}
                     </Text>
+                    {openRegistration && (
+                        <Button
+                            type="primary"
+                            size="small"
+                            icon={<PlusOutlined />}
+                            onClick={openRegistration}
+                        >
+                            Register new patient
+                        </Button>
+                    )}
                 </Flex>
                 <Table
                     columns={columns}
