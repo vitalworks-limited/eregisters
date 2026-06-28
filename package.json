@@ -25,9 +25,11 @@
     "antd": "^6.4.2",
     "dayjs": "^1.11.20",
     "dexie": "^4.4.2",
+    "leaflet": "^1.9.4",
     "lodash": "^4.18.1",
     "react": "19.2.6",
     "react-dom": "19.2.6",
+    "react-leaflet": "^5.0.0",
     "recharts": "^3.9.0",
     "tanstack-dexie-db-collection": "^0.1.4",
     "xstate": "^5.31.1",
@@ -37,10 +39,12 @@
     "@dhis2/cli-app-scripts": "12.11.0",
     "@playwright/test": "^1.61.1",
     "@types/jest": "^30.0.0",
+    "@types/leaflet": "^1.9.21",
     "@types/lodash": "^4.17.24",
     "@types/node": "^25.8.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   }
 }

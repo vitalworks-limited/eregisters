@@ -22,7 +22,6 @@ import {
 } from "../sync/adminConfig";
 import { refreshAdminConfig } from "../sync/adminConfigCache";
 import { listTelemetry, SyncTelemetry } from "../sync/telemetry";
-import { AdminNationalOverview } from "../admin/AdminNationalOverview";
 import { AdminRoute } from "./admin";
 
 const { Title, Text } = Typography;
@@ -167,19 +166,14 @@ function AdminOverview() {
 
     return (
         <Flex vertical gap={token.marginSM}>
-            <AdminNationalOverview />
-
-            <Flex
-                vertical
-                gap={token.marginXXS}
-                style={{ marginTop: token.marginSM }}
-            >
+            <Flex vertical gap={token.marginXXS}>
                 <Title level={5} style={{ margin: 0 }}>
                     This device & facility
                 </Title>
                 <Text type="secondary">
-                    Local snapshot for the signed-in user — independent
-                    from the national summary above.
+                    Local snapshot for the signed-in user. For
+                    cluster-wide indicators see{" "}
+                    <Link to="/admin/dashboard">National dashboard</Link>.
                 </Text>
             </Flex>
 

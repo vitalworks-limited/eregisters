@@ -15,6 +15,7 @@ import {
 } from "antd";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminCacheStatusBadge } from "./AdminCacheStatusBadge";
+import { AdminFacilityCoverageMap } from "./AdminFacilityCoverageMap";
 import { AdminOperationalAlertsPanel } from "./AdminOperationalAlertsPanel";
 import { AdminSummaryCard } from "./AdminSummaryCard";
 import { AdminTopContributorsTable } from "./AdminTopContributorsTable";
@@ -228,7 +229,7 @@ export const AdminNationalOverview: React.FC<{
                     type="error"
                     showIcon
                     icon={<WarningOutlined />}
-                    message="Summary read failed"
+                    title="Summary read failed"
                     description={error}
                 />
             )}
@@ -268,7 +269,7 @@ export const AdminNationalOverview: React.FC<{
                 <Alert
                     type="info"
                     showIcon
-                    message="No Admin Summary Data Available"
+                    title="No Admin Summary Data Available"
                     description={
                         <>
                             <Paragraph style={{ marginBottom: 0 }}>
@@ -303,6 +304,12 @@ export const AdminNationalOverview: React.FC<{
                     </Title>
                     <AdminOperationalAlertsPanel alerts={summary.alerts} />
                 </Flex>
+            )}
+
+            {summary && (
+                <AdminFacilityCoverageMap
+                    facilities={summary.facilityRiskMap}
+                />
             )}
 
             {summary && (

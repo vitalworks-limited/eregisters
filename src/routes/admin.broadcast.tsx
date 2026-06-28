@@ -303,7 +303,7 @@ function AdminBroadcast() {
                             value={severity}
                             onChange={(e) => setSeverity(e.target.value)}
                         >
-                            <Space direction="vertical">
+                            <Space orientation="vertical">
                                 <Radio value="info">
                                     <Text strong>Notify only</Text>{" "}
                                     <Text type="secondary">
@@ -338,7 +338,7 @@ function AdminBroadcast() {
                         <Alert
                             type="warning"
                             showIcon
-                            message="Forced reload affects every open session"
+                            title="Forced reload affects every open session"
                             description="The app attempts to save drafts before reload, but anything not yet typed into a field will be lost. Use only for urgent fixes."
                         />
                     )}
@@ -374,7 +374,7 @@ function AdminBroadcast() {
                 type="info"
                 showIcon
                 icon={<NotificationOutlined />}
-                message="How clients discover broadcasts"
+                title="How clients discover broadcasts"
                 description={
                     <>
                         Every client polls{" "}

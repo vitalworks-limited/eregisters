@@ -406,7 +406,7 @@ function AdminConfig() {
                                                 typeof v === "number" ? v : 0,
                                         }))
                                     }
-                                    addonAfter="min"
+                                    suffix="min"
                                     style={{ width: 140 }}
                                 />
                             </Flex>
@@ -637,7 +637,7 @@ function AdminConfig() {
                         <Alert
                             type="warning"
                             showIcon
-                            message="Hard-stop modal"
+                            title="Hard-stop modal"
                             description="The user can't capture data or navigate until they click the action button. Reserve this for compliance-grade notices."
                         />
                     )}

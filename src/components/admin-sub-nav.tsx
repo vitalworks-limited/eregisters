@@ -5,6 +5,7 @@ import {
     DatabaseOutlined,
     CloudUploadOutlined,
     FileSearchOutlined,
+    GlobalOutlined,
     NotificationOutlined,
     TeamOutlined,
     ThunderboltOutlined,
@@ -28,6 +29,12 @@ export const ADMIN_NAV: NavItem[] = [
         label: "Overview",
         icon: <DashboardOutlined />,
         activeWhen: (p) => p === "/admin" || p === "/admin/",
+    },
+    {
+        to: "/admin/dashboard",
+        label: "National dashboard",
+        icon: <GlobalOutlined />,
+        activeWhen: (p) => p.startsWith("/admin/dashboard"),
     },
     {
         to: "/admin/sync",

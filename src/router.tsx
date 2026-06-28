@@ -8,6 +8,7 @@ import { Spinner } from "./components/spinner";
 import { AdminRoute } from "./routes/admin";
 import { AdminBroadcastRoute } from "./routes/admin.broadcast";
 import { AdminConfigRoute } from "./routes/admin.config";
+import { AdminDashboardRoute } from "./routes/admin.dashboard";
 import { AdminDataCaptureRoute } from "./routes/admin.data-capture";
 import { AdminIndexRoute } from "./routes/admin.index";
 import { AdminInsightsRoute } from "./routes/admin.insights";
@@ -29,6 +30,7 @@ const routeTree = RootRoute.addChildren([
     ReportsRoute,
     AdminRoute.addChildren([
         AdminIndexRoute,
+        AdminDashboardRoute,
         AdminSyncRoute,
         AdminQueueRoute,
         AdminUsersRoute,

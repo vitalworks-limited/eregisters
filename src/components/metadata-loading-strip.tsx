@@ -104,7 +104,7 @@ export const MetadataLoadingStrip: React.FC = () => {
                             ? token.colorError
                             : token.colorPrimary
                     }
-                    trailColor={token.colorBorderSecondary}
+                    railColor={token.colorBorderSecondary}
                     status={
                         progress.phase === "error"
                             ? "exception"

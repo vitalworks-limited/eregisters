@@ -45,7 +45,7 @@ export const SupportInfo: React.FC = () => {
                 </Typography.Link>{" "}
                 · © {new Date().getFullYear()}
             </Typography.Text>
-            <Divider type="vertical" style={{ marginInline: token.marginXS }} />
+            <Divider orientation="vertical" style={{ marginInline: token.marginXS }} />
             <Tooltip title={tooltipTitle}>
                 <Typography.Text
                     type="secondary"
