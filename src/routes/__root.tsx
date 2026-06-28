@@ -1,237 +1,123 @@
+import { MenuOutlined } from "@ant-design/icons";
+import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
 import {
-    CloudDownloadOutlined,
-    CloudUploadOutlined,
-    DownOutlined,
-    HomeOutlined,
-    MenuOutlined,
-    ReloadOutlined,
-} from "@ant-design/icons";
-import {
-    createRootRouteWithContext,
-    Link,
-    Outlet,
-} from "@tanstack/react-router";
-import {
-    Badge,
-    Button,
+    Divider,
     Drawer,
-    Dropdown,
     Flex,
     Grid,
     Layout,
-    Space,
-    Tooltip,
+    theme,
     Typography,
 } from "antd";
-import dayjs from "dayjs";
-import relativeTime from "dayjs/plugin/relativeTime";
 import React, { useEffect, useState } from "react";
 
-import { eq, useLiveSuspenseQuery } from "@tanstack/react-db";
-import { waitFor } from "xstate";
-import { Spinner } from "../components/spinner";
-import { useMetadata } from "../hooks/useMetadata";
-import { SyncContext } from "../machines/sync";
+import { eq, useLiveQuery } from "@tanstack/react-db";
+import { AppNav } from "../components/app-nav";
+import { MetadataLoadingStrip } from "../components/metadata-loading-strip";
+import { AdminNoticeBanner } from "../components/admin-notice-banner";
+import { OfflineBanner } from "../components/offline-banner";
+import { OnlineIndicator } from "../components/online-indicator";
+import { OrgUnitChip } from "../components/org-unit-chip";
+import { SupportInfo } from "../components/support-info";
+import { SyncPopover } from "../components/sync-popover";
+import { ThemeToggle } from "../components/theme-toggle";
 import {
-    isDataPullLoading,
-    isDataPushLoading,
-    isMetadataSyncLoading,
-} from "../machines/sync-metadata-mode";
-import {
-    trackedEntitiesCollection,
     enrollmentsCollection,
     eventsCollection,
+    trackedEntitiesCollection,
 } from "../collections";
-import { useConfig } from "@dhis2/app-runtime";
-import { redirectByUnit } from "../utils/utils";
+import { SyncContext } from "../machines/sync";
 
-dayjs.extend(relativeTime);
-
-const { Header } = Layout;
+const { Content } = Layout;
 const { Title, Text } = Typography;
+
+const BRAND_BAR_HEIGHT = 60;
+const UGANDA_LOGO_URL =
+    "https://upload.wikimedia.org/wikipedia/commons/7/7c/Coat_of_arms_of_Uganda.svg";
 
 export const RootRoute = createRootRouteWithContext<{
     syncActor: ReturnType<typeof SyncContext.useActorRef>;
 }>()({
     component: LayoutWithDrafts,
-    pendingComponent: () => (
-        <Spinner
-            component={<Typography.Text>Loading Metadata</Typography.Text>}
-        />
-    ),
-    loader: async ({ context: { syncActor } }) => {
-        await waitFor(syncActor, (snapshot) => {
-            return snapshot.matches({ metadataSync: "waiting" });
-        });
-    },
 });
 
-function SyncButton({
-    tooltip,
-    icon,
-    isLoading,
-    idleLabel,
-    loadingLabel,
-    lastTime,
-    onClick,
-    type,
-    danger,
-}: {
-    tooltip: string;
-    icon: React.ReactNode;
-    isLoading: boolean;
-    idleLabel: string;
-    loadingLabel: string;
-    lastTime?: string;
-    onClick: () => void;
-    type?: "primary" | "default";
-    danger?: boolean;
-}) {
+function BrandMark({ showWordmark }: { showWordmark: boolean }) {
+    const { token } = theme.useToken();
     return (
-        <Tooltip title={tooltip}>
-            <Button
-                icon={icon}
-                loading={isLoading}
-                onClick={onClick}
-                type={type}
-                danger={danger}
-                style={{ height: "auto", padding: "4px 12px" }}
-            >
-                <Flex vertical align="flex-start" gap={0}>
-                    <span>{isLoading ? loadingLabel : idleLabel}</span>
-                    {lastTime && (
-                        <Text
-                            type="secondary"
-                            style={{ fontSize: 10, lineHeight: 1 }}
-                        >
-                            {lastTime}
-                        </Text>
-                    )}
-                </Flex>
-            </Button>
-        </Tooltip>
-    );
-}
-
-function SplitSyncButton({
-    tooltip,
-    icon,
-    isLoading,
-    idleLabel,
-    loadingLabel,
-    lastTime,
-    primaryAction,
-    dropdownItems,
-    type,
-    danger,
-}: {
-    tooltip: string;
-    icon: React.ReactNode;
-    isLoading: boolean;
-    idleLabel: string;
-    loadingLabel: string;
-    lastTime?: string;
-    primaryAction: () => void;
-    dropdownItems: Array<{ key: string; label: string; onClick: () => void }>;
-    type?: "primary" | "default";
-    danger?: boolean;
-}) {
-    return (
-        <Space.Compact>
-            <Tooltip title={tooltip}>
-                <Button
-                    icon={icon}
-                    loading={isLoading}
-                    onClick={primaryAction}
-                    type={type}
-                    danger={danger}
-                    style={{ height: "auto", padding: "4px 12px" }}
+        <Flex align="center" gap={token.marginSM}>
+            <img
+                src={UGANDA_LOGO_URL}
+                alt="Uganda Coat of Arms"
+                style={{ height: showWordmark ? 34 : 28 }}
+            />
+            {showWordmark && (
+                <Title
+                    level={4}
+                    style={{
+                        margin: 0,
+                        color: token.colorPrimary,
+                        fontWeight: 600,
+                        lineHeight: 1.2,
+                        whiteSpace: "nowrap",
+                        letterSpacing: -0.2,
+                    }}
                 >
-                    <Flex vertical align="flex-start" gap={0}>
-                        <span>{isLoading ? loadingLabel : idleLabel}</span>
-                        {lastTime && (
-                            <Text
-                                type="secondary"
-                                style={{ fontSize: 10, lineHeight: 1 }}
-                            >
-                                {lastTime}
-                            </Text>
-                        )}
-                    </Flex>
-                </Button>
-            </Tooltip>
-            <Dropdown
-                menu={{
-                    items: dropdownItems.map((item) => ({
-                        key: item.key,
-                        label: item.label,
-                        onClick: item.onClick,
-                    })),
-                }}
-            >
-                <Button
-                    type={type}
-                    danger={danger}
-                    icon={<DownOutlined />}
-                    style={{ height: "auto", padding: "4px 6px" }}
-                />
-            </Dropdown>
-        </Space.Compact>
+                    Medical{" "}
+                    <Text
+                        type="secondary"
+                        style={{ fontWeight: 400, fontSize: "inherit" }}
+                    >
+                        eRegistry
+                    </Text>
+                </Title>
+            )}
+        </Flex>
     );
 }
 
 function LayoutWithDrafts() {
     const syncActor = SyncContext.useActorRef();
+    const { token } = theme.useToken();
 
-    const { baseUrl } = useConfig();
-    const program = SyncContext.useSelector((a) => a.context.metadata.program);
-    const userOrgUnits = SyncContext.useSelector(
-        (a) => a.context.userInfo?.organisationUnits.map((a) => a.id) ?? [],
+    // Read metadata directly off the sync machine so we never throw during
+    // the initial load — the chrome stays put and only the body swaps.
+    const orgUnit = SyncContext.useSelector(
+        (s) => s.context.metadata?.orgUnit,
     );
 
-    const { orgUnit } = useMetadata();
-    const syncingMetadata = SyncContext.useSelector((snapshot) => {
-        return isMetadataSyncLoading(
-            snapshot.matches({ metadataSync: "syncing" }) ||
-                snapshot.matches({ metadataSync: "deletingMetadata" }) ||
-                snapshot.matches({ metadataSync: "savingMetadata" }),
-            snapshot.context.lastMetadataPull,
-        );
-    });
-
-    const syncingData = SyncContext.useSelector((snapshot) =>
-        isDataPullLoading(
-            snapshot.matches({ dataPull: "syncing" }),
-            snapshot.context.lastDataPull,
-        ),
+    // Metadata is ready when the sync machine reaches either of these
+    // states. `failure` is treated as ready so the app surfaces an error
+    // route instead of spinning forever (see Phase 5 of the earlier work).
+    const metadataReady = SyncContext.useSelector(
+        (s) =>
+            s.matches({ metadataSync: "waiting" }) ||
+            s.matches({ metadataSync: "failure" }),
     );
 
-    const pushingData = SyncContext.useSelector((snapshot) =>
-        isDataPushLoading(snapshot.matches({ dataSync: "batchSync" })),
-    );
-    const lastDataPull = SyncContext.useSelector((a) => a.context.lastDataPull);
-    const lastDataPush = SyncContext.useSelector((a) => a.context.lastDataPush);
-    const lastMetadataPull = SyncContext.useSelector(
-        (a) => a.context.lastMetadataPull,
-    );
-    const { data: pendingTrackedEntities } = useLiveSuspenseQuery((q) =>
+    // Non-suspense versions so the chrome can render before any data has
+    // landed in the Dexie tables (i.e. on the first cold start).
+    const { data: pendingTrackedEntities = [] } = useLiveQuery((q) =>
         q
             .from({ trackedEntities: trackedEntitiesCollection })
             .where(({ trackedEntities }) =>
                 eq(trackedEntities.syncStatus, "pending"),
             ),
     );
-
-    const { data: pendingEnrollments } = useLiveSuspenseQuery((q) =>
+    const { data: pendingEnrollments = [] } = useLiveQuery((q) =>
         q
             .from({ enrollments: enrollmentsCollection })
             .where(({ enrollments }) => eq(enrollments.syncStatus, "pending")),
     );
-    const { data: pendingEvents } = useLiveSuspenseQuery((q) =>
+    const { data: pendingEvents = [] } = useLiveQuery((q) =>
         q
             .from({ events: eventsCollection })
             .where(({ events }) => eq(events.syncStatus, "pending")),
     );
+    const pendingCount =
+        pendingTrackedEntities.length +
+        pendingEnrollments.length +
+        pendingEvents.length;
+
     useEffect(() => {
         const handleOnline = () =>
             syncActor.send({ type: "NETWORK_RECONNECT" });
@@ -240,161 +126,147 @@ function LayoutWithDrafts() {
     }, [syncActor]);
 
     const screens = Grid.useBreakpoint();
-    const isMobile = !screens.lg;
-    const isLarge = !screens.xl;
+    const isMobile = !screens.md;
+    const showWordmark = !!screens.sm;
     const [drawerOpen, setDrawerOpen] = useState(false);
 
-    const navItems = (vertical: boolean) => (
-        <Flex
-            align={vertical ? "flex-start" : "center"}
-            justify="center"
-            gap={vertical ? 16 : 10}
-            vertical={vertical}
+    const brandBar = (
+        <div
+            style={{
+                background: token.colorBgContainer,
+                borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                padding: `0 ${token.padding}px`,
+                height: BRAND_BAR_HEIGHT,
+                display: "flex",
+                alignItems: "stretch",
+                justifyContent: "space-between",
+                gap: token.marginLG,
+            }}
         >
-            <Link to="/" onClick={() => setDrawerOpen(false)}>
-                <Flex align="center" justify="center" gap={5}>
-                    <HomeOutlined style={{ fontSize: 20, color: "#1890ff" }} />
-                    <Text strong>{orgUnit?.name ?? "Loading..."}</Text>
-                </Flex>
-            </Link>
-            <SplitSyncButton
-                tooltip="Pull data changes since last sync"
-                icon={<CloudDownloadOutlined />}
-                isLoading={syncingData}
-                idleLabel="Pull Changes"
-                loadingLabel="Pulling..."
-                lastTime={
-                    lastDataPull ? dayjs(lastDataPull).fromNow() : undefined
-                }
-                primaryAction={() =>
-                    syncActor.send({ type: "START_DATA_SYNC" })
-                }
-                dropdownItems={[
-                    {
-                        key: "full",
-                        label: "Pull All Data",
-                        onClick: () =>
-                            syncActor.send({ type: "FULL_DATA_SYNC" }),
-                    },
-                ]}
-            />
-            <SplitSyncButton
-                tooltip="Sync metadata changes since last sync"
-                icon={<ReloadOutlined />}
-                isLoading={syncingMetadata}
-                idleLabel="Sync Metadata"
-                loadingLabel="Syncing..."
-                lastTime={
-                    lastMetadataPull
-                        ? dayjs(lastMetadataPull).fromNow()
-                        : undefined
-                }
-                primaryAction={() =>
-                    syncActor.send({ type: "START_METADATA_SYNC" })
-                }
-                dropdownItems={[
-                    {
-                        key: "full",
-                        label: "Full Metadata Sync",
-                        onClick: () =>
-                            syncActor.send({ type: "FULL_METADATA_SYNC" }),
-                    },
-                ]}
-                type="primary"
-            />
-            <Tooltip title="Push Data">
-                <Badge
-                    count={
-                        pendingEnrollments.length +
-                        pendingEvents.length +
-                        pendingTrackedEntities.length
-                    }
-                    style={{ backgroundColor: "#faad14" }}
-                    title="Pending entities to sync"
-                    showZero
+            <Flex
+                align="center"
+                gap={token.marginLG}
+                style={{ minWidth: 0, flex: "0 1 auto" }}
+            >
+                <Flex
+                    align="center"
+                    gap={token.marginSM}
+                    style={{ minWidth: 0 }}
                 >
-                    <SyncButton
-                        tooltip="Push Data"
-                        icon={<CloudUploadOutlined />}
-                        isLoading={pushingData}
-                        idleLabel="Push Data"
-                        loadingLabel="Pushing..."
-                        lastTime={
-                            lastDataPush
-                                ? dayjs(lastDataPush).fromNow()
-                                : undefined
-                        }
-                        onClick={() => syncActor.send({ type: "PUSH_DATA" })}
-                        danger
-                    />
-                </Badge>
-            </Tooltip>
-            {/* <Link to="/reports" onClick={() => setDrawerOpen(false)}>
-                Reports
-            </Link> */}
-        </Flex>
-    );
-
-    redirectByUnit(
-        userOrgUnits,
-        program?.organisationUnits.map(({ id }) => id) ?? [],
-        baseUrl,
+                    {isMobile && metadataReady && (
+                        <button
+                            type="button"
+                            aria-label="Open navigation"
+                            onClick={() => setDrawerOpen(true)}
+                            style={{
+                                background: "transparent",
+                                border: "none",
+                                padding: token.paddingXS,
+                                cursor: "pointer",
+                                color: token.colorTextSecondary,
+                                display: "inline-flex",
+                                alignItems: "center",
+                            }}
+                        >
+                            <MenuOutlined style={{ fontSize: 20 }} />
+                        </button>
+                    )}
+                    <BrandMark showWordmark={showWordmark} />
+                </Flex>
+                {!isMobile && metadataReady && (
+                    <nav
+                        role="navigation"
+                        aria-label="Primary"
+                        style={{ display: "flex", alignItems: "stretch" }}
+                    >
+                        <AppNav orientation="horizontal" />
+                    </nav>
+                )}
+            </Flex>
+            <Flex align="center" gap={token.marginSM}>
+                <OnlineIndicator />
+                {!isMobile && orgUnit?.name && (
+                    <OrgUnitChip name={orgUnit.name} id={orgUnit.id} />
+                )}
+                <SyncPopover
+                    pendingCount={pendingCount}
+                    compact={isMobile}
+                />
+                <ThemeToggle />
+            </Flex>
+        </div>
     );
 
     return (
         <Layout
             style={{
                 minHeight: "calc(100vh - 48px)",
-                background: "#f0f2f5",
+                background: token.colorBgLayout,
             }}
         >
-            <Header
+            <a
+                href="#main-content"
                 style={{
-                    background: "#fff",
-                    padding: "0 16px",
-                    display: "flex",
-                    alignItems: "center",
-                    alignContent: "center",
-                    justifyItems: "center",
-                    justifyContent: "space-between",
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                    position: "absolute",
+                    insetInlineStart: 8,
+                    insetBlockStart: 8,
+                    background: token.colorBgContainer,
+                    color: token.colorPrimary,
+                    padding: `${token.paddingXXS}px ${token.paddingSM}px`,
+                    border: `1px solid ${token.colorBorder}`,
+                    zIndex: 100,
+                    transform: "translateY(-200%)",
+                    transition: "transform 120ms",
                 }}
+                onFocus={(e) =>
+                    (e.currentTarget.style.transform = "translateY(0)")
+                }
+                onBlur={(e) =>
+                    (e.currentTarget.style.transform = "translateY(-200%)")
+                }
             >
-                <Flex align="center" gap={isMobile ? "middle" : "large"}>
-                    <img
-                        src="https://upload.wikimedia.org/wikipedia/commons/7/7c/Coat_of_arms_of_Uganda.svg"
-                        alt="Uganda Coat of Arms"
-                        style={{ height: isMobile ? 36 : 54 }}
-                    />
-                    <Title
-                        level={isMobile ? 5 : 3}
-                        style={{ margin: 0, color: "#1f4788" }}
-                    >
-                        Medical{" "}
-                        <Text style={{ fontWeight: 300 }}>eRegistry</Text>
-                    </Title>
-                </Flex>
-
-                {isMobile || isLarge ? (
-                    <Button
-                        type="text"
-                        icon={<MenuOutlined style={{ fontSize: 20 }} />}
-                        onClick={() => setDrawerOpen(true)}
-                    />
-                ) : (
-                    navItems(false)
-                )}
-            </Header>
+                Skip to main content
+            </a>
+            <OfflineBanner />
+            <AdminNoticeBanner />
+            <header role="banner">{brandBar}</header>
             <Drawer
                 title="Navigation"
-                placement="right"
+                placement="left"
                 onClose={() => setDrawerOpen(false)}
                 open={drawerOpen}
-                size={280}
+                size="default"
+                styles={{ body: { padding: 0 } }}
             >
-                {navItems(true)}
+                {orgUnit?.name && (
+                    <>
+                        <Flex
+                            vertical
+                            gap={token.marginSM}
+                            style={{ padding: token.padding }}
+                        >
+                            <OrgUnitChip name={orgUnit.name} id={orgUnit.id} />
+                        </Flex>
+                        <Divider style={{ margin: 0 }} />
+                    </>
+                )}
+                <div style={{ padding: `${token.padding}px 0` }}>
+                    <AppNav
+                        orientation="vertical"
+                        onItemClick={() => setDrawerOpen(false)}
+                    />
+                </div>
             </Drawer>
-            <Outlet />
+            <Content
+                id="main-content"
+                role="main"
+                style={{ display: "flex", flexDirection: "column", flex: 1 }}
+            >
+                {metadataReady ? <Outlet /> : <MetadataLoadingStrip />}
+            </Content>
+            <footer role="contentinfo">
+                <SupportInfo />
+            </footer>
         </Layout>
     );
 }

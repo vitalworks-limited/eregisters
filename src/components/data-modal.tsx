@@ -1,6 +1,17 @@
 import { UserAddOutlined } from "@ant-design/icons";
 import type { FormInstance } from "antd";
-import { Button, Flex, Form, Grid, Modal, Spin, Typography } from "antd";
+import {
+    Alert,
+    Avatar,
+    Button,
+    Flex,
+    Form,
+    Grid,
+    Modal,
+    Spin,
+    theme,
+    Typography,
+} from "antd";
 import React, { useEffect, useState } from "react";
 import { SyncStatusComp } from "./sync-status-comp";
 import {
@@ -62,11 +73,13 @@ function ModalContent<T extends FlattenedTrackedEntity | FlattenedEvent>({
 }: ModalContentProps<T>) {
     const [form] = Form.useForm<T>();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const watchedValues: Record<string, any> = Form.useWatch((values) => values, form) ?? {};
+    const watchedValues: Record<string, any> =
+        Form.useWatch((values) => values, form) ?? {};
     const isSubmitDisabled =
         requiredFields?.some((f) => !watchedValues[f]) ?? false;
 
     const [contentReady, setContentReady] = useState(false);
+    const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
     useEffect(() => {
         if (open) {
@@ -75,19 +88,31 @@ function ModalContent<T extends FlattenedTrackedEntity | FlattenedEvent>({
             return () => cancelAnimationFrame(raf);
         } else {
             setContentReady(false);
+            setValidationErrors([]);
         }
     }, [open]);
 
     const handleOk = async (addAnother = false) => {
         try {
             const values = await form.validateFields();
+            setValidationErrors([]);
             setLoading(true);
             await onSave({ values, addAnother });
             if (!addAnother) {
                 onClose();
             }
         } catch (error) {
-            console.error("Validation failed:", error);
+            const errs =
+                (error as { errorFields?: Array<{ errors: string[] }> })
+                    ?.errorFields ?? [];
+            const messages = errs
+                .flatMap((f) => f.errors)
+                .filter((m): m is string => Boolean(m));
+            setValidationErrors(
+                messages.length
+                    ? messages
+                    : ["Please review the fields highlighted above."],
+            );
         } finally {
             setLoading(false);
         }
@@ -121,10 +146,7 @@ function ModalContent<T extends FlattenedTrackedEntity | FlattenedEvent>({
                             <Button
                                 onClick={onCancel}
                                 disabled={loading}
-                                style={{
-                                    borderRadius: 8,
-                                    ...(isMobile && { width: "100%" }),
-                                }}
+                                block={isMobile}
                             >
                                 Cancel
                             </Button>
@@ -133,55 +155,36 @@ function ModalContent<T extends FlattenedTrackedEntity | FlattenedEvent>({
                                 onClick={() => handleOk()}
                                 loading={loading}
                                 disabled={isSubmitDisabled || loading}
-                                style={{
-                                    background:
-                                        "linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%)",
-                                    borderColor: "#7c3aed",
-                                    borderRadius: 8,
-                                    fontWeight: 500,
-                                    ...(isMobile
+                                block={isMobile}
+                                style={
+                                    isMobile
                                         ? {
-                                              width: "100%",
                                               whiteSpace: "normal" as const,
                                               wordBreak: "break-word" as const,
                                               height: "auto",
-                                              padding: "8px 16px",
                                           }
-                                        : {
-                                              paddingLeft: 32,
-                                              paddingRight: 32,
-                                          }),
-                                }}
+                                        : undefined
+                                }
                             >
                                 {submitButtonText}
                             </Button>
                             {hasAddAnother && (
                                 <Button
-                                    type="primary"
-                                    style={{
-                                        background:
-                                            "linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%)",
-                                        borderColor: "#7c3aed",
-                                        borderRadius: 8,
-                                        fontWeight: 500,
-                                        ...(isMobile
+                                    onClick={() => handleOk(true)}
+                                    loading={loading}
+                                    disabled={isSubmitDisabled || loading}
+                                    block={isMobile}
+                                    style={
+                                        isMobile
                                             ? {
-                                                  width: "100%",
                                                   whiteSpace:
                                                       "normal" as const,
                                                   wordBreak:
                                                       "break-word" as const,
                                                   height: "auto",
-                                                  padding: "8px 16px",
                                               }
-                                            : {
-                                                  paddingLeft: 32,
-                                                  paddingRight: 32,
-                                              }),
-                                    }}
-                                    onClick={() => handleOk(true)}
-                                    loading={loading}
-                                    disabled={isSubmitDisabled || loading}
+                                            : undefined
+                                    }
                                 >
                                     {submitButtonText} & add another
                                 </Button>
@@ -194,14 +197,43 @@ function ModalContent<T extends FlattenedTrackedEntity | FlattenedEvent>({
                         maxHeight: "75vh",
                         overflow: "auto",
                     },
-                    wrapper: {},
-                    container: {
-                        backgroundColor: "#f5f5f5",
-                    },
                 }}
             >
                 {contentReady ? (
-                    children(form)
+                    <>
+                        {validationErrors.length > 0 && (
+                            <Alert
+                                type="error"
+                                showIcon
+                                style={{ marginBottom: 16 }}
+                                title="Please fix the following before continuing"
+                                description={
+                                    <ul
+                                        style={{
+                                            margin: 0,
+                                            paddingInlineStart: 20,
+                                        }}
+                                    >
+                                        {validationErrors
+                                            .slice(0, 6)
+                                            .map((m, i) => (
+                                                <li key={i}>{m}</li>
+                                            ))}
+                                        {validationErrors.length > 6 && (
+                                            <li>
+                                                …and{" "}
+                                                {validationErrors.length - 6}{" "}
+                                                more
+                                            </li>
+                                        )}
+                                    </ul>
+                                }
+                                closable
+                                onClose={() => setValidationErrors([])}
+                            />
+                        )}
+                        {children(form)}
+                    </>
                 ) : (
                     <Flex
                         justify="center"
@@ -230,6 +262,7 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
 }: DataModalProps<T>) {
     const screens = Grid.useBreakpoint();
     const isMobile = !screens.md;
+    const { token } = theme.useToken();
     const [loading, setLoading] = useState(false);
     const [openCount, setOpenCount] = useState(0);
 
@@ -246,22 +279,13 @@ export function DataModal<T extends FlattenedTrackedEntity | FlattenedEvent>({
 
     const titleNode = (
         <Flex align="center" gap="middle">
-            <div
-                style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: "50%",
-                    background:
-                        "linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#fff",
-                }}
-            >
-                <UserAddOutlined style={{ fontSize: 20 }} />
-            </div>
-            <Text strong style={{ fontSize: 18, color: "#1f2937" }}>
+            <Avatar
+                shape="square"
+                size={36}
+                style={{ backgroundColor: token.colorPrimary }}
+                icon={<UserAddOutlined />}
+            />
+            <Text strong style={{ fontSize: token.fontSizeHeading5 }}>
                 {title}
             </Text>
         </Flex>

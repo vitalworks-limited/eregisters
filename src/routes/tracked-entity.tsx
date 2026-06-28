@@ -1,32 +1,46 @@
 import {
-    ArrowLeftOutlined,
     CalendarOutlined,
-    CaretRightOutlined,
+    ClockCircleOutlined,
+    CloudUploadOutlined,
     DeleteOutlined,
     EditOutlined,
+    EnvironmentOutlined,
+    FileTextOutlined,
+    HeartOutlined,
+    IdcardOutlined,
+    PhoneOutlined,
     PlusOutlined,
+    PrinterOutlined,
+    SafetyOutlined,
     UserOutlined,
 } from "@ant-design/icons";
-import { createRoute } from "@tanstack/react-router";
+import { createRoute, Link } from "@tanstack/react-router";
 import type { DescriptionsProps, TableProps } from "antd";
 
 import { and, eq, not, useLiveSuspenseQuery } from "@tanstack/react-db";
 import {
+    Avatar,
+    Breadcrumb,
     Button,
-    Card,
-    Collapse,
+    Col,
     Descriptions,
+    Divider,
     Flex,
     Form,
     Grid,
     Popconfirm,
-    Space,
-    Splitter,
+    Row,
+    Tabs,
     Table,
     Tag,
+    theme,
+    Timeline,
     Typography,
 } from "antd";
+import { MiniSparkline } from "../components/charts";
+import { EmptyState } from "../components/empty-state";
 import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
 import { Table as DexieTable } from "dexie";
 import { isEmpty } from "lodash";
 import React, { useMemo } from "react";
@@ -45,11 +59,13 @@ import { useMetadata } from "../hooks/useMetadata";
 import { useModalState } from "../hooks/useModalState";
 import { EventContext, TrackedEntityContext } from "../machines";
 import { SyncContext } from "../machines/sync";
+import { markNextSyncManual } from "../sync/telemetry";
 import {
     FlattenedEnrollment,
     FlattenedEvent,
     FlattenedTrackedEntity,
 } from "../schemas";
+import { printPatientSummary } from "../utils/printPatientSummary";
 import {
     cancelDataModal,
     createEmptyEvent,
@@ -85,6 +101,7 @@ function renderTags(text: string | string[] | undefined, color: string) {
 
 function TrackedEntityComponent() {
     const syncActor = SyncContext.useActorRef();
+    const { token } = theme.useToken();
     const { data, isOpen, isNew, openModal, closeModal } =
         useModalState<FlattenedEvent>();
 
@@ -102,7 +119,6 @@ function TrackedEntityComponent() {
         programRules,
     } = useMetadata();
     const { trackedEntity: tei } = TrackedEntityRoute.useParams();
-    const navigate = TrackedEntityRoute.useNavigate();
     const attributes = Array.from(trackedEntityAttributes.values());
     const mainStage = program?.programStages.find(
         (s) => s.id === "K2nxbE9ubSs",
@@ -266,6 +282,7 @@ function TrackedEntityComponent() {
                                             record.event,
                                         );
                                     if (markedDeleted.length > 0) {
+                                        markNextSyncManual();
                                         syncActor.send({ type: "PUSH_DATA" });
                                     }
                                 } catch (error) {
@@ -313,147 +330,257 @@ function TrackedEntityComponent() {
         openModal(newEvent, enrollment, true);
     };
 
-    const leftPanel = (
-        <Card
-            title={
-                <Space>
-                    <CalendarOutlined />
-                    <span>Client Visits</span>
-                    {!navigator.onLine && <Tag color="orange">Offline</Tag>}
-                </Space>
-            }
-            extra={
-                <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={handleCreate}
-                >
-                    Add new visit
-                </Button>
-            }
-        >
-            <Table
-                columns={columns}
-                dataSource={events}
-                pagination={false}
-                rowKey="event"
-                scroll={{ x: "max-content" }}
-            />
-        </Card>
-    );
+    const initials = `${firstName.charAt(0)}${surname.charAt(0)}`.toUpperCase();
 
-    const rightPanel = (
-        <Collapse
-            expandIcon={({ isActive }) => (
-                <CaretRightOutlined rotate={isActive ? 90 : 0} />
-            )}
-            style={{ backgroundColor: "white" }}
-            items={[
-                {
-                    key: "1",
-                    label: "Person Profile",
-                    children: (
-                        <Descriptions bordered column={1} items={items} />
-                    ),
-                    extra: (
-                        <Button
-                            icon={<EditOutlined />}
-                            size="small"
-                            onClick={() =>
-                                openTrackedEntityModal(
-                                    {
-                                        ...trackedEntity,
-                                        attributes: {
-                                            ...trackedEntity.attributes,
-                                            enrolledAt: enrollment.enrolledAt,
-                                            ...enrollment.attributes,
-                                        },
-                                    },
-                                    enrollment,
-                                )
-                            }
-                        >
-                            Edit
-                        </Button>
-                    ),
+    const openEditProfile = () =>
+        openTrackedEntityModal(
+            {
+                ...trackedEntity,
+                attributes: {
+                    ...trackedEntity.attributes,
+                    enrolledAt: enrollment.enrolledAt,
+                    ...enrollment.attributes,
                 },
-            ]}
-            styles={{ body: { padding: 0, margin: 0 } }}
-        />
-    );
+            },
+            enrollment,
+        );
 
-    return (
-        <Flex
-            style={{
-                padding: "8px 0",
-            }}
-            vertical
-            gap={5}
-        >
-            <Flex
-                vertical={isMobile}
-                align={isMobile ? "flex-start" : "center"}
-                gap={isMobile ? 4 : 8}
-                style={{
-                    padding: 10,
-                    borderBottom: "1px solid #f0f0f0",
-                    background: "#fff",
-                }}
-            >
-                <Button
-                    icon={<ArrowLeftOutlined />}
-                    type="text"
-                    onClick={() => navigate({ to: "/tracked-entities" })}
-                >
-                    Back
-                </Button>
-                <Flex align="center" gap={8} wrap>
-                    <UserOutlined
-                        style={{
-                            fontSize: isMobile ? 16 : 18,
-                            color: "#1f4788",
-                        }}
-                    />
-                    <Title level={isMobile ? 5 : 4} style={{ margin: 0 }}>
-                        {firstName} {surname}
-                    </Title>
-                    {age !== null && <Tag color="blue">{age} yrs</Tag>}
-                    <Tag color="purple">{sex}</Tag>
-
-                    <SyncStatusComp syncStatus={trackedEntity.syncStatus} />
-                </Flex>
+    const visitsPane = (
+        <Flex vertical gap={token.marginSM}>
+            <Flex align="center" justify="space-between" wrap gap={token.marginSM}>
+                <Text type="secondary">
+                    {events.length} visit{events.length === 1 ? "" : "s"} recorded
+                </Text>
             </Flex>
-
-            {isMobile ? (
-                <Flex
-                    vertical
-                    gap={16}
+            {events.length === 0 ? (
+                <EmptyState
+                    title="No visits yet"
+                    description='Use "New visit" in the page header to record one.'
+                />
+            ) : (
+                <div
                     style={{
-                        padding: 10,
-                        overflow: "auto",
+                        background: token.colorBgContainer,
+                        border: `1px solid ${token.colorBorderSecondary}`,
                     }}
                 >
-                    {rightPanel}
-                    {leftPanel}
-                </Flex>
-            ) : (
-                <Splitter style={{ height: "calc(100vh - 181px)" }}>
-                    <Splitter.Panel style={{ padding: "0 10px" }}>
-                        {leftPanel}
-                    </Splitter.Panel>
-                    <Splitter.Panel
-                        defaultSize="25%"
-                        style={{ padding: "0 10px" }}
-                        collapsible={{
-                            start: true,
-                            end: true,
-                            showCollapsibleIcon: true,
-                        }}
-                    >
-                        {rightPanel}
-                    </Splitter.Panel>
-                </Splitter>
+                    <Table
+                        columns={columns}
+                        dataSource={events}
+                        pagination={false}
+                        rowKey="event"
+                        size="middle"
+                        sticky
+                        scroll={{ x: "max-content" }}
+                    />
+                </div>
             )}
+        </Flex>
+    );
+
+    const enrollmentPane = (
+        <div
+            style={{
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorderSecondary}`,
+            }}
+        >
+            <Flex
+                align="center"
+                justify="space-between"
+                style={{
+                    padding: `${token.paddingSM}px ${token.padding}px`,
+                    borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                }}
+            >
+                <Text strong>Person profile</Text>
+                <Button
+                    icon={<EditOutlined />}
+                    size="small"
+                    onClick={openEditProfile}
+                >
+                    Edit
+                </Button>
+            </Flex>
+            <Descriptions
+                bordered={false}
+                column={isMobile ? 1 : 2}
+                items={items}
+                style={{ padding: token.padding }}
+                colon={false}
+                styles={{
+                    label: {
+                        color: token.colorTextSecondary,
+                        width: 220,
+                        fontWeight: 500,
+                    },
+                }}
+            />
+        </div>
+    );
+
+    const overviewPane = renderOverviewPane({
+        token,
+        trackedEntity,
+        enrollment,
+        events,
+        firstName,
+        surname,
+        sex,
+        age,
+        onOpenVisit: (ev) => openModal(ev, enrollment),
+        onCreateVisit: handleCreate,
+    });
+
+    return (
+        <Flex vertical gap={0}>
+            <div
+                style={{
+                    background: token.colorBgContainer,
+                    borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                    paddingBlock: token.paddingXS,
+                    paddingInline: token.padding,
+                }}
+            >
+                <Breadcrumb
+                    items={[
+                        {
+                            title: (
+                                <Link to="/tracked-entities">Patients</Link>
+                            ),
+                        },
+                        {
+                            title: `${firstName ?? ""} ${surname ?? ""}`.trim(),
+                        },
+                    ]}
+                />
+            </div>
+            <div
+                style={{
+                    position: "sticky",
+                    top: 0,
+                    zIndex: 10,
+                    background: token.colorBgContainer,
+                    borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                    paddingBlock: token.paddingSM,
+                    paddingInline: token.padding,
+                }}
+            >
+                <Flex
+                    align={isMobile ? "flex-start" : "center"}
+                    justify="space-between"
+                    gap={token.marginSM}
+                    wrap
+                    vertical={isMobile}
+                >
+                    <Flex align="center" gap={token.marginSM} wrap>
+                        <Avatar
+                            shape="square"
+                            size={isMobile ? 36 : 44}
+                            style={{
+                                backgroundColor: token.colorPrimary,
+                                fontWeight: 600,
+                            }}
+                        >
+                            {initials || <UserOutlined />}
+                        </Avatar>
+                        <Flex vertical gap={token.marginXXS}>
+                            <Title
+                                level={isMobile ? 5 : 4}
+                                style={{ margin: 0, lineHeight: 1.2 }}
+                            >
+                                {firstName} {surname}
+                            </Title>
+                            <Flex
+                                gap={token.marginXS}
+                                align="center"
+                                wrap
+                            >
+                                {sex && <Tag>{sex}</Tag>}
+                                {age !== null && <Tag>{age} yrs</Tag>}
+                                <SyncStatusComp
+                                    syncStatus={trackedEntity.syncStatus}
+                                />
+                            </Flex>
+                        </Flex>
+                    </Flex>
+                    <Flex gap={token.marginXS} wrap>
+                        <Button
+                            icon={<EditOutlined />}
+                            onClick={openEditProfile}
+                        >
+                            Edit details
+                        </Button>
+                        <Button
+                            type="primary"
+                            icon={<PlusOutlined />}
+                            onClick={handleCreate}
+                        >
+                            New visit
+                        </Button>
+                        <Button
+                            icon={<PrinterOutlined />}
+                            onClick={() =>
+                                printPatientSummary({
+                                    trackedEntity,
+                                    enrollment,
+                                    events,
+                                    program: {
+                                        programStages:
+                                            program?.programStages?.map(
+                                                (s) => ({
+                                                    id: s.id,
+                                                    name: s.name,
+                                                }),
+                                            ) ?? [],
+                                    },
+                                    facilityName: orgUnit?.name,
+                                })
+                            }
+                            aria-label="Print summary"
+                        />
+                    </Flex>
+                </Flex>
+            </div>
+
+            <div
+                style={{
+                    padding: isMobile ? token.paddingSM : token.padding,
+                }}
+            >
+                <Tabs
+                    defaultActiveKey="visits"
+                    items={[
+                        {
+                            key: "overview",
+                            label: (
+                                <span>
+                                    <UserOutlined /> Overview
+                                </span>
+                            ),
+                            children: overviewPane,
+                        },
+                        {
+                            key: "visits",
+                            label: (
+                                <span>
+                                    <CalendarOutlined /> Visits
+                                </span>
+                            ),
+                            children: visitsPane,
+                        },
+                        {
+                            key: "enrollment",
+                            label: (
+                                <span>
+                                    <UserOutlined /> Enrollment
+                                </span>
+                            ),
+                            children: enrollmentPane,
+                        },
+                    ]}
+                />
+            </div>
 
             <DataModal<FlattenedEvent>
                 open={isOpen}
@@ -694,6 +821,843 @@ function TrackedEntityComponent() {
                     </TrackedEntityContext.Provider>
                 )}
             </DataModal>
+        </Flex>
+    );
+}
+
+dayjs.extend(relativeTime);
+
+interface OverviewArgs {
+    token: ReturnType<typeof theme.useToken>["token"];
+    trackedEntity: FlattenedTrackedEntity;
+    enrollment: FlattenedEnrollment;
+    events: FlattenedEvent[];
+    firstName: string;
+    surname: string;
+    sex: string;
+    age: number | null;
+    onOpenVisit: (ev: FlattenedEvent) => void;
+    onCreateVisit: () => void;
+}
+
+const DV = {
+    services: "mrKZWf2WMIC",
+    immunization: "ZuYU54N4pjS",
+    referral: "EzGu4kzZZTz",
+    weight: "scpPwoNsS27",
+    height: "uIFJ94mZt0S",
+} as const;
+
+const ATTR = {
+    nin: "BiTsLcJQ95V",
+    phone: "sB1IHYu2xQT",
+    clientId: "oTI0DLitzFY",
+    village: "xcYGVzmcWvi",
+    dob: "Y3DE5CZWySr",
+    category: "N6Y4aCbmHHt",
+} as const;
+
+function tagsFrom(value: unknown): string[] {
+    if (!value) return [];
+    if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
+    return String(value)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+}
+
+function parseNumber(value: unknown): number | undefined {
+    if (typeof value === "number" && !Number.isNaN(value)) return value;
+    if (typeof value === "string") {
+        const n = parseFloat(value);
+        if (!Number.isNaN(n)) return n;
+    }
+    return undefined;
+}
+
+function bmiCategory(bmi: number): { label: string; color: string } {
+    if (bmi < 18.5) return { label: "Underweight", color: "gold" };
+    if (bmi < 25) return { label: "Normal", color: "green" };
+    if (bmi < 30) return { label: "Overweight", color: "orange" };
+    return { label: "Obese", color: "red" };
+}
+
+function VitalRow({
+    label,
+    value,
+    unit,
+    series,
+    accent,
+    token,
+}: {
+    label: string;
+    value: number | undefined;
+    unit: string;
+    series: number[];
+    accent: string;
+    token: OverviewArgs["token"];
+}) {
+    const { Text } = Typography;
+    return (
+        <Flex align="center" justify="space-between" gap={token.marginSM}>
+            <Flex vertical gap={0} style={{ minWidth: 0 }}>
+                <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                    {label}
+                </Text>
+                <Flex align="baseline" gap={token.marginXXS}>
+                    <span
+                        style={{
+                            fontSize: 22,
+                            fontWeight: 600,
+                            color:
+                                value === undefined
+                                    ? token.colorTextTertiary
+                                    : token.colorTextBase,
+                            lineHeight: 1.1,
+                        }}
+                    >
+                        {value === undefined ? "—" : value}
+                    </span>
+                    {value !== undefined && (
+                        <Text
+                            type="secondary"
+                            style={{ fontSize: token.fontSizeSM }}
+                        >
+                            {unit}
+                        </Text>
+                    )}
+                </Flex>
+            </Flex>
+            {series.length > 1 && (
+                <MiniSparkline values={series} color={accent} width={96} height={32} />
+            )}
+        </Flex>
+    );
+}
+
+function renderOverviewPane({
+    token,
+    trackedEntity,
+    enrollment,
+    events,
+    firstName,
+    surname,
+    sex,
+    age,
+    onOpenVisit,
+    onCreateVisit,
+}: OverviewArgs) {
+    const { Title, Text } = Typography;
+    const lastVisit = events[0];
+    const last30 = events.filter((e) =>
+        dayjs(e.occurredAt ?? e.createdAt).isAfter(dayjs().subtract(30, "day")),
+    ).length;
+    const pendingRecords =
+        (trackedEntity.syncStatus === "pending" ? 1 : 0) +
+        (enrollment.syncStatus === "pending" ? 1 : 0) +
+        events.filter((e) => e.syncStatus === "pending").length;
+
+    const services = lastVisit
+        ? tagsFrom(lastVisit.dataValues?.[DV.services])
+        : [];
+    const immunizations = lastVisit
+        ? tagsFrom(lastVisit.dataValues?.[DV.immunization])
+        : [];
+    const referral = lastVisit
+        ? String(lastVisit.dataValues?.[DV.referral] ?? "").trim()
+        : "";
+
+    const weightHistory = events
+        .map((e) => ({
+            date: e.occurredAt ?? e.createdAt,
+            value: parseNumber(e.dataValues?.[DV.weight]),
+        }))
+        .filter((p): p is { date: string; value: number } =>
+            p.value !== undefined && p.value > 0,
+        )
+        .slice(0, 12)
+        .reverse();
+    const heightHistory = events
+        .map((e) => ({
+            date: e.occurredAt ?? e.createdAt,
+            value: parseNumber(e.dataValues?.[DV.height]),
+        }))
+        .filter((p): p is { date: string; value: number } =>
+            p.value !== undefined && p.value > 0,
+        )
+        .slice(0, 12)
+        .reverse();
+    const latestWeight = weightHistory[weightHistory.length - 1]?.value;
+    const latestHeight = heightHistory[heightHistory.length - 1]?.value;
+    const bmi =
+        latestWeight !== undefined && latestHeight !== undefined && latestHeight > 0
+            ? +(latestWeight / (latestHeight / 100) ** 2).toFixed(1)
+            : undefined;
+    const bmiBand = bmi !== undefined ? bmiCategory(bmi) : undefined;
+
+    const nin = String(trackedEntity.attributes?.[ATTR.nin] ?? "").trim();
+    const phone = String(trackedEntity.attributes?.[ATTR.phone] ?? "").trim();
+    const clientId = String(trackedEntity.attributes?.[ATTR.clientId] ?? "")
+        .trim();
+    const villageRaw = String(
+        trackedEntity.attributes?.[ATTR.village] ?? "",
+    ).trim();
+    // The village attribute encodes the parish in parentheses for some
+    // facilities — split it so the parish renders on its own row.
+    const villageMatch = villageRaw.match(/^([^(]+?)\s*\(([^)]+)\)\s*$/);
+    const village = villageMatch ? villageMatch[1].trim() : villageRaw;
+    const parish = villageMatch ? villageMatch[2].trim() : "";
+    const dob = String(trackedEntity.attributes?.[ATTR.dob] ?? "").trim();
+    const clientCategory = String(
+        trackedEntity.attributes?.[ATTR.category] ?? "",
+    ).trim();
+
+    const placeholder = (text = "—") => (
+        <Text type="secondary">{text}</Text>
+    );
+
+    const renderVisitChips = (items: string[], color: string) =>
+        items.length === 0 ? (
+            placeholder()
+        ) : (
+            <Flex gap={token.marginXXS} wrap>
+                {items.map((t) => (
+                    <Tag key={t} color={color} style={{ margin: 0 }}>
+                        {t.toUpperCase()}
+                    </Tag>
+                ))}
+            </Flex>
+        );
+
+    const kpi = (
+        label: string,
+        value: React.ReactNode,
+        sub: React.ReactNode,
+        icon: React.ReactNode,
+        accent: string,
+    ) => (
+        <Flex
+            vertical
+            gap={token.marginXXS}
+            style={{
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorderSecondary}`,
+                padding: token.padding,
+                height: "100%",
+            }}
+        >
+            <Flex align="center" justify="space-between">
+                <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                    {label}
+                </Text>
+                <span style={{ color: accent, fontSize: 16 }}>{icon}</span>
+            </Flex>
+            <span
+                style={{
+                    color: accent,
+                    fontWeight: 600,
+                    fontSize: 24,
+                    lineHeight: 1.1,
+                }}
+            >
+                {value}
+            </span>
+            {sub && (
+                <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                    {sub}
+                </Text>
+            )}
+        </Flex>
+    );
+
+    const kpiRow = (
+        <Row gutter={[token.marginSM, token.marginSM]}>
+            <Col xs={12} sm={6}>
+                {kpi(
+                    "Total visits",
+                    events.length,
+                    events.length > 0 ? "All time" : "No visits yet",
+                    <CalendarOutlined />,
+                    token.colorPrimary,
+                )}
+            </Col>
+            <Col xs={12} sm={6}>
+                {kpi(
+                    "Last visit",
+                    lastVisit
+                        ? dayjs(
+                              lastVisit.occurredAt ?? lastVisit.createdAt,
+                          ).fromNow(true)
+                        : "—",
+                    lastVisit
+                        ? dayjs(
+                              lastVisit.occurredAt ?? lastVisit.createdAt,
+                          ).format("MMM D, YYYY")
+                        : "No visits yet",
+                    <ClockCircleOutlined />,
+                    token.colorInfo,
+                )}
+            </Col>
+            <Col xs={12} sm={6}>
+                {kpi(
+                    "Last 30 days",
+                    last30,
+                    last30 === 1 ? "1 visit" : `${last30} visits`,
+                    <HeartOutlined />,
+                    token.colorSuccess,
+                )}
+            </Col>
+            <Col xs={12} sm={6}>
+                {kpi(
+                    "Pending sync",
+                    pendingRecords,
+                    pendingRecords > 0
+                        ? "Records waiting to push"
+                        : "All up to date",
+                    <CloudUploadOutlined />,
+                    pendingRecords > 0
+                        ? token.colorWarning
+                        : token.colorTextTertiary,
+                )}
+            </Col>
+        </Row>
+    );
+
+    const careSnapshot = (
+        <Flex
+            vertical
+            style={{
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorderSecondary}`,
+                height: "100%",
+            }}
+        >
+            <Flex
+                align="center"
+                justify="space-between"
+                gap={token.marginSM}
+                wrap
+                style={{
+                    padding: `${token.paddingSM}px ${token.padding}px`,
+                    borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                }}
+            >
+                <Flex align="center" gap={token.marginXS}>
+                    <FileTextOutlined style={{ color: token.colorPrimary }} />
+                    <Title level={5} style={{ margin: 0 }}>
+                        Care snapshot
+                    </Title>
+                </Flex>
+                {lastVisit ? (
+                    <Tag
+                        color={
+                            lastVisit.syncStatus === "synced"
+                                ? "green"
+                                : lastVisit.syncStatus === "pending"
+                                  ? "orange"
+                                  : "default"
+                        }
+                        style={{ margin: 0 }}
+                    >
+                        {dayjs(
+                            lastVisit.occurredAt ?? lastVisit.createdAt,
+                        ).format("MMM D, YYYY")}
+                    </Tag>
+                ) : null}
+            </Flex>
+            <Flex
+                vertical
+                gap={token.margin}
+                style={{ padding: token.padding, flex: 1 }}
+            >
+                {lastVisit ? (
+                    <>
+                        <Flex vertical gap={token.marginXS}>
+                            <Text
+                                type="secondary"
+                                style={{ fontSize: token.fontSizeSM }}
+                            >
+                                Services received
+                            </Text>
+                            {renderVisitChips(services, "blue")}
+                        </Flex>
+                        <Flex vertical gap={token.marginXS}>
+                            <Text
+                                type="secondary"
+                                style={{ fontSize: token.fontSizeSM }}
+                            >
+                                Immunizations
+                            </Text>
+                            {renderVisitChips(immunizations, "green")}
+                        </Flex>
+                        <Flex vertical gap={token.marginXS}>
+                            <Text
+                                type="secondary"
+                                style={{ fontSize: token.fontSizeSM }}
+                            >
+                                Referral
+                            </Text>
+                            <Text>{referral || placeholder("No referral")}</Text>
+                        </Flex>
+                        <Divider style={{ margin: 0 }} />
+                        <Flex
+                            align="center"
+                            justify="space-between"
+                            gap={token.marginSM}
+                        >
+                            <Flex gap={token.marginLG} wrap>
+                                <Flex vertical gap={0}>
+                                    <Text
+                                        type="secondary"
+                                        style={{ fontSize: token.fontSizeSM }}
+                                    >
+                                        Weight
+                                    </Text>
+                                    <span
+                                        style={{
+                                            fontWeight: 600,
+                                            fontSize: 18,
+                                            color:
+                                                latestWeight === undefined
+                                                    ? token.colorTextTertiary
+                                                    : token.colorTextBase,
+                                        }}
+                                    >
+                                        {latestWeight === undefined
+                                            ? "—"
+                                            : `${latestWeight} kg`}
+                                    </span>
+                                </Flex>
+                                <Flex vertical gap={0}>
+                                    <Text
+                                        type="secondary"
+                                        style={{ fontSize: token.fontSizeSM }}
+                                    >
+                                        Height
+                                    </Text>
+                                    <span
+                                        style={{
+                                            fontWeight: 600,
+                                            fontSize: 18,
+                                            color:
+                                                latestHeight === undefined
+                                                    ? token.colorTextTertiary
+                                                    : token.colorTextBase,
+                                        }}
+                                    >
+                                        {latestHeight === undefined
+                                            ? "—"
+                                            : `${latestHeight} cm`}
+                                    </span>
+                                </Flex>
+                                <Flex vertical gap={0}>
+                                    <Text
+                                        type="secondary"
+                                        style={{ fontSize: token.fontSizeSM }}
+                                    >
+                                        BMI
+                                    </Text>
+                                    <Flex
+                                        align="baseline"
+                                        gap={token.marginXXS}
+                                    >
+                                        <span
+                                            style={{
+                                                fontWeight: 600,
+                                                fontSize: 18,
+                                                color:
+                                                    bmi === undefined
+                                                        ? token.colorTextTertiary
+                                                        : token.colorTextBase,
+                                            }}
+                                        >
+                                            {bmi === undefined ? "—" : bmi}
+                                        </span>
+                                        {bmiBand && (
+                                            <Tag
+                                                color={bmiBand.color}
+                                                style={{ margin: 0 }}
+                                            >
+                                                {bmiBand.label}
+                                            </Tag>
+                                        )}
+                                    </Flex>
+                                </Flex>
+                            </Flex>
+                            <Button
+                                type="link"
+                                style={{ padding: 0 }}
+                                onClick={() => onOpenVisit(lastVisit)}
+                            >
+                                Open visit
+                            </Button>
+                        </Flex>
+                    </>
+                ) : (
+                    <Flex
+                        vertical
+                        align="center"
+                        gap={token.marginSM}
+                        style={{ paddingBlock: token.paddingLG }}
+                    >
+                        <Text type="secondary">
+                            No visits recorded yet. Open the Visits tab or use
+                            "New visit" above to start.
+                        </Text>
+                        <Button
+                            type="primary"
+                            icon={<PlusOutlined />}
+                            onClick={onCreateVisit}
+                        >
+                            Add new visit
+                        </Button>
+                    </Flex>
+                )}
+            </Flex>
+        </Flex>
+    );
+
+    const vitalsCard = (
+        <Flex
+            vertical
+            style={{
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorderSecondary}`,
+                height: "100%",
+            }}
+        >
+            <Flex
+                align="center"
+                justify="space-between"
+                gap={token.marginSM}
+                style={{
+                    padding: `${token.paddingSM}px ${token.padding}px`,
+                    borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                }}
+            >
+                <Flex align="center" gap={token.marginXS}>
+                    <HeartOutlined style={{ color: token.colorPrimary }} />
+                    <Title level={5} style={{ margin: 0 }}>
+                        Vitals trend
+                    </Title>
+                </Flex>
+                <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                    Last {Math.max(weightHistory.length, heightHistory.length)}{" "}
+                    visit{weightHistory.length === 1 ? "" : "s"}
+                </Text>
+            </Flex>
+            <Flex
+                vertical
+                gap={token.margin}
+                style={{ padding: token.padding, flex: 1 }}
+            >
+                <VitalRow
+                    label="Weight"
+                    value={latestWeight}
+                    unit="kg"
+                    series={weightHistory.map((p) => p.value)}
+                    accent={token.colorPrimary}
+                    token={token}
+                />
+                <VitalRow
+                    label="Height"
+                    value={latestHeight}
+                    unit="cm"
+                    series={heightHistory.map((p) => p.value)}
+                    accent={token.colorSuccess}
+                    token={token}
+                />
+                {bmi !== undefined && bmiBand && (
+                    <Flex align="center" justify="space-between" gap={token.marginSM}>
+                        <Flex vertical gap={0}>
+                            <Text
+                                type="secondary"
+                                style={{ fontSize: token.fontSizeSM }}
+                            >
+                                BMI
+                            </Text>
+                            <Flex align="baseline" gap={token.marginXXS}>
+                                <span
+                                    style={{
+                                        fontSize: 22,
+                                        fontWeight: 600,
+                                        lineHeight: 1.1,
+                                    }}
+                                >
+                                    {bmi}
+                                </span>
+                                <Tag color={bmiBand.color} style={{ margin: 0 }}>
+                                    {bmiBand.label}
+                                </Tag>
+                            </Flex>
+                        </Flex>
+                    </Flex>
+                )}
+                {weightHistory.length === 0 && heightHistory.length === 0 && (
+                    <Text type="secondary">
+                        Capture weight and height during a visit to see trends
+                        here.
+                    </Text>
+                )}
+            </Flex>
+        </Flex>
+    );
+
+    const detailItems: DescriptionsProps["items"] = [
+        {
+            key: "clientId",
+            label: (
+                <Flex align="center" gap={token.marginXXS}>
+                    <IdcardOutlined /> Client ID
+                </Flex>
+            ),
+            children: clientId || placeholder(),
+        },
+        {
+            key: "nin",
+            label: (
+                <Flex align="center" gap={token.marginXXS}>
+                    <SafetyOutlined /> National ID
+                </Flex>
+            ),
+            children: nin || placeholder(),
+        },
+        {
+            key: "phone",
+            label: (
+                <Flex align="center" gap={token.marginXXS}>
+                    <PhoneOutlined /> Phone
+                </Flex>
+            ),
+            children: phone || placeholder(),
+        },
+        {
+            key: "village",
+            label: (
+                <Flex align="center" gap={token.marginXXS}>
+                    <EnvironmentOutlined /> Village
+                </Flex>
+            ),
+            children: village || placeholder(),
+        },
+        ...(parish
+            ? [
+                  {
+                      key: "parish",
+                      label: (
+                          <Flex align="center" gap={token.marginXXS}>
+                              <EnvironmentOutlined /> Parish
+                          </Flex>
+                      ),
+                      children: parish,
+                  },
+              ]
+            : []),
+        {
+            key: "sex",
+            label: "Sex",
+            children: sex || placeholder(),
+        },
+        {
+            key: "age",
+            label: "Age",
+            children: age !== null ? `${age} yrs` : placeholder(),
+        },
+        {
+            key: "dob",
+            label: "Date of birth",
+            children: dob ? dayjs(dob).format("MMM D, YYYY") : placeholder(),
+        },
+        {
+            key: "category",
+            label: "Client category",
+            children: clientCategory || placeholder(),
+        },
+        {
+            key: "registered",
+            label: "Registered",
+            children: trackedEntity.createdAt
+                ? dayjs(trackedEntity.createdAt).format("MMM D, YYYY")
+                : placeholder(),
+        },
+        {
+            key: "enrolled",
+            label: "Enrolled",
+            children: enrollment.enrolledAt
+                ? dayjs(enrollment.enrolledAt).format("MMM D, YYYY")
+                : placeholder(),
+        },
+    ];
+
+    const detailsCard = (
+        <Flex
+            vertical
+            style={{
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorderSecondary}`,
+                height: "100%",
+            }}
+        >
+            <Flex
+                align="center"
+                gap={token.marginXS}
+                style={{
+                    padding: `${token.paddingSM}px ${token.padding}px`,
+                    borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                }}
+            >
+                <UserOutlined style={{ color: token.colorPrimary }} />
+                <Title level={5} style={{ margin: 0 }}>
+                    Patient details
+                </Title>
+            </Flex>
+            <div style={{ padding: token.padding, flex: 1 }}>
+                <Descriptions
+                    bordered={false}
+                    column={1}
+                    size="small"
+                    colon={false}
+                    items={detailItems}
+                    styles={{
+                        label: {
+                            color: token.colorTextSecondary,
+                            fontWeight: 500,
+                            width: 160,
+                        },
+                    }}
+                />
+            </div>
+        </Flex>
+    );
+
+    const recentVisits = events.slice(0, 5);
+    const timelineItems = recentVisits.map((ev) => {
+        const date = dayjs(ev.occurredAt ?? ev.createdAt);
+        const evServices = tagsFrom(ev.dataValues?.[DV.services]);
+        const evImmun = tagsFrom(ev.dataValues?.[DV.immunization]);
+        const weight = parseNumber(ev.dataValues?.[DV.weight]);
+        const weightLabel = weight !== undefined ? `${weight} kg` : "";
+        return {
+            color:
+                ev.syncStatus === "synced"
+                    ? "green"
+                    : ev.syncStatus === "pending"
+                      ? "orange"
+                      : token.colorTextTertiary,
+            children: (
+                <Flex
+                    vertical
+                    gap={token.marginXXS}
+                    style={{ paddingBottom: token.marginXS }}
+                >
+                    <Flex
+                        align="center"
+                        justify="space-between"
+                        gap={token.marginXS}
+                        wrap
+                    >
+                        <Text strong>{date.format("ddd, MMM D, YYYY")}</Text>
+                        <Button
+                            type="link"
+                            size="small"
+                            style={{ padding: 0 }}
+                            onClick={() => onOpenVisit(ev)}
+                        >
+                            Open
+                        </Button>
+                    </Flex>
+                    {(evServices.length > 0 || evImmun.length > 0) && (
+                        <Flex gap={token.marginXXS} wrap>
+                            {evServices.map((t) => (
+                                <Tag
+                                    key={`s-${t}`}
+                                    color="blue"
+                                    style={{ margin: 0 }}
+                                >
+                                    {t.toUpperCase()}
+                                </Tag>
+                            ))}
+                            {evImmun.map((t) => (
+                                <Tag
+                                    key={`i-${t}`}
+                                    color="green"
+                                    style={{ margin: 0 }}
+                                >
+                                    {t.toUpperCase()}
+                                </Tag>
+                            ))}
+                        </Flex>
+                    )}
+                    {weightLabel && (
+                        <Text
+                            type="secondary"
+                            style={{ fontSize: token.fontSizeSM }}
+                        >
+                            {weightLabel}
+                        </Text>
+                    )}
+                </Flex>
+            ),
+        };
+    });
+
+    const recentVisitsCard = (
+        <Flex
+            vertical
+            style={{
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorderSecondary}`,
+                height: "100%",
+            }}
+        >
+            <Flex
+                align="center"
+                justify="space-between"
+                gap={token.marginSM}
+                style={{
+                    padding: `${token.paddingSM}px ${token.padding}px`,
+                    borderBottom: `1px solid ${token.colorBorderSecondary}`,
+                }}
+            >
+                <Flex align="center" gap={token.marginXS}>
+                    <CalendarOutlined style={{ color: token.colorPrimary }} />
+                    <Title level={5} style={{ margin: 0 }}>
+                        Recent visits
+                    </Title>
+                </Flex>
+                <Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
+                    Showing latest {recentVisits.length}
+                </Text>
+            </Flex>
+            <div style={{ padding: token.padding, flex: 1 }}>
+                {recentVisits.length === 0 ? (
+                    <Text type="secondary">No visits to show.</Text>
+                ) : (
+                    <Timeline items={timelineItems} />
+                )}
+            </div>
+        </Flex>
+    );
+
+    return (
+        <Flex vertical gap={token.marginSM}>
+            {kpiRow}
+            <Row gutter={[token.marginSM, token.marginSM]}>
+                <Col xs={24} lg={15}>
+                    {careSnapshot}
+                </Col>
+                <Col xs={24} lg={9}>
+                    {vitalsCard}
+                </Col>
+            </Row>
+            <Row gutter={[token.marginSM, token.marginSM]}>
+                <Col xs={24} lg={15}>
+                    {detailsCard}
+                </Col>
+                <Col xs={24} lg={9}>
+                    {recentVisitsCard}
+                </Col>
+            </Row>
         </Flex>
     );
 }

@@ -1,7 +1,7 @@
 import { FormInstance, Select } from "antd";
 import React from "react";
 import { Village } from "../schemas";
-// import villages from "../villages.json";
+import { loadVillagesWhenNeeded } from "../utils/villages";
 
 interface WatchField {
     fieldId: string | string[];
@@ -34,11 +34,18 @@ export default function VillageSelect({
     const [currentVillages, setCurrentVillages] = React.useState<Village[]>([]);
 
     React.useEffect(() => {
-        fetch("./data/villages.min.json")
-            .then((res) => res.json())
-            .then(setCurrentVillages);
+        let cancelled = false;
+        loadVillagesWhenNeeded()
+            .then((data) => {
+                if (!cancelled) setCurrentVillages(data);
+            })
+            .catch((err) => {
+                console.error("Failed to load villages.min.json", err);
+            });
+        return () => {
+            cancelled = true;
+        };
     }, []);
-    // const currentVillages = villages as Village[];
 
     const handleVillageChange = async (selectedValue: string) => {
         onChange?.(selectedValue);
