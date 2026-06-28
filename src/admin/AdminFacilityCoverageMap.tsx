@@ -1116,30 +1116,6 @@ export const AdminFacilityCoverageMap: React.FC<{
                                 >
                                     {choroplethSpec.description}
                                 </Text>
-                                <Flex
-                                    align="center"
-                                    gap={token.marginXS}
-                                    style={{ marginTop: token.marginXXS }}
-                                >
-                                    <Text style={{ fontSize: token.fontSizeSM }}>
-                                        {choroplethRange.min}
-                                        {choroplethSpec.isRatio ? "%" : ""}
-                                    </Text>
-                                    <div
-                                        style={{
-                                            flex: 1,
-                                            height: 10,
-                                            background: `linear-gradient(to right, ${PALETTES[palette].ramp.join(
-                                                ",",
-                                            )})`,
-                                            borderRadius: 2,
-                                        }}
-                                    />
-                                    <Text style={{ fontSize: token.fontSizeSM }}>
-                                        {choroplethRange.max}
-                                        {choroplethSpec.isRatio ? "%" : ""}
-                                    </Text>
-                                </Flex>
                             </>
                         )}
 
@@ -1198,54 +1174,6 @@ export const AdminFacilityCoverageMap: React.FC<{
                                 >
                                     {activeThematic.description}
                                 </Text>
-                                {legend.length > 0 && (
-                                    <Flex vertical gap={2}>
-                                        <Text
-                                            strong
-                                            style={{
-                                                fontSize: token.fontSizeSM,
-                                            }}
-                                        >
-                                            Facility legend
-                                        </Text>
-                                        {legend.map((b) => (
-                                            <Flex
-                                                key={b.label}
-                                                align="center"
-                                                gap={token.marginXS}
-                                            >
-                                                <span
-                                                    style={{
-                                                        display: "inline-block",
-                                                        width: 10,
-                                                        height: 10,
-                                                        borderRadius: "50%",
-                                                        background: b.color,
-                                                        border: "1px solid rgba(0,0,0,0.15)",
-                                                    }}
-                                                />
-                                                <Text
-                                                    style={{
-                                                        fontSize:
-                                                            token.fontSizeSM,
-                                                        flex: 1,
-                                                    }}
-                                                >
-                                                    {b.label}
-                                                </Text>
-                                                <Text
-                                                    type="secondary"
-                                                    style={{
-                                                        fontSize:
-                                                            token.fontSizeSM,
-                                                    }}
-                                                >
-                                                    {b.count}
-                                                </Text>
-                                            </Flex>
-                                        ))}
-                                    </Flex>
-                                )}
                             </>
                         )}
 
@@ -1259,6 +1187,125 @@ export const AdminFacilityCoverageMap: React.FC<{
                         )}
                     </Flex>
                 </div>
+
+                {/* Right-side legend panel — separate from filters so
+                 *  it can be glanced at without scrolling the controls. */}
+                {(showFacilities && legend.length > 0) || showChoropleth ? (
+                    <div
+                        style={{
+                            position: "absolute",
+                            top: 12,
+                            right: 56,
+                            background: token.colorBgContainer,
+                            border: `1px solid ${token.colorBorderSecondary}`,
+                            boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                            borderRadius: 6,
+                            padding: token.paddingSM,
+                            maxWidth: 240,
+                            maxHeight: "calc(100% - 24px)",
+                            overflowY: "auto",
+                            zIndex: 999,
+                        }}
+                    >
+                        <Flex vertical gap={token.marginXS}>
+                            {showChoropleth && (
+                                <Flex vertical gap={4}>
+                                    <Text
+                                        strong
+                                        style={{ fontSize: token.fontSizeSM }}
+                                    >
+                                        {choroplethSpec.label}
+                                    </Text>
+                                    <Flex
+                                        align="center"
+                                        gap={token.marginXS}
+                                    >
+                                        <Text
+                                            style={{
+                                                fontSize: token.fontSizeSM,
+                                            }}
+                                        >
+                                            {choroplethRange.min}
+                                            {choroplethSpec.isRatio ? "%" : ""}
+                                        </Text>
+                                        <div
+                                            style={{
+                                                flex: 1,
+                                                height: 10,
+                                                background: `linear-gradient(to right, ${PALETTES[
+                                                    palette
+                                                ].ramp.join(",")})`,
+                                                borderRadius: 2,
+                                            }}
+                                        />
+                                        <Text
+                                            style={{
+                                                fontSize: token.fontSizeSM,
+                                            }}
+                                        >
+                                            {choroplethRange.max}
+                                            {choroplethSpec.isRatio ? "%" : ""}
+                                        </Text>
+                                    </Flex>
+                                </Flex>
+                            )}
+
+                            {showFacilities && legend.length > 0 && (
+                                <Flex vertical gap={3}>
+                                    {showChoropleth && (
+                                        <Divider
+                                            style={{ margin: "4px 0" }}
+                                        />
+                                    )}
+                                    <Text
+                                        strong
+                                        style={{ fontSize: token.fontSizeSM }}
+                                    >
+                                        {groupSetId
+                                            ? activeThematic.label
+                                            : "Facility legend"}
+                                    </Text>
+                                    {legend.map((b) => (
+                                        <Flex
+                                            key={b.label}
+                                            align="center"
+                                            gap={token.marginXS}
+                                        >
+                                            <span
+                                                style={{
+                                                    display: "inline-block",
+                                                    width: 10,
+                                                    height: 10,
+                                                    borderRadius: "50%",
+                                                    background: b.color,
+                                                    border: "1px solid rgba(0,0,0,0.15)",
+                                                }}
+                                            />
+                                            <Text
+                                                style={{
+                                                    fontSize:
+                                                        token.fontSizeSM,
+                                                    flex: 1,
+                                                }}
+                                            >
+                                                {b.label}
+                                            </Text>
+                                            <Text
+                                                type="secondary"
+                                                style={{
+                                                    fontSize:
+                                                        token.fontSizeSM,
+                                                }}
+                                            >
+                                                {b.count.toLocaleString()}
+                                            </Text>
+                                        </Flex>
+                                    ))}
+                                </Flex>
+                            )}
+                        </Flex>
+                    </div>
+                ) : null}
             </div>
         </Flex>
     );
