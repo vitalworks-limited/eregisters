@@ -12,7 +12,6 @@ import {
 import React, { useEffect, useState } from "react";
 
 import { eq, useLiveQuery } from "@tanstack/react-db";
-import { useConfig } from "@dhis2/app-runtime";
 import { AppNav } from "../components/app-nav";
 import { MetadataLoadingStrip } from "../components/metadata-loading-strip";
 import { AdminNoticeBanner } from "../components/admin-notice-banner";
@@ -28,7 +27,6 @@ import {
     trackedEntitiesCollection,
 } from "../collections";
 import { SyncContext } from "../machines/sync";
-import { redirectByUnit } from "../utils/utils";
 
 const { Content } = Layout;
 const { Title, Text } = Typography;
@@ -81,17 +79,10 @@ function LayoutWithDrafts() {
     const syncActor = SyncContext.useActorRef();
     const { token } = theme.useToken();
 
-    const { baseUrl } = useConfig();
     // Read metadata directly off the sync machine so we never throw during
     // the initial load — the chrome stays put and only the body swaps.
     const orgUnit = SyncContext.useSelector(
         (s) => s.context.metadata?.orgUnit,
-    );
-    const program = SyncContext.useSelector(
-        (s) => s.context.metadata?.program,
-    );
-    const userOrgUnits = SyncContext.useSelector(
-        (s) => s.context.userInfo?.organisationUnits.map((a) => a.id) ?? [],
     );
 
     // Metadata is ready when the sync machine reaches either of these
@@ -138,12 +129,6 @@ function LayoutWithDrafts() {
     const isMobile = !screens.md;
     const showWordmark = !!screens.sm;
     const [drawerOpen, setDrawerOpen] = useState(false);
-
-    redirectByUnit(
-        userOrgUnits,
-        program?.organisationUnits.map(({ id }) => id) ?? [],
-        baseUrl,
-    );
 
     const brandBar = (
         <div

@@ -260,23 +260,23 @@ function AdminSyncMonitor() {
             dataIndex: "trigger",
             key: "trigger",
             width: 110,
+            // Rows captured before the trigger field shipped have no
+            // value — assume the scheduler (the dominant source) rather
+            // than rendering a useless dash.
             render: (t?: string) =>
                 t === "manual" ? (
                     <Tag color="purple">Manual</Tag>
-                ) : t === "scheduled" ? (
-                    <Tag color="blue">Scheduled</Tag>
                 ) : (
-                    <Tag>—</Tag>
+                    <Tag color="blue">Scheduled</Tag>
                 ),
             filters: [
                 { text: "Manual", value: "manual" },
                 { text: "Scheduled", value: "scheduled" },
-                { text: "Unknown", value: "_none" },
             ],
-            onFilter: (value, record) => {
-                if (value === "_none") return !record.trigger;
-                return record.trigger === value;
-            },
+            onFilter: (value, record) =>
+                value === "manual"
+                    ? record.trigger === "manual"
+                    : record.trigger !== "manual",
         },
         {
             title: "Duration",

@@ -1,5 +1,4 @@
 import {
-    useConfig,
     useCurrentUserInfo,
     useDataEngine,
 } from "@dhis2/app-runtime";
@@ -14,7 +13,6 @@ import { startAdminConfigPolling } from "./sync/adminConfigCache";
 import { requestPersistentStorage } from "./sync/persistentStorage";
 import { darkTheme, lightTheme } from "./theme";
 import { UpdateWatcher } from "./update/useUpdateWatcher";
-import { redirectByAuthorities } from "./utils/utils";
 
 const THEME_KEY = "eregisters.theme";
 type ThemeMode = "light" | "dark";
@@ -52,10 +50,7 @@ const FullApp: FC<{
 }> = ({ user, orgUnit }) => {
     const engine = useDataEngine();
     const userInfo = useCurrentUserInfo();
-    const { baseUrl } = useConfig();
     const { message } = App.useApp();
-
-    redirectByAuthorities(userInfo?.authorities ?? [], baseUrl);
 
     return (
         <SyncContext.Provider
