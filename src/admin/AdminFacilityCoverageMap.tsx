@@ -30,6 +30,7 @@ import {
 } from "react-leaflet";
 import { FacilityRiskPoint, HealthStatus } from "./summaryTypes";
 import { useOrgUnitBoundaries } from "./useOrgUnitBoundaries";
+import { useOrgUnitGroupSets } from "./useOrgUnitGroupSets";
 import { useOrgUnitLevels } from "./useOrgUnitLevels";
 import {
     AncestorRef,
@@ -54,6 +55,8 @@ interface PlottedFacility {
     recentLogins: number;
     /** Resolved live logged-in count: summary value when present, else recentLogins. */
     liveLoggedIn: number;
+    /** OrgUnit group memberships (Facility Type, Ownership, etc.). */
+    groupIds: Set<string>;
 }
 
 type DisplayMode = "facilities" | "choropleth" | "both";
@@ -404,6 +407,8 @@ export const AdminFacilityCoverageMap: React.FC<{
     const resetViewRef = useRef<(() => void) | null>(null);
     const [palette, setPalette] = useState<PaletteKey>("blue");
     const [showValues, setShowValues] = useState(false);
+    const [groupSetId, setGroupSetId] = useState<string | undefined>();
+    const { groupSets } = useOrgUnitGroupSets();
 
     // Data
     const {
@@ -486,6 +491,7 @@ export const AdminFacilityCoverageMap: React.FC<{
                     // Real DHIS2 lastLogin wins when present — otherwise the
                     // summary's cached loggedInUsers value carries it.
                     liveLoggedIn: Math.max(summaryLive, recentLogins),
+                    groupIds: new Set(f.groups.map((g) => g.id)),
                 };
             });
     }, [programFacilities, riskById, userCounts]);
@@ -559,8 +565,39 @@ export const AdminFacilityCoverageMap: React.FC<{
         return { min, max };
     }, [aggregates, choroplethSpec]);
 
-    const activeThematic =
-        THEMATIC_LAYERS.find((l) => l.key === thematic) ?? THEMATIC_LAYERS[0];
+    const activeThematic = useMemo<ThematicSpec>(() => {
+        // GroupSet picker overrides the thematic layer — colours
+        // facilities by which group they belong to within the chosen
+        // organisationUnitGroupSet (Facility Type, Ownership, etc.).
+        if (groupSetId) {
+            const gs = groupSets.find((s) => s.id === groupSetId);
+            if (gs) {
+                return {
+                    key: "coverage" as ThematicKey,
+                    label: gs.displayName,
+                    description: `Coloured by ${gs.displayName} membership. Each group uses its DHIS2-defined colour.`,
+                    bin: (f) => {
+                        for (const g of gs.groups) {
+                            if (f.groupIds.has(g.id)) {
+                                return {
+                                    label: g.displayName,
+                                    color: g.color,
+                                };
+                            }
+                        }
+                        return {
+                            label: "Not classified",
+                            color: "#9ca3af",
+                        };
+                    },
+                };
+            }
+        }
+        return (
+            THEMATIC_LAYERS.find((l) => l.key === thematic) ??
+            THEMATIC_LAYERS[0]
+        );
+    }, [groupSetId, groupSets, thematic]);
 
     const legend = useMemo(() => {
         const buckets = new Map<string, { color: string; count: number }>();
@@ -1108,9 +1145,36 @@ export const AdminFacilityCoverageMap: React.FC<{
 
                         {showFacilities && (
                             <>
+                                <Divider style={{ margin: "4px 0" }} />
+                                <Text strong>Colour by group set</Text>
+                                <Select
+                                    size="small"
+                                    value={groupSetId}
+                                    onChange={(v) => setGroupSetId(v)}
+                                    showSearch
+                                    optionFilterProp="label"
+                                    allowClear
+                                    placeholder="None — use thematic below"
+                                    options={groupSets.map((gs) => ({
+                                        value: gs.id,
+                                        label: `${gs.displayName} (${gs.groups.length})`,
+                                    }))}
+                                />
+                                {groupSetId && (
+                                    <Text
+                                        type="secondary"
+                                        style={{ fontSize: token.fontSizeSM }}
+                                    >
+                                        Overrides the thematic — each
+                                        group renders in its own DHIS2-
+                                        defined colour.
+                                    </Text>
+                                )}
+
                                 <Text strong>Facility thematic</Text>
                                 <Radio.Group
                                     value={thematic}
+                                    disabled={!!groupSetId}
                                     onChange={(e) => setThematic(e.target.value)}
                                 >
                                     <Flex vertical gap={2}>

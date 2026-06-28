@@ -24,6 +24,9 @@ export interface ProgramFacility {
     parentName?: string;
     /** Ordered root → parent. Each element has DHIS2 id, name and level. */
     ancestors: AncestorRef[];
+    /** OrganisationUnitGroup memberships — used by the Coverage Map to
+     *  colour facilities by Facility Type / Ownership / etc. */
+    groups: Array<{ id: string; displayName: string }>;
     latitude?: number;
     longitude?: number;
 }
@@ -34,6 +37,7 @@ interface ProgramQueryRow {
     level?: number;
     parent?: { displayName?: string };
     ancestors?: Array<{ id: string; displayName: string; level: number }>;
+    organisationUnitGroups?: Array<{ id: string; displayName: string }>;
     geometry?: { type?: string; coordinates?: unknown };
 }
 
@@ -111,7 +115,7 @@ export function useProgramFacilities(): {
                         resource,
                         params: {
                             fields:
-                                "organisationUnits[id,displayName,level,parent[displayName],ancestors[id,displayName,level],geometry]",
+                                "organisationUnits[id,displayName,level,parent[displayName],ancestors[id,displayName,level],organisationUnitGroups[id,displayName],geometry]",
                         },
                     },
                 })) as unknown as ProgramFacilitiesQuery;
@@ -127,6 +131,10 @@ export function useProgramFacilities(): {
                             id: a.id,
                             displayName: a.displayName,
                             level: a.level,
+                        })),
+                        groups: (ou.organisationUnitGroups ?? []).map((g) => ({
+                            id: g.id,
+                            displayName: g.displayName,
                         })),
                         latitude: ll ? ll[1] : undefined,
                         longitude: ll ? ll[0] : undefined,
