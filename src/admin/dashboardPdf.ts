@@ -113,13 +113,20 @@ interface SectionPage {
  * Snapshots a DOM node at 2x scale, then slices the canvas into A4-page
  * tiles. Returns one image per PDF page. The image width is fixed at
  * CONTENT_WIDTH_MM; the height of the last tile may be shorter.
+ *
+ * Large nodes (e.g. a several-hundred-row table) are captured at 1.5x
+ * scale so we don't blow the canvas memory budget — at 2x scale a
+ * 1 280x10 000 px DOM tree creates a ~100 MB image and crashes the
+ * generator on modest hardware.
  */
 async function captureSectionAsPages(
     node: HTMLElement,
 ): Promise<SectionPage[]> {
     if (!node || node.offsetWidth === 0 || node.offsetHeight === 0) return [];
+    const tallSection = node.scrollHeight > 2500;
+    const scale = tallSection ? 1.5 : 2;
     const canvas = await html2canvas(node, {
-        scale: 2,
+        scale,
         backgroundColor: "#ffffff",
         useCORS: true,
         logging: false,
@@ -205,9 +212,27 @@ export async function downloadDashboardPdf(
     const logo = await loadImage(UGANDA_LOGO_URL);
 
     let pageNumber = 0;
+    const failed: string[] = [];
 
-    for (const node of sections) {
-        const pages = await captureSectionAsPages(node);
+    for (let i = 0; i < sections.length; i += 1) {
+        const node = sections[i];
+        const sectionName =
+            node.getAttribute("data-pdf-section") ?? `section-${i}`;
+        let pages: SectionPage[] = [];
+        try {
+            pages = await captureSectionAsPages(node);
+        } catch (err) {
+            // Don't let one broken section abort the whole PDF — log
+            // and keep going so the rest of the report still renders.
+            console.error(
+                `[pdf] failed to capture section '${sectionName}':`,
+                err,
+            );
+            failed.push(sectionName);
+        }
+        // Yield to the browser between sections so heavy DOM work
+        // doesn't stall the main thread for several seconds.
+        await new Promise((r) => setTimeout(r, 50));
         if (pages.length === 0) continue;
         for (const tile of pages) {
             if (pageNumber > 0) pdf.addPage();
@@ -224,6 +249,13 @@ export async function downloadDashboardPdf(
                 "FAST",
             );
         }
+    }
+
+    if (failed.length > 0) {
+        console.warn(
+            `[pdf] ${failed.length} section(s) couldn't be captured:`,
+            failed,
+        );
     }
 
     // Empty doc — fall back to a single blank page so we don't crash.

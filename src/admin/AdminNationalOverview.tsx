@@ -23,6 +23,7 @@ import {
 import { useCurrentUserInfo, useDataEngine } from "@dhis2/app-runtime";
 import {
     Alert,
+    App,
     Button,
     Col,
     Flex,
@@ -230,6 +231,7 @@ export const AdminNationalOverview: React.FC<{
     const [summary, setSummary] = useState<AdminOverviewSummary | undefined>();
     const [loading, setLoading] = useState(false);
     const [generatingPdf, setGeneratingPdf] = useState(false);
+    const { message } = App.useApp();
     // Fall back to the signed-in user's first org unit when no scope
     // is passed by the parent — otherwise the live tracker count
     // probes (clients + events) have nothing to anchor on and Total
@@ -419,11 +421,22 @@ export const AdminNationalOverview: React.FC<{
                         icon={<PrinterOutlined />}
                         loading={generatingPdf}
                         onClick={async () => {
+                            const hideLoading = message.loading(
+                                "Preparing dashboard for PDF…",
+                                0,
+                            );
                             setGeneratingPdf(true);
-                            // Give React a beat to re-render the table
-                            // in print mode (no pagination, no toolbar)
-                            // before html2canvas snapshots the DOM.
-                            await new Promise((r) => setTimeout(r, 200));
+                            // Two animation frames + a longer settle so
+                            // the table can fully re-render in
+                            // print-mode (no pagination, hidden
+                            // toolbar) before html2canvas snapshots it.
+                            await new Promise((r) =>
+                                requestAnimationFrame(() => r(undefined)),
+                            );
+                            await new Promise((r) =>
+                                requestAnimationFrame(() => r(undefined)),
+                            );
+                            await new Promise((r) => setTimeout(r, 500));
                             try {
                                 await downloadDashboardPdf(
                                     "[data-pdf-root]",
@@ -436,9 +449,14 @@ export const AdminNationalOverview: React.FC<{
                                         healthBand: bandLabel(health.band),
                                     },
                                 );
+                                message.success("PDF ready");
                             } catch (err) {
                                 console.error("[pdf]", err);
+                                message.error(
+                                    "Couldn't build the PDF on this device. The dashboard is too large for in-browser rendering — try filtering or use Export CSV instead.",
+                                );
                             } finally {
+                                hideLoading();
                                 setGeneratingPdf(false);
                             }
                         }}
