@@ -561,6 +561,15 @@ function TrackedEntityComponent() {
                             children: overviewPane,
                         },
                         {
+                            key: "demographic-details",
+                            label: (
+                                <span>
+                                    <IdcardOutlined /> Demographic Details
+                                </span>
+                            ),
+                            children: enrollmentPane,
+                        },
+                        {
                             key: "visits",
                             label: (
                                 <span>
@@ -568,15 +577,6 @@ function TrackedEntityComponent() {
                                 </span>
                             ),
                             children: visitsPane,
-                        },
-                        {
-                            key: "enrollment",
-                            label: (
-                                <span>
-                                    <UserOutlined /> Enrollment
-                                </span>
-                            ),
-                            children: enrollmentPane,
                         },
                     ]}
                 />
