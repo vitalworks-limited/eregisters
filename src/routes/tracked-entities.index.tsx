@@ -20,11 +20,11 @@ import {
     Dropdown,
     Flex,
     MenuProps,
-    Table,
     theme,
     Typography,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { ResponsiveTable } from "../components/responsive-table";
 import React, { useMemo } from "react";
 import { EmptyState } from "../components/empty-state";
 import { FlattenedTrackedEntity } from "../schemas";
@@ -445,7 +445,7 @@ function TrackedEntitiesSearch() {
                         </Button>
                     )}
                 </Flex>
-                <Table
+                <ResponsiveTable
                     columns={columns}
                     dataSource={currentTrackedEntities}
                     rowKey="trackedEntity"

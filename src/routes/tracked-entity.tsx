@@ -31,7 +31,6 @@ import {
     Popconfirm,
     Row,
     Tabs,
-    Table,
     Tag,
     theme,
     Timeline,
@@ -51,6 +50,7 @@ import {
     trackedEntitiesCollection,
 } from "../collections";
 import { DataModal } from "../components/data-modal";
+import { ResponsiveTable } from "../components/responsive-table";
 import MainEventCapture from "../components/main-event-capture";
 import { Spinner } from "../components/spinner";
 import { SyncStatusComp } from "../components/sync-status-comp";
@@ -364,7 +364,7 @@ function TrackedEntityComponent() {
                         border: `1px solid ${token.colorBorderSecondary}`,
                     }}
                 >
-                    <Table
+                    <ResponsiveTable
                         columns={columns}
                         dataSource={events}
                         pagination={false}

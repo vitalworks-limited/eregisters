@@ -12,7 +12,6 @@ import {
     Grid,
     message,
     Popconfirm,
-    Table,
     TableProps,
     theme,
     Typography,
@@ -36,6 +35,7 @@ import {
     deleteEventWithChildren,
 } from "../utils/utils";
 import { DataModal } from "./data-modal";
+import { ResponsiveTable } from "./responsive-table";
 import ProgramStageForm from "./program-stage-form";
 
 import {
@@ -200,7 +200,7 @@ export const ProgramStageCapture: React.FC<{
     ];
     return (
         <>
-            <Table
+            <ResponsiveTable
                 columns={columns}
                 dataSource={events}
                 pagination={false}
