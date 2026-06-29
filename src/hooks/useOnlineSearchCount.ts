@@ -29,6 +29,14 @@ export interface ServerSearchResult {
 
 const DEBOUNCE_MS = 500;
 const SAMPLE_PAGE_SIZE = 5;
+// When the user types multiple words we can't express the
+// "every word must match some searchable attribute (AND across words,
+// OR across attributes)" semantics in a single tracker API call —
+// `query=` and `filter=` give us neither directly. Instead we fire one
+// request per word and intersect the IDs locally. A larger per-word
+// page size keeps the intersection meaningful when one of the words is
+// common (e.g. searching "John Mary" against a database with many Johns).
+const MULTI_WORD_PER_REQUEST_PAGE_SIZE = 50;
 
 interface ProbeRow {
     trackedEntity: string;
@@ -81,38 +89,69 @@ export function useOnlineSearchCount({
         }
         let cancelled = false;
         setState((s) => ({ ...s, loading: true, error: undefined }));
+        const words = trimmed.split(/\s+/).filter(Boolean);
+        const toHit = (row: ProbeRow): ServerSearchHit => ({
+            trackedEntity: row.trackedEntity,
+            orgUnit: row.orgUnit,
+            attributes: Object.fromEntries(
+                (row.attributes ?? []).map((a) => [
+                    a.attribute,
+                    a.value ?? "",
+                ]),
+            ),
+        });
         const timer = setTimeout(async () => {
             try {
-                const r = (await engine.query({
-                    list: {
-                        resource: "tracker/trackedEntities",
-                        params: {
-                            program,
-                            orgUnit,
-                            ouMode: "ACCESSIBLE",
-                            query: trimmed,
-                            pageSize: SAMPLE_PAGE_SIZE,
-                            totalPages: true,
-                            fields: "trackedEntity,orgUnit,attributes[attribute,value]",
-                        },
-                    },
-                })) as unknown as ProbeResponse;
+                const singleWord = words.length <= 1;
+                const responses = await Promise.all(
+                    words.map(
+                        (word) =>
+                            engine.query({
+                                list: {
+                                    resource: "tracker/trackedEntities",
+                                    params: {
+                                        program,
+                                        orgUnit,
+                                        ouMode: "ACCESSIBLE",
+                                        query: word,
+                                        pageSize: singleWord
+                                            ? SAMPLE_PAGE_SIZE
+                                            : MULTI_WORD_PER_REQUEST_PAGE_SIZE,
+                                        totalPages: singleWord,
+                                        fields:
+                                            "trackedEntity,orgUnit,attributes[attribute,value]",
+                                    },
+                                },
+                            }) as unknown as Promise<ProbeResponse>,
+                    ),
+                );
                 if (cancelled) return;
-                const list = r.list;
-                const rows = rowsFromResponse(list);
-                const total = totalFromResponse(list) || rows.length;
+                if (singleWord) {
+                    const list = responses[0].list;
+                    const rows = rowsFromResponse(list);
+                    const total = totalFromResponse(list) || rows.length;
+                    setState({
+                        total,
+                        sample: rows.map(toHit),
+                        loading: false,
+                    });
+                    return;
+                }
+                const rowsByWord = responses.map((r) =>
+                    rowsFromResponse(r.list),
+                );
+                const idSetsAfterFirst = rowsByWord
+                    .slice(1)
+                    .map(
+                        (rows) =>
+                            new Set(rows.map((row) => row.trackedEntity)),
+                    );
+                const intersection = rowsByWord[0].filter((row) =>
+                    idSetsAfterFirst.every((s) => s.has(row.trackedEntity)),
+                );
                 setState({
-                    total,
-                    sample: rows.map((row) => ({
-                        trackedEntity: row.trackedEntity,
-                        orgUnit: row.orgUnit,
-                        attributes: Object.fromEntries(
-                            (row.attributes ?? []).map((a) => [
-                                a.attribute,
-                                a.value ?? "",
-                            ]),
-                        ),
-                    })),
+                    total: intersection.length,
+                    sample: intersection.slice(0, SAMPLE_PAGE_SIZE).map(toHit),
                     loading: false,
                 });
             } catch (err) {

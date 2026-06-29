@@ -114,15 +114,23 @@ function TrackedEntitiesSearch() {
             let query = q.from({ trackedEntity: trackedEntitiesCollection });
 
             if (globalQuery && searchableAttrIds.length > 0) {
-                const pattern = `%${globalQuery}%`;
-                query = query.where(({ trackedEntity }) => {
-                    const terms = searchableAttrIds.map((aid) =>
-                        ilike(trackedEntity.attributes[aid], pattern),
-                    );
-                    if (terms.length === 1) return terms[0];
-                    const [first, second, ...rest] = terms;
-                    return or(first, second, ...rest);
-                });
+                const words = globalQuery.split(/\s+/).filter(Boolean);
+                if (words.length > 0) {
+                    query = query.where(({ trackedEntity }) => {
+                        const perWord = words.map((word) => {
+                            const pattern = `%${word}%`;
+                            const matches = searchableAttrIds.map((aid) =>
+                                ilike(trackedEntity.attributes[aid], pattern),
+                            );
+                            if (matches.length === 1) return matches[0];
+                            const [first, second, ...rest] = matches;
+                            return or(first, second, ...rest);
+                        });
+                        if (perWord.length === 1) return perWord[0];
+                        const [first, second, ...rest] = perWord;
+                        return and(first, second, ...rest);
+                    });
+                }
             }
             for (const [filterKey, filterValue] of fieldFilters) {
                 query = query.where(({ trackedEntity }) =>
